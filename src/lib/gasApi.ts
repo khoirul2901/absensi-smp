@@ -9,7 +9,7 @@ export const GAS_URL_STORAGE_KEY = "SIAS_GAS_URL";
 export function getGasUrl(): string {
   const saved = localStorage.getItem(GAS_URL_STORAGE_KEY);
   if (saved) return saved.trim();
-  return ((import.meta as any).env?.VITE_GAS_URL as string) || "https://script.google.com/macros/s/AKfycbxKcc68ujRI-Wi-DLH8Ni6yiCoDZMowf0WVG4U8O8Yn7nldUd40Uvz0DyXwvjRNWdlp/exec";
+  return ((import.meta as any).env?.VITE_GAS_URL as string) || "";
 }
 
 export function setGasUrl(url: string): void {
@@ -656,7 +656,7 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
       method: "POST",
       mode: "cors",
       headers: {
-        "Content-Type": "text/plain;charset=utf-8",
+        "Content-Type": "text/plain",
       },
       body: JSON.stringify({ action, args }),
     });
