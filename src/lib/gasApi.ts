@@ -9,7 +9,7 @@ export const GAS_URL_STORAGE_KEY = "SIAS_GAS_URL";
 export function getGasUrl(): string {
   const saved = localStorage.getItem(GAS_URL_STORAGE_KEY);
   if (saved) return saved.trim();
-  return ((import.meta as any).env?.VITE_GAS_URL as string) || "https://script.google.com/macros/s/AKfycbwrGBYo5c4ie148Gpk0JAJdmeL6jDRCgTD6sxiOu6On8kLAtKxcB1r6NDUpSAh3s8ZD/exec";
+  return ((import.meta as any).env?.VITE_GAS_URL as string) || "https://script.google.com/macros/s/AKfycbxKcc68ujRI-Wi-DLH8Ni6yiCoDZMowf0WVG4U8O8Yn7nldUd40Uvz0DyXwvjRNWdlp/exec";
 }
 
 export function setGasUrl(url: string): void {
