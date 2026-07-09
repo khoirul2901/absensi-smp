@@ -1,0 +1,69 @@
+<!-- ========================================== -->
+<!-- FILE: PageLogin.html                       -->
+<!-- ========================================== -->
+<div class="row g-0 vh-100">
+  <!-- Left Side: Branding / Visual (Hidden on mobile) -->
+  <div class="col-lg-6 d-none d-lg-flex flex-column justify-content-center align-items-center position-relative text-white" style="background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); overflow: hidden;">
+     <!-- Decorative elements -->
+     <div class="position-absolute" style="top: -10%; left: -10%; width: 50%; height: 50%; background: radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%); border-radius: 50%;"></div>
+     <div class="position-absolute" style="bottom: -10%; right: -10%; width: 60%; height: 60%; background: radial-gradient(circle, rgba(16,185,129,0.1) 0%, transparent 70%); border-radius: 50%;"></div>
+     <div class="position-absolute" style="top: 40%; right: 10%; width: 100px; height: 100px; border: 1px solid rgba(255,255,255,0.05); border-radius: 50%;"></div>
+     
+     <div class="text-center z-1 px-5">
+        <div class="mb-4 d-inline-flex align-items-center justify-content-center rounded-circle bg-white bg-opacity-10 shadow" style="width: 80px; height: 80px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1);">
+           <i class="fa fa-fingerprint fa-2x text-white"></i>
+        </div>
+        <h1 class="display-5 fw-bold tracking-tight mb-3" style="font-family: 'Plus Jakarta Sans', sans-serif;">SIAS Workspace</h1>
+        <p class="lead text-white-50 mx-auto" style="max-width: 400px; font-size: 1.1rem; line-height: 1.6;">
+           Sistem Informasi Absensi Sekolah Terpadu. Kelola kehadiran, laporan, dan administrasi dalam satu platform cerdas.
+        </p>
+     </div>
+  </div>
+  
+  <!-- Right Side: Login Form -->
+  <div class="col-lg-6 d-flex flex-column justify-content-center align-items-center position-relative login-right-side">
+    <div class="w-100 login-card mx-auto" style="max-width: 450px;">
+       <div class="text-center mb-4 d-lg-none">
+           <div class="mb-3 d-inline-flex align-items-center justify-content-center rounded-circle shadow-sm" style="width: 60px; height: 60px; background-color: #0f172a; color: white;">
+               <i class="fa fa-fingerprint fa-2x"></i>
+           </div>
+           <h2 class="fw-bold tracking-tight mb-0" style="font-family: 'Plus Jakarta Sans', sans-serif; color: #0f172a;">SIAS Workspace</h2>
+           <p class="text-muted small">Sistem Informasi Absensi Sekolah</p>
+       </div>
+       
+       <div class="mb-5 text-center text-lg-start">
+           <h2 class="fw-bold text-dark mb-2" style="font-family: 'Plus Jakarta Sans', sans-serif;">Selamat Datang</h2>
+           <p class="text-muted">Silakan masuk menggunakan kredensial admin Anda.</p>
+       </div>
+       
+       <form onsubmit="doLogin(event)">
+           <div class="mb-4">
+               <label class="form-label text-muted small fw-bold tracking-wider">Username</label>
+               <div class="input-group input-group-lg shadow-sm rounded-3 overflow-hidden border">
+                   <span class="input-group-text bg-white border-0 px-3"><i class="fa fa-user text-muted"></i></span>
+                   <input type="text" id="loginUsername" class="form-control border-0 fs-6 bg-white" required placeholder="Masukkan username" style="box-shadow: none;">
+               </div>
+           </div>
+           
+           <div class="mb-5">
+               <label class="form-label text-muted small fw-bold tracking-wider">Password</label>
+               <div class="input-group input-group-lg shadow-sm rounded-3 overflow-hidden border">
+                   <span class="input-group-text bg-white border-0 px-3"><i class="fa fa-lock text-muted"></i></span>
+                   <input type="password" id="loginPassword" class="form-control border-0 fs-6 bg-white" required placeholder="Masukkan kata sandi" style="box-shadow: none;">
+                   <button class="btn bg-white border-0 px-3 text-muted" type="button" onclick="togglePassword()" style="box-shadow: none;">
+                       <i class="fa fa-eye" id="loginEyeIcon"></i>
+                   </button>
+               </div>
+           </div>
+           
+           <button type="submit" class="btn btn-primary w-100 py-3 fw-bold shadow position-relative overflow-hidden" id="btnLogin" style="border-radius: 12px; font-size: 1rem; transition: all 0.3s; letter-spacing: 0.5px;">
+               Otorisasi Akses
+           </button>
+           
+           <div class="text-center mt-4 pt-2">
+              <span class="text-muted small"><i class="fa fa-shield-alt me-1"></i> Koneksi Terenkripsi & Aman</span>
+           </div>
+       </form>
+    </div>
+  </div>
+</div>

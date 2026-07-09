@@ -1,0 +1,377 @@
+<!-- ========================================== -->
+<!-- FILE: Styles.html                          -->
+<!-- ========================================== -->
+<style>
+  :root {
+    --bg-main: #f8fafc;
+    --text-main: #0f172a;
+    --sidebar-bg: #0f172a;
+    --sidebar-accent: #6366f1;
+    --border-color: #e2e8f0;
+    --card-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.05);
+    --card-radius: 16px;
+  }
+  
+  body, body.bg-light { 
+    background-color: var(--bg-main) !important; 
+    color: var(--text-main) !important;
+    font-family: 'DM Sans', 'Helvetica Neue', Arial, sans-serif !important; 
+  }
+  
+  h1, h2, h3, h4, h5, h6, .modal-title {
+    font-family: 'Plus Jakarta Sans', sans-serif !important;
+    font-weight: 600;
+  }
+  
+  .btn, .form-control, .form-select, .card {
+    border-radius: 12px !important;
+  }
+
+  .login-right-side {
+    background-color: white;
+  }
+  .login-card {
+    background: white;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 1.5rem;
+    margin: 0;
+  }
+  @media (min-width: 992px) {
+    .login-right-side {
+        background-color: white;
+    }
+    .login-card {
+        padding: 3rem;
+    }
+  }
+  
+  .glassmorphism {
+    background: white;
+    border-radius: var(--card-radius);
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+    border: 1px solid var(--border-color);
+  }
+
+  /* Sidebar Nav override */
+  .sidebar, #mobileHeader { background-color: var(--sidebar-bg) !important; }
+  
+  .nav-item .btn-outline-light {
+    border-left: none !important;
+    border-radius: 12px !important;
+    padding: 10px 16px !important;
+    margin: 4px 12px;
+    transition: all 0.25s ease-in-out;
+    font-size: 14px;
+    font-weight: 500;
+    color: #cbd5e1 !important;
+    border: none !important;
+    text-align: left;
+  }
+  .nav-item .btn-outline-light:hover:not(.active) {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    color: white !important;
+  }
+  .nav-item .btn-outline-light.active {
+    background-color: #6366f1 !important; /* Soft indigo solid */
+    color: #ffffff !important; /* High contrast white */
+    font-weight: 600 !important;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35); /* Elegant soft glow */
+  }
+  
+  @media (max-width: 768px) {
+    .sidebar {
+      position: fixed;
+      z-index: 1045;
+      left: -260px;
+      transition: left 0.3s ease;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    .sidebar.show {
+      left: 0;
+    }
+    .content {
+      width: 100%;
+    }
+  }
+
+  /* Interactive Elements */
+  .card, .stat-card {
+    background: white !important;
+    border-radius: var(--card-radius) !important;
+    box-shadow: var(--card-shadow) !important;
+    border: none !important;
+  }
+  
+  #PageDashboard .stat-card {
+    border-bottom: 4px solid var(--sidebar-accent) !important;
+  }
+  #PageDashboard .col-md-3:nth-child(2) .stat-card { border-bottom-color: #fbbf24 !important; }
+  #PageDashboard .col-md-3:nth-child(3) .stat-card { border-bottom-color: #ef4444 !important; }
+  #PageDashboard .col-md-3:nth-child(4) .stat-card { border-bottom-color: #10b981 !important; }
+  
+  .card-header {
+    background: #f8fafc !important;
+    border-bottom: 1px solid var(--border-color) !important;
+  }
+
+  /* Enhanced Tables */
+  .table-responsive {
+    border: none !important;
+    border-radius: var(--card-radius) !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+  }
+  
+  .table { margin-bottom: 0 !important; }
+  
+  .table-light th, .table thead th {
+    background-color: #f8fafc !important;
+    color: #475569 !important;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 12px 20px !important;
+  }
+  
+  .table tbody td {
+    padding: 14px 20px !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    font-size: 13px !important;
+    vertical-align: middle;
+  }
+
+  /* Nav Tabs - Data Tables */
+  .nav-tabs {
+    border-bottom: none !important;
+  }
+  .nav-tabs .nav-link {
+    font-size: 13px;
+    font-weight: 600;
+    color: #64748b;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    border-radius: 0 !important;
+    padding: 16px 20px !important;
+    background: transparent !important;
+  }
+  .nav-tabs .nav-link:hover { color: var(--sidebar-bg); }
+  .nav-tabs .nav-link.active {
+    color: var(--sidebar-bg) !important;
+    border-bottom-color: var(--sidebar-bg) !important;
+  }
+  
+  /* Status Badges */
+  .badge-tepat { background-color: #dcfce7 !important; color: #166534 !important; padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+  .badge-telat { background-color: #fef9c3 !important; color: #854d0e !important; padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+  .badge-sakit { background-color: #e0f2fe !important; color: #075985 !important; padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+  .badge-alfa  { background-color: #fee2e2 !important; color: #991b1b !important; padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+
+  /* Buttons & Micro elements */
+  .btn-primary {
+    background-color: var(--sidebar-accent) !important;
+    border-color: var(--sidebar-accent) !important;
+  }
+  .btn-primary:hover {
+    background-color: #4f46e5 !important; /* Indigo 600 */
+    border-color: #4f46e5 !important;
+  }
+  .text-primary {
+    color: var(--sidebar-accent) !important;
+  }
+  .bg-primary {
+    background-color: var(--sidebar-bg) !important;
+  }
+  .bg-primary.bg-opacity-10 {
+    background-color: rgba(99, 102, 241, 0.1) !important; /* using sidebar-accent for soft background */
+  }
+  
+  .btn-outline-primary { border-color: var(--border-color) !important; color: #475569 !important; }
+  .btn-outline-primary:hover, .btn-check:checked + .btn-outline-primary {
+    background-color: #e2e8f0 !important;
+    color: var(--sidebar-bg) !important;
+    border-color: transparent !important;
+  }
+  
+  .btn-light.border, .btn-sm {
+      padding: 6px 12px !important;
+      border-radius: 6px !important;
+      border: 1px solid var(--border-color) !important;
+      background: white !important;
+      font-size: 11px !important;
+      font-weight: 600 !important;
+  }
+  .btn-light.border:hover { background: #f8fafc !important; }
+
+  /* Print Media Query */
+  @media screen {
+    .print-only-canvas { display: none !important; }
+  }
+
+  /* Elegant Portrait Standard KTP Size ID Card */
+  .id-card {
+      width: 53.98mm;
+      height: 85.60mm;
+      color: white;
+      border-radius: 12px;
+      padding: 12px;
+      text-align: center;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.15) !important;
+      page-break-inside: avoid;
+      position: relative;
+      overflow: hidden;
+      font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+  }
+  
+  /* Siswa Card Color Theme: Blue gradient */
+  .id-card-student {
+      background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #1d4ed8 100%) !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+  }
+  
+  /* Guru Card Color Theme: Luxury Charcoal Gold gradient */
+  .id-card-teacher {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #b45309 100%) !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+  }
+
+  .id-card-header-logo {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 2px;
+      width: 100%;
+      justify-content: center;
+  }
+  .logo-circle {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+  }
+  .logo-text {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #ffffff;
+  }
+
+  .id-card-title {
+      font-size: 8px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.75);
+      margin-bottom: 4px;
+  }
+  
+  .id-card-photo {
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      background: #f1f5f9;
+      margin: 0 auto;
+      border: 2px solid rgba(255,255,255,0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      color: #64748b;
+  }
+  .id-card-photo i {
+      font-size: 28px;
+      margin-top: 10px;
+  }
+  
+  .id-card-name {
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.2;
+      color: #ffffff;
+      margin-top: 4px;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+  }
+  
+  .id-card-role-badge {
+      font-size: 8px;
+      font-weight: 700;
+      padding: 2px 10px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.25);
+      color: #ffffff;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 2px;
+  }
+  
+  .id-card-details {
+      margin: 4px 0;
+      text-align: center;
+  }
+  
+  .id-card-sub {
+      font-size: 10px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.9);
+  }
+  
+  .id-card-num {
+      font-size: 8px;
+      font-family: monospace;
+      color: rgba(255, 255, 255, 0.7);
+  }
+  
+  .id-card-qr {
+      width: 72px;
+      height: 72px;
+      background: white;
+      margin: 0 auto;
+      padding: 5px;
+      border-radius: 6px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  .id-card-qr img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+  }
+  
+  .id-card-footer {
+      font-size: 7px;
+      color: rgba(255,255,255,0.7);
+      width: 100%;
+      text-align: center;
+      font-weight: 500;
+      letter-spacing: 0.2px;
+  }
+
+  @media print {
+    body * { visibility: hidden; }
+    #printCanvas, #printCanvas * { visibility: visible; }
+    #printCanvas {
+        position: absolute; left: 0; top: 0; width: 100%;
+        display: flex; flex-wrap: wrap; gap: 15px; justify-content: flex-start;
+    }
+  }
+</style>

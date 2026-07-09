@@ -1,0 +1,107 @@
+<!-- ========================================== -->
+<!-- FILE: PageSettings.html                    -->
+<!-- ========================================== -->
+<div class="p-4" style="max-width: 1000px; margin: 0 auto;">
+    <h2 class="h4 fw-bold mb-4">Pengaturan Sistem Dasar</h2>
+    
+    <div class="row g-4">
+        <!-- Panel 1: Jam Operasional -->
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0 stat-card h-100">
+                <div class="card-header bg-white border-bottom pt-4 pb-3 px-4">
+                    <h6 class="fw-bold text-dark mb-0"><i class="fa fa-clock text-primary me-2"></i> Regulasi Zona Waktu</h6>
+                </div>
+                <div class="card-body p-4 bg-gray-50">
+                    <form onsubmit="simpanAturanJam(event)">
+                        <div class="mb-3">
+                            <label class="form-label text-muted small fw-bold">Gerbang Masuk Buka</label>
+                            <input type="time" class="form-control" id="formJamMulai" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label text-muted small fw-bold">Ambang Batas Terlambat</label>
+                            <input type="time" class="form-control" id="formJamBatas" required>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label text-muted small fw-bold">Gerbang Pulang Buka</label>
+                            <input type="time" class="form-control" id="formJamPulang" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 shadow-sm" id="btnSimpanJam">Konfigurasi Engine</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel 2: Kalender Libur -->
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0 stat-card h-100">
+                <div class="card-header bg-white border-bottom pt-4 pb-3 px-4">
+                    <h6 class="fw-bold text-dark mb-0"><i class="fa fa-calendar-alt text-danger me-2"></i> Penangguhan Sensor Kalender</h6>
+                </div>
+                <div class="card-body p-4 bg-gray-50">
+                     <form class="d-flex gap-2 mb-4" onsubmit="tambahanLiburAction(event)">
+                         <input type="date" class="form-control" id="inputTglLibur" required>
+                         <input type="text" class="form-control" id="inputKetLibur" placeholder="Alasan event..." required>
+                         <button type="submit" class="btn btn-danger text-white shadow-sm" id="btnTamLibur"><i class="fa fa-plus"></i></button>
+                     </form>
+                     <div class="table-responsive rounded border bg-white border-light" style="max-height: 180px; overflow-y:auto;">
+                         <table class="table table-sm table-hover mb-0">
+                             <tbody id="tbodyHariLibur">
+                                <!-- injected -->
+                             </tbody>
+                         </table>
+                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel 3: Reset Kredensial -->
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0 stat-card">
+                <div class="card-header bg-white border-bottom pt-4 pb-3 px-4">
+                    <h6 class="fw-bold text-dark mb-0"><i class="fa fa-shield-alt text-warning me-2"></i> Otoritas Akses Utama</h6>
+                </div>
+                <div class="card-body p-4 bg-gray-50">
+                     <form onsubmit="updateSandiVault(event)" class="row g-3 align-items-end">
+                         <div class="col-12">
+                             <label class="form-label text-muted small fw-bold">Verifikasi Sandi Lama</label>
+                             <input type="password" class="form-control" id="pwLama" required>
+                         </div>
+                         <div class="col-12">
+                             <label class="form-label text-muted small fw-bold">Kewenangan Sandi Baru</label>
+                             <input type="password" class="form-control" id="pwBaru" required>
+                         </div>
+                         <div class="col-12">
+                             <label class="form-label text-muted small fw-bold">Cek Integritas Sandi Baru</label>
+                             <input type="password" class="form-control" id="pwKonfir" required>
+                         </div>
+                         <div class="col-12 mt-4">
+                             <button type="submit" class="btn btn-warning w-100 shadow-sm" id="btnSandi">Mutasi Vault</button>
+                         </div>
+                     </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel 4: Pengaturan Kelas -->
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0 stat-card h-100">
+                <div class="card-header bg-white border-bottom pt-4 pb-3 px-4">
+                    <h6 class="fw-bold text-dark mb-0"><i class="fa fa-users text-info me-2"></i> Pengaturan Data Kelas</h6>
+                </div>
+                <div class="card-body p-4 bg-gray-50">
+                     <form class="d-flex gap-2 mb-4" onsubmit="tambahanKelasAction(event)">
+                         <input type="text" class="form-control" id="inputNamaKelas" placeholder="Nama kelas baru..." required>
+                         <button type="submit" class="btn btn-info text-white shadow-sm" id="btnTamKelas"><i class="fa fa-plus"></i></button>
+                     </form>
+                     <div class="table-responsive rounded border bg-white border-light" style="max-height: 250px; overflow-y:auto;">
+                         <table class="table table-sm table-hover mb-0">
+                             <tbody id="tbodyKelas">
+                                <!-- injected -->
+                             </tbody>
+                         </table>
+                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

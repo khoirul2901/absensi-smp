@@ -1,0 +1,82 @@
+<!-- ========================================== -->
+<!-- FILE: PageCrud.html                        -->
+<!-- ========================================== -->
+<div class="p-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="h4 fw-bold mb-1">Pangkalan Master Data</h2>
+            <p class="text-muted text-sm mb-0">Atur entitas pendaftar pada sistem.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary shadow-sm" onclick="bukaModalCrud('tambah')"><i class="fa fa-plus"></i> Injeksi Baru</button>
+            <input type="file" id="fileImportExcel" style="display:none" accept=".xlsx, .xls" onchange="prosesImportExcel(event)">
+            <button class="btn btn-success shadow-sm" onclick="document.getElementById('fileImportExcel').click()"><i class="fa fa-file-excel"></i> Import Excel</button>
+            <button class="btn btn-info text-white shadow-sm" onclick="exportDataExcel()"><i class="fa fa-download"></i> Ekspor XLS</button>
+        </div>
+    </div>
+    
+    <div class="card shadow-sm border-0 stat-card">
+         <div class="card-header bg-white border-bottom p-3 d-flex justify-content-between">
+            <div class="d-flex gap-2">
+                <select class="form-select w-auto shadow-sm" id="crudKategori" onchange="toggleCrudFilterKelas(); muatUlangDataCrud()">
+                    <option value="Siswa">Kelola Data Siswa</option>
+                    <option value="Guru">Kelola Data Guru</option>
+                </select>
+                
+                <select class="form-select w-auto shadow-sm" id="crudFilterKelas" onchange="muatUlangDataCrud()">
+                    <option value="">Semua Kelas</option>
+                    <option value="X">Kelas X</option>
+                    <option value="XI">Kelas XI</option>
+                    <option value="XII">Kelas XII</option>
+                </select>
+            </div>
+            
+            <button class="btn btn-outline-dark shadow-sm" onclick="cetakIdCardMassal()">
+               <i class="fa fa-print"></i> Cetak Massal (Terpilih)
+            </button>
+         </div>
+         <div class="card-body p-0">
+             <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="tabelaMasterCrud">
+                    <thead class="table-light text-muted small">
+                        <tr id="theadCrud">
+                            <!-- Injected Dynamically Based on Siswa/Guru -->
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyCrud">
+                       <tr><td colspan="6" class="text-center py-4">Memuat Database...</td></tr>
+                    </tbody>
+                </table>
+             </div>
+         </div>
+    </div>
+</div>
+
+<!-- Modal Form Entitas -->
+<div class="modal fade" id="modalFormCrud" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-primary text-white border-0">
+        <h5 class="modal-title" id="judulModalCrud">Definisi Formulir Baru</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <form id="formMasterData" onsubmit="submitFormCrud(event)">
+            <input type="hidden" id="crudModeAksi">
+            <input type="hidden" id="crudIdTarget">
+            
+            <div id="dynamicFormFields">
+                <!-- Javascript will inject inputs here based on Siswa or Guru -->
+            </div>
+            
+            <div class="mt-4">
+               <button type="submit" class="btn btn-primary w-100 fw-bold" id="btnSubmitCrud">Evaluasi & Simpan</button>
+            </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden Canvas for Printable IDs -->
+<div id="printCanvas" class="print-only-canvas"></div>

@@ -1,0 +1,1460 @@
+<!-- ========================================== -->
+<!-- FILE: Scripts.html                         -->
+<!-- ========================================== -->
+<script>
+  // DOM Cache & State
+  let globalAdminName = "";
+  let currentActiveTab = "PageDashboard";
+  // Chart Instances
+  let dashChart = null;
+  let currentDataCrud = []; // Store active CRUD data globally for export and print
+
+  function switchPage(pageId, navButtonContext) {
+     if(navButtonContext) {
+        document.querySelectorAll('.nav-item .btn').forEach(btn => btn.classList.remove('active', 'bg-white', 'text-primary'));
+        navButtonContext.classList.add('active', 'bg-white', 'text-primary');
+     }
+     
+     // Sembunyikan sidebar di mobile jika sedang terbuka
+     const sidebar = document.getElementById('sidebar');
+     if (sidebar && sidebar.classList.contains('show')) {
+        sidebar.classList.remove('show');
+     }
+     
+     document.querySelectorAll('.page-content').forEach(p => p.style.display = 'none');
+     document.getElementById(pageId).style.display = 'block';
+     currentActiveTab = pageId;
+
+     if (pageId === "PageAbsensi") {
+         muatUlangTabelAbsen();
+         setTimeout(() => {
+             const inputScanner = document.getElementById('manualBarcode');
+             if (inputScanner) inputScanner.focus();
+         }, 300);
+     }
+     
+     if (pageId === "PageCrud") {
+         muatUlangDataCrud();
+         if (!window.kelasGlobal) loadKelasUtama();
+     }
+     if (pageId === "PageLaporan") {
+         if (!window.kelasGlobal) loadKelasUtama();
+     }
+     if (pageId === "PageSettings") {
+         loadAturanJamUtama();
+         if (!window.kelasGlobal) loadKelasUtama();
+     }
+     if (pageId === "PageDashboard") {
+         document.getElementById('dashDate').innerText = new Date().toLocaleDateString('id-ID', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+         
+         if (typeof google !== 'undefined' && google.script) {
+            google.script.run.withSuccessHandler(res => {
+               if(res && res.success) {
+                  const d = res.data;
+                  // Siswa
+                  document.getElementById('dashSiswaTotal').innerText = d.totalSiswa || 0;
+                  document.getElementById('dashSiswaMasuk').innerText = d.siswaMasuk || 0;
+                  document.getElementById('dashSiswaPulang').innerText = d.siswaPulang || 0;
+                  document.getElementById('dashSiswaTepat').innerText = d.siswaTepat || "0%";
+                  document.getElementById('progSiswaTepat').style.width = (d.siswaTepatInt || 0) + "%";
+                  document.getElementById('dashSiswaPulangPersen').innerText = (d.siswaPulangPersenInt || 0) + "%";
+                  document.getElementById('progSiswaPulangPersen').style.width = (d.siswaPulangPersenInt || 0) + "%";
+                  document.getElementById('dashSiswaAlfa').innerText = (d.siswaAlfaInt || 0) + "%";
+                  document.getElementById('progSiswaAlfa').style.width = (d.siswaAlfaInt || 0) + "%";
+                  
+                  // Guru
+                  document.getElementById('dashGuruTotal').innerText = d.totalGuru || 0;
+                  document.getElementById('dashGuruMasuk').innerText = d.guruMasuk || 0;
+                  document.getElementById('dashGuruPulang').innerText = d.guruPulang || 0;
+                  document.getElementById('dashGuruTepat').innerText = d.guruTepat || "0%";
+                  document.getElementById('progGuruTepat').style.width = (d.guruTepatInt || 0) + "%";
+                  document.getElementById('dashGuruPulangPersen').innerText = (d.guruPulangPersenInt || 0) + "%";
+                  document.getElementById('progGuruPulangPersen').style.width = (d.guruPulangPersenInt || 0) + "%";
+                  document.getElementById('dashGuruAlfa').innerText = (d.guruAlfaInt || 0) + "%";
+                  document.getElementById('progGuruAlfa').style.width = (d.guruAlfaInt || 0) + "%";
+
+                  renderChart(d.chartLabels, d.chartData);
+               } else {
+                  renderChart();
+               }
+            }).withFailureHandler(err => {
+               console.error("getDashboardMetrics failed", err);
+               renderChart();
+            }).getDashboardMetrics();
+         } else {
+            renderChart();
+         }
+     }
+  }
+  
+  // -- Auth Login Logic --
+  function togglePassword(){
+      let i = document.getElementById("loginPassword");
+      let icon = document.getElementById("loginEyeIcon");
+      if(i.type === "password"){
+          i.type = "text"; icon.className = "fa fa-eye-slash";
+      }else{
+          i.type = "password"; icon.className = "fa fa-eye";
+      }
+  }
+
+  function doLogin(e) {
+     e.preventDefault();
+     const btn = document.getElementById('btnLogin');
+     const oriText = btn.innerHTML;
+     const us = document.getElementById('loginUsername').value;
+     const pw = document.getElementById('loginPassword').value;
+     
+     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Autentikasi...';
+     btn.disabled = true;
+
+     google.script.run.withSuccessHandler(res => {
+        btn.innerHTML = oriText; btn.disabled = false;
+        if(res && res.success){
+           globalAdminName = res.username;
+           
+           const isGuru = res.role.toLowerCase() === 'guru';
+           if(isGuru) {
+               document.getElementById('navItemDashboard').classList.remove('d-none');
+               document.getElementById('navItemCrud').classList.add('d-none');
+               document.getElementById('navItemLaporan').classList.remove('d-none');
+               document.getElementById('navItemSettings').classList.add('d-none');
+               
+               document.getElementById('tabKategoriGuru').closest('.nav-item').classList.add('d-none');
+               ubahTabKategori('Siswa', document.getElementById('tabKategoriSiswa'));
+               
+               document.getElementById('loginArea').classList.add('d-none');
+               document.getElementById('mainApp').classList.remove('d-none');
+               document.getElementById('mainApp').classList.add('d-flex');
+               
+               switchPage('PageDashboard', document.getElementById('navBtnDashboard'));
+           } else {
+               document.getElementById('navItemDashboard').classList.remove('d-none');
+               document.getElementById('navItemCrud').classList.remove('d-none');
+               document.getElementById('navItemLaporan').classList.remove('d-none');
+               document.getElementById('navItemSettings').classList.remove('d-none');
+               
+               document.getElementById('tabKategoriGuru').closest('.nav-item').classList.remove('d-none');
+               
+               document.getElementById('loginArea').classList.add('d-none');
+               document.getElementById('mainApp').classList.remove('d-none');
+               document.getElementById('mainApp').classList.add('d-flex');
+               
+               switchPage('PageDashboard', document.getElementById('navBtnDashboard'));
+           }
+        } else {
+           Swal.fire({ icon: 'error', title: 'Otorisasi Gagal', text: res.message, confirmButtonColor: '#0d6efd' });
+        }
+     }).withFailureHandler(err => {
+         btn.innerHTML = oriText; btn.disabled = false;
+         Swal.fire({ icon: 'error', title: 'Fatal Error Network', text: err, confirmButtonColor: '#0d6efd' });
+     }).verifikasiLogin(us, pw);
+  }
+
+  function logout() {
+      Swal.fire({
+          title: 'Keluar dari Panel Admin?',
+          text: "Sesi anda akan ditutup.",
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonColor: '#d33',
+          cancelButtonColor: '#6c757d',
+          confirmButtonText: 'Ya, Keluar'
+      }).then((result) => {
+          if (result.isConfirmed) {
+              document.getElementById('mainApp').classList.remove('d-flex');
+              document.getElementById('mainApp').classList.add('d-none');
+              document.getElementById('loginArea').classList.remove('d-none');
+              document.getElementById('loginUsername').value = "";
+              document.getElementById('loginPassword').value = "";
+          }
+      });
+  }
+
+  // ============== MODUL ABSENSI LIVE ==============
+  let html5QrcodeScannerLive = null;
+  let isKameraLive = false;
+
+  function toggleKameraLive() {
+      const reader = document.getElementById('reader');
+      const btn = document.getElementById('btnToggleKamera');
+      
+      if (isKameraLive) {
+          if (html5QrcodeScannerLive) {
+              html5QrcodeScannerLive.stop().then(() => {
+                  reader.style.display = 'none';
+                  btn.innerHTML = '<i class="fa fa-video fa-lg me-2"></i> Mulai Kamera Live';
+                  btn.classList.replace('btn-danger', 'btn-primary');
+                  isKameraLive = false;
+              }).catch(err => console.error(err));
+          }
+      } else {
+          reader.style.display = 'block';
+          if (!html5QrcodeScannerLive) {
+              html5QrcodeScannerLive = new Html5Qrcode("reader");
+          }
+          
+          navigator.mediaDevices.getUserMedia({ video: true }).then(() => {
+              Html5Qrcode.getCameras().then(devices => {
+                  if (devices && devices.length) {
+                      html5QrcodeScannerLive.start(
+                          { facingMode: "environment" },
+                          {
+                              fps: 10,
+                              qrbox: 250
+                          },
+                          onScanSuccess,
+                          onScanFailure
+                      ).then(() => {
+                          btn.innerHTML = '<i class="fa fa-stop fa-lg me-2"></i> Hentikan Kamera';
+                          btn.classList.replace('btn-primary', 'btn-danger');
+                          isKameraLive = true;
+                      }).catch((err) => {
+                          Swal.fire({ icon: 'error', title: 'Error', text: 'Kamera gagal dimulai: ' + err });
+                          reader.style.display = 'none';
+                      });
+                  } else {
+                      Swal.fire({ icon: 'error', title: 'Error', text: 'Tidak ada kamera ditemukan di perangkat ini' });
+                      reader.style.display = 'none';
+                  }
+              }).catch(err => {
+                  Swal.fire({ icon: 'error', title: 'Error', text: 'Izin kamera ditolak atau error: ' + err });
+                  reader.style.display = 'none';
+              });
+          }).catch(err => {
+              Swal.fire({ icon: 'error', title: 'Error', text: 'Izin getUserMedia ditolak: ' + err });
+              reader.style.display = 'none';
+          });
+      }
+  }
+
+  function bukaModalKamera() {
+      document.getElementById('qrFileInput').click();
+  }
+
+  let lastScannedText = "";
+  let lastScanTime = 0;
+
+  function onScanSuccess(decodedText, decodedResult) {
+     const now = new Date().getTime();
+     if (decodedText === lastScannedText && (now - lastScanTime) < 3000) {
+         // Ignore duplicate scan within 3 seconds
+         return;
+     }
+     lastScannedText = decodedText;
+     lastScanTime = now;
+
+     const isSiswa = document.getElementById('tabKategoriSiswa').classList.contains('active');
+     const kategori = isSiswa ? 'Siswa' : 'Guru';
+     const mode = document.getElementById('tabModeMasuk').checked ? 'Masuk' : 'Pulang';
+
+     // Audio feedback
+     const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+     audio.play().catch(e => console.log('Audio blocked'));
+
+     Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'info',
+        title: 'Memproses scan: ' + decodedText,
+        showConfirmButton: false,
+        timer: 1500
+     });
+     
+     google.script.run.withSuccessHandler(res => {
+        if(res && res.success){
+            muatUlangTabelAbsen();
+            Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: 'success',
+                title: 'Berhasil: ' + decodedText,
+                text: res.message || '',
+                showConfirmButton: false,
+                timer: 2000
+            });
+        } else {
+            Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: 'error',
+                title: 'Gagal: ' + decodedText,
+                text: res.message || 'ID tidak terdaftar',
+                showConfirmButton: false,
+                timer: 3000
+            });
+        }
+     }).withFailureHandler(err => {
+         Swal.fire('Error', 'Sistem Gagal: ' + err, 'error');
+     }).prosesScanQR(decodedText, kategori, mode);
+  }
+  function onScanFailure(error) { /* silence per default html5-qrcode */ }
+
+  function handleQrFileUpload(event) {
+      if (event.target.files && event.target.files.length > 0) {
+          const file = event.target.files[0];
+          
+          Swal.fire({
+             title: 'Menganalisis Foto...',
+             text: 'Mencari semua QR Code dalam gambar',
+             allowOutsideClick: false,
+             didOpen: () => {
+                 Swal.showLoading()
+             }
+          });
+
+          const img = new Image();
+          const url = URL.createObjectURL(file);
+          
+          img.onload = async () => {
+              URL.revokeObjectURL(url);
+              let decodedTexts = [];
+              
+              if ('BarcodeDetector' in window) {
+                  try {
+                      const barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
+                      const barcodes = await barcodeDetector.detect(img);
+                      decodedTexts = barcodes.map(b => b.rawValue);
+                  } catch (e) {
+                      console.log("BarcodeDetector error:", e);
+                  }
+              }
+              
+              // Fallback to html5QrCode if BarcodeDetector didn't find anything or is not supported
+              if (decodedTexts.length === 0) {
+                  try {
+                      const html5QrCode = new Html5Qrcode("hiddenReader");
+                      const decodedText = await html5QrCode.scanFile(file, true);
+                      decodedTexts.push(decodedText);
+                  } catch (err) {
+                      console.log("Html5Qrcode error:", err);
+                  }
+              }
+
+              if (decodedTexts.length > 0) {
+                  decodedTexts = [...new Set(decodedTexts)]; // deduplicate
+                  processMultipleQRCodes(decodedTexts);
+              } else {
+                  Swal.fire({
+                     icon: 'error',
+                     title: 'QR Code Tidak Ditemukan',
+                     text: 'Pastikan gambar jelas, terang, dan QR Code tidak terpotong. Coba foto ulang dengan lebih dekat.',
+                  });
+              }
+          };
+          img.onerror = () => {
+              Swal.fire('Error', 'Gagal memuat gambar', 'error');
+          };
+          
+          img.src = url;
+          event.target.value = "";
+      }
+  }
+
+  async function processMultipleQRCodes(decodedTexts) {
+      if (decodedTexts.length === 1) {
+          Swal.close();
+          onScanSuccess(decodedTexts[0], null);
+          return;
+      }
+
+      const isSiswa = document.getElementById('tabKategoriSiswa').classList.contains('active');
+      const kategori = isSiswa ? 'Siswa' : 'Guru';
+      const mode = document.getElementById('tabModeMasuk').checked ? 'Masuk' : 'Pulang';
+
+      Swal.fire({
+         title: `Memproses ${decodedTexts.length} QR Code...`,
+         allowOutsideClick: false,
+         didOpen: () => {
+             Swal.showLoading()
+         }
+      });
+
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+      audio.play().catch(e => console.log('Audio blocked'));
+      
+      const promises = decodedTexts.map(text => {
+          return new Promise((resolve) => {
+              google.script.run.withSuccessHandler(res => {
+                  resolve({ text, success: res.success, message: res.message });
+              }).withFailureHandler(err => {
+                  resolve({ text, success: false, message: err });
+              }).prosesScanQR(text, kategori, mode);
+          });
+      });
+
+      const results = await Promise.all(promises);
+      
+      const successCount = results.filter(r => r.success).length;
+      const failCount = results.filter(r => !r.success).length;
+
+      muatUlangTabelAbsen();
+      
+      let htmlResult = `<div class="text-start mt-3" style="max-height: 200px; overflow-y: auto; font-size: 0.85rem; border: 1px solid #dee2e6; padding: 10px; border-radius: 6px;">`;
+      results.forEach(r => {
+          if(r.success) {
+              htmlResult += `<div class="text-success mb-2 border-bottom pb-1"><i class="fa fa-check-circle"></i> <b>${r.text}</b><br><span class="text-muted">${r.message}</span></div>`;
+          } else {
+              htmlResult += `<div class="text-danger mb-2 border-bottom pb-1"><i class="fa fa-times-circle"></i> <b>${r.text}</b><br><span class="text-muted">${r.message || 'Gagal diproses'}</span></div>`;
+          }
+      });
+      htmlResult += `</div>`;
+
+      Swal.fire({
+          icon: successCount > 0 ? (failCount === 0 ? 'success' : 'warning') : 'error',
+          title: `Hasil Scan (${decodedTexts.length} QR)`,
+          html: `<b><span class="text-success">Berhasil: ${successCount}</span> | <span class="text-danger">Gagal: ${failCount}</span></b>` + htmlResult,
+          confirmButtonText: 'Tutup'
+      });
+  }
+
+  function handleManualBarcode(event) {
+      if (event.key === 'Enter') {
+          submitManualBarcode();
+      }
+  }
+
+  function submitManualBarcode() {
+      const input = document.getElementById('manualBarcode');
+      const val = input.value.trim();
+      if (val) {
+          onScanSuccess(val, null);
+          input.value = "";
+          input.focus(); // Keep focus for next scan
+      }
+  }
+
+  function ubahTabKategori(kat, el){
+      document.getElementById('tabKategoriSiswa').classList.remove('active', 'fw-bold');
+      document.getElementById('tabKategoriGuru').classList.remove('active', 'fw-bold');
+      document.getElementById('tabKategoriSiswa').classList.add('text-muted');
+      document.getElementById('tabKategoriGuru').classList.add('text-muted');
+      
+      el.classList.add('active', 'fw-bold');
+      el.classList.remove('text-muted');
+      
+      document.getElementById('filterKelasAbsen').style.display = (kat === 'Siswa') ? 'block' : 'none';
+      muatUlangTabelAbsen();
+  }
+
+  function ubahTabMode(mode){
+     document.getElementById('thWaktuTarget').innerText = mode==='Masuk' ? 'Jam Masuk' : 'Jam Pulang';
+     muatUlangTabelAbsen();
+  }
+
+  function filterTabelAbsen() {
+     muatUlangTabelAbsen();
+  }
+
+  function muatUlangTabelAbsen() {
+     const isSiswa = document.getElementById('tabKategoriSiswa').classList.contains('active');
+     const mode = document.getElementById('tabModeMasuk').checked ? 'Masuk' : 'Pulang';
+     const filterKelas = document.getElementById('filterKelasAbsen').value;
+     const kategori = isSiswa ? 'Siswa' : 'Guru';
+     
+     const tb = document.getElementById('tbodyLiveAbsen');
+     tb.innerHTML = '<tr><td colspan="5" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Sinkronisasi Stream...</td></tr>';
+     
+     if (typeof google === 'undefined' || typeof google.script === 'undefined') {
+         setTimeout(()=>{
+             let dataHTML = ``;
+             for(let i=1; i<=3; i++){
+                 dataHTML += `<tr>
+                    <td class="fw-bold text-muted">${isSiswa?'S':'G'}-00${i}</td>
+                    <td class="fw-medium">Dummy Name ${i}</td>
+                    <td class='font-monospace'>06:${30+i}</td>
+                    <td><span class="badge ${i==2?'badge-telat':'badge-tepat'}">${i==2?'Terlambat':'Tepat Waktu'}</span></td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-light border text-primary" onclick="bukaModalManualAbsen('${isSiswa?'S':'G'}-00${i}', 'Dummy Name ${i}')"><i class="fa fa-cog"></i> Aksi</button>
+                    </td>
+                 </tr>`;
+             }
+             tb.innerHTML = dataHTML;
+         }, 600);
+         return;
+     }
+
+     const tglHariIni = new Date().toISOString().split('T')[0];
+     
+     google.script.run.withSuccessHandler(res => {
+         if (res && res.success && res.data.length > 0) {
+             let html = '';
+             let addedCount = 0;
+             res.data.forEach(item => {
+                 let statusField = mode === 'Masuk' ? item.status_masuk : item.status_pulang;
+                 let jamField = mode === 'Masuk' ? item.jam_masuk : item.jam_pulang;
+                 if (!statusField || statusField === "") statusField = "-";
+
+                 addedCount++;
+                 
+                 let badgeClass = statusField === '-' ? 'bg-secondary' : 'badge-tepat'; // default
+                 let statusLower = String(statusField).toLowerCase();
+                 if(statusLower.includes('terlambat')) badgeClass = 'badge-telat';
+                 if(statusLower.includes('sakit')) badgeClass = 'badge-sakit';
+                 if(statusLower.includes('izin')) badgeClass = 'badge-sakit';
+                 if(statusLower.includes('alfa')) badgeClass = 'badge-alfa';
+                 if(statusLower.includes('lupa')) badgeClass = 'badge-alfa';
+
+                 let idTarget = item.id_target;
+                 let namaTarget = item.nama_target || "Tanpa Nama";
+                 let statTampil = statusField === '-' ? 'Belum Presensi' : statusField;
+
+                 html += `<tr>
+                    <td class="text-center">
+                        <input class="form-check-input bulk-check-item" type="checkbox" value="${idTarget}" data-nama="${namaTarget.replace(/'/g, "\\'")}" onchange="updateBulkCount()">
+                    </td>
+                    <td class="fw-bold text-muted">${idTarget}</td>
+                    <td class="fw-medium">${namaTarget}</td>
+                    <td class='font-monospace'>${jamField && jamField !== '-' ? jamField : '--:--'}</td>
+                    <td><span class="badge ${badgeClass}">${statTampil}</span></td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-light border text-primary" onclick="bukaModalManualAbsen('${idTarget}', '${namaTarget.replace(/'/g, "\\'")}')"><i class="fa fa-cog"></i> Aksi</button>
+                    </td>
+                 </tr>`;
+             });
+             tb.innerHTML = addedCount > 0 ? html : '<tr><td colspan="6" class="text-center py-4 text-muted">Belum ada absen terekam hari ini.</td></tr>';
+             
+             // Reset bulk UI
+             document.getElementById('checkAll').checked = false;
+             updateBulkCount();
+         } else {
+             tb.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">Belum ada master data.</td></tr>';
+         }
+     }).withFailureHandler(err => {
+         tb.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-danger">Terjadi Error: ${err.message || err}</td></tr>`;
+         console.error(err);
+     }).getLiveAbsenHariIni(kategori, tglHariIni, filterKelas);
+  }
+
+  function bukaModalManualAbsen(id, nama){
+      document.getElementById('manualIdTarget').value = id;
+      document.getElementById('manualNama').value = nama;
+      document.getElementById('manualKet').value = '';
+      new bootstrap.Modal(document.getElementById('modalAbsenManual')).show();
+  }
+
+  function submitAbsenManual(e){
+      e.preventDefault();
+      const id = document.getElementById('manualIdTarget').value;
+      const status = document.getElementById('manualStatus').value;
+      const ket = document.getElementById('manualKet').value;
+      const isSiswa = document.getElementById('tabKategoriSiswa').classList.contains('active');
+      const kategori = isSiswa ? 'Siswa' : 'Guru';
+      const mode = document.getElementById('tabModeMasuk').checked ? 'Masuk' : 'Pulang';
+      const tgl = new Date().toISOString().split('T')[0];
+
+      const btn = document.getElementById('btnSubmitManual'); btn.disabled=true;
+      google.script.run.withSuccessHandler(res=>{
+          btn.disabled=false;
+          bootstrap.Modal.getInstance(document.getElementById('modalAbsenManual')).hide();
+          muatUlangTabelAbsen();
+      }).simpanAbsenManual(id, kategori, mode, tgl, status, ket);
+  }
+
+  // ============== BULK ACTIONS ==============
+  function toggleCheckAll(source) {
+      const checkboxes = document.querySelectorAll('.bulk-check-item');
+      checkboxes.forEach(cb => cb.checked = source.checked);
+      updateBulkCount();
+  }
+
+  function updateBulkCount() {
+      const checkboxes = document.querySelectorAll('.bulk-check-item:checked');
+      const count = checkboxes.length;
+      document.getElementById('bulkCountDisplay').textContent = `${count} Terpilih`;
+      document.getElementById('btnBulkSubmit').disabled = count === 0;
+  }
+
+  function submitBulkAbsen() {
+      const checkboxes = document.querySelectorAll('.bulk-check-item:checked');
+      if (checkboxes.length === 0) {
+          Swal.fire({ icon: 'warning', title: 'Pilih Data', text: 'Ceklis minimal satu baris data!' });
+          return;
+      }
+      
+      const status = document.getElementById('bulkStatus').value;
+      const isSiswa = document.getElementById('tabKategoriSiswa').classList.contains('active');
+      const kategori = isSiswa ? 'Siswa' : 'Guru';
+      const mode = document.getElementById('tabModeMasuk').checked ? 'Masuk' : 'Pulang';
+      const tgl = new Date().toISOString().split('T')[0];
+      
+      Swal.fire({
+          title: 'Konfirmasi Absensi',
+          text: `Anda akan mengubah status ${checkboxes.length} orang menjadi "${status}". Lanjutkan?`,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonColor: '#0d6efd',
+          cancelButtonColor: '#6c757d',
+          confirmButtonText: 'Ya, Lanjutkan'
+      }).then((result) => {
+          if (result.isConfirmed) {
+              const ids = Array.from(checkboxes).map(cb => cb.value);
+              const btn = document.getElementById('btnBulkSubmit'); 
+              const oriText = btn.innerHTML;
+              btn.disabled = true;
+              btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Memproses...`;
+        
+              google.script.run.withSuccessHandler(res => {
+                  btn.innerHTML = oriText;
+                  document.getElementById('checkAll').checked = false;
+                  muatUlangTabelAbsen();
+                  Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Berhasil diproses', showConfirmButton: false, timer: 2000 });
+              }).withFailureHandler(err => {
+                  btn.innerHTML = oriText;
+                  btn.disabled = false;
+                  Swal.fire({ icon: 'error', title: 'Gagal', text: err, confirmButtonColor: '#0d6efd' });
+              }).simpanBulkAbsenManual(ids, kategori, mode, tgl, status, "Diset kolektif via dashboard");
+          }
+      });
+  }
+
+  // ============== MODUL CRUD ==============
+  function toggleCrudFilterKelas() {
+      const kat = document.getElementById('crudKategori').value;
+      const fKelas = document.getElementById('crudFilterKelas');
+      if (kat === 'Guru') {
+         fKelas.style.display = 'none';
+         fKelas.value = '';
+      } else {
+         fKelas.style.display = 'block';
+      }
+  }
+
+  function muatUlangDataCrud() {
+      const kat = document.getElementById('crudKategori').value;
+      const tH = document.getElementById('theadCrud');
+      const tB = document.getElementById('tbodyCrud');
+      const fKelas = document.getElementById('crudFilterKelas') ? document.getElementById('crudFilterKelas').value : '';
+      
+      tB.innerHTML ='<tr><td colspan="8" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Menarik Data...</td></tr>';
+      
+      if(kat === 'Siswa') {
+         tH.innerHTML = `<th><input type='checkbox' class='form-check-input' id='cbAll'></th><th>ID</th><th>NISN</th><th>Nama Siswa</th><th>Kelas/JR</th><th>JK</th><th class="text-end">Operasi</th>`;
+      } else {
+         tH.innerHTML = `<th><input type='checkbox' class='form-check-input' id='cbAll'></th><th>ID</th><th>NIP/NUPTK</th><th>Nama Guru</th><th>Jabatan</th><th>JK</th><th class="text-end">Operasi</th>`;
+      }
+
+      if (typeof google === 'undefined' || typeof google.script === 'undefined') {
+          setTimeout(()=>{
+              if(kat === 'Siswa') {
+                 tB.innerHTML = `<tr><td><input type='checkbox' class='form-check-input cbRow' value='S-001'></td><td>S-001</td><td>1234</td><td>Ahmad Siswa</td><td>XI RPL</td><td>Laki-laki</td><td class="text-end text-nowrap"><button class='btn btn-sm btn-outline-info' onclick="cetakIdCardIndividu('S-001', 'Ahmad Siswa', 'Siswa')"><i class='fa fa-id-card'></i></button><button class='btn btn-sm btn-outline-warning mx-1' onclick="bukaModalCrud('edit', 'S-001')"><i class='fa fa-edit'></i></button><button class='btn btn-sm btn-outline-danger' onclick="hapusDataCrud('S-001')"><i class='fa fa-trash'></i></button></td></tr>`;
+              } else {
+                 tB.innerHTML = `<tr><td><input type='checkbox' class='form-check-input cbRow' value='G-001'></td><td>G-001</td><td>198001</td><td>Budi Guru</td><td>Waka</td><td>Laki-laki</td><td class="text-end text-nowrap"><button class='btn btn-sm btn-outline-info' onclick="cetakIdCardIndividu('G-001', 'Budi Guru', 'Guru')"><i class='fa fa-id-card'></i></button><button class='btn btn-sm btn-outline-warning mx-1' onclick="bukaModalCrud('edit', 'G-001')"><i class='fa fa-edit'></i></button><button class='btn btn-sm btn-outline-danger' onclick="hapusDataCrud('G-001')"><i class='fa fa-trash'></i></button></td></tr>`;
+              }
+          }, 500);
+          return;
+      }
+
+      google.script.run.withSuccessHandler(res => {
+         if (res && res.success && res.data.length > 0) {
+             currentDataCrud = res.data;
+             let html = '';
+             let addedCount = 0;
+             res.data.forEach(item => {
+                 if (kat === 'Siswa') {
+                     if(fKelas && item.kelas !== fKelas) return;
+                     addedCount++;
+                     html += `<tr>
+                         <td><input type='checkbox' class='form-check-input cbRow' value='${item.id_siswa}'></td>
+                         <td>${item.id_siswa}</td>
+                         <td>${item.nisn}</td>
+                         <td>${item.nama_siswa}</td>
+                         <td>${item.kelas} ${item.jurusan}</td>
+                         <td>${item.jenis_kelamin}</td>
+                         <td class="text-end text-nowrap">
+                             <button class='btn btn-sm btn-outline-info' title="Cetak ID Card" onclick="cetakIdCardIndividu('${item.id_siswa}', '${item.nama_siswa.replace(/'/g, "\\'")}', '${kat}')"><i class='fa fa-id-card'></i></button>
+                             <button class='btn btn-sm btn-outline-warning mx-1' title="Edit" onclick="bukaModalCrud('edit', '${item.id_siswa}', '${item.nisn}', '${item.nama_siswa.replace(/'/g, "\\'")}', '${item.jenis_kelamin}', '${item.kelas}', '${item.jurusan}', '${item.no_hp_ortu}')"><i class='fa fa-edit'></i></button>
+                             <button class='btn btn-sm btn-outline-danger' title="Hapus" onclick="hapusDataCrud('${item.id_siswa}')"><i class='fa fa-trash'></i></button>
+                         </td>
+                     </tr>`;
+                 } else {
+                     addedCount++;
+                     html += `<tr>
+                         <td><input type='checkbox' class='form-check-input cbRow' value='${item.id_guru}'></td>
+                         <td>${item.id_guru}</td>
+                         <td>${item.nip_nuptk}</td>
+                         <td>${item.nama_guru}</td>
+                         <td>${item.jabatan_tugas}</td>
+                         <td>${item.jenis_kelamin}</td>
+                         <td class="text-end text-nowrap">
+                             <button class='btn btn-sm btn-outline-info' title="Cetak ID Card" onclick="cetakIdCardIndividu('${item.id_guru}', '${item.nama_guru.replace(/'/g, "\\'")}', '${kat}')"><i class='fa fa-id-card'></i></button>
+                             <button class='btn btn-sm btn-outline-warning mx-1' title="Edit" onclick="bukaModalCrud('edit', '${item.id_guru}', '${item.nip_nuptk}', '${item.nama_guru.replace(/'/g, "\\'")}', '${item.jenis_kelamin}', '${item.jabatan_tugas}', '${item.no_hp}')"><i class='fa fa-edit'></i></button>
+                             <button class='btn btn-sm btn-outline-danger' title="Hapus" onclick="hapusDataCrud('${item.id_guru}')"><i class='fa fa-trash'></i></button>
+                         </td>
+                     </tr>`;
+                 }
+             });
+             tB.innerHTML = addedCount > 0 ? html : '<tr><td colspan="8" class="text-center py-4 text-muted">Tidak ada data yang sesuai filter...</td></tr>';
+         } else {
+             tB.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-muted">Aduh, Datanya Masih Kosong...</td></tr>';
+         }
+      }).withFailureHandler(err => {
+         tB.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-danger">Gagal Memuat Database: ${err}</td></tr>`;
+      }).getDataMaster(kat);
+  }
+
+  function bukaModalCrud(mode, idTarget='', v1='', v2='', v3='', v4='', v5='', v6='') {
+      const kat = document.getElementById('crudKategori').value;
+      document.getElementById('crudModeAksi').value = mode;
+      document.getElementById('crudIdTarget').value = idTarget;
+      
+      const judul = document.getElementById('judulModalCrud');
+      judul.innerText = (mode === 'tambah' ? 'Buat Entitas ' : 'Sunting Entitas ') + kat;
+      
+      const dynContainer = document.getElementById('dynamicFormFields');
+      if (kat === 'Siswa') {
+         let kelasOptions = (window.kelasGlobal || []).map(k => `<option value="${k}" ${mode==='edit' && v4===k?'selected':''}>${k}</option>`).join('');
+         dynContainer.innerHTML = `
+            <div class="mb-3">
+                <label class="form-label text-muted small fw-bold">NISN</label>
+                <input type="text" class="form-control" id="fNisn" value="${mode==='edit'?v1:''}" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label text-muted small fw-bold">Nama Lengkap Siswa</label>
+                <input type="text" class="form-control" id="fNama" value="${mode==='edit'?v2:''}" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label text-muted small fw-bold">Jenis Kelamin</label>
+                <select class="form-select" id="fJK" required>
+                    <option value="Laki-laki" ${mode==='edit' && v3==='Laki-laki'?'selected':''}>Laki-laki</option>
+                    <option value="Perempuan" ${mode==='edit' && v3==='Perempuan'?'selected':''}>Perempuan</option>
+                </select>
+            </div>
+            <div class="row g-2 mb-3">
+               <div class="col-6">
+                   <label class="form-label text-muted small fw-bold">Kelas</label>
+                   <select class="form-select" id="fKelas" required>
+                      <option value="">Pilih...</option>
+                      ${kelasOptions}
+                   </select>
+               </div>
+               <div class="col-6">
+                   <label class="form-label text-muted small fw-bold">Jurusan (Opsional)</label>
+                   <input type="text" class="form-control" id="fJurusan" placeholder="Cth: RPL 1" value="${mode==='edit'?v5:''}">
+               </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label text-muted small fw-bold">No. HP Orang Tua</label>
+                <input type="text" class="form-control" id="fHp" value="${mode==='edit'?v6:''}" required>
+            </div>
+         `;
+      } else {
+         dynContainer.innerHTML = `
+            <div class="mb-3">
+                <label class="form-label text-muted small fw-bold">NIP / NUPTK</label>
+                <input type="text" class="form-control" id="fNip" value="${mode==='edit'?v1:''}" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label text-muted small fw-bold">Nama Lengkap Guru</label>
+                <input type="text" class="form-control" id="fNama" value="${mode==='edit'?v2:''}" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label text-muted small fw-bold">Jenis Kelamin</label>
+                <select class="form-select" id="fJK" required>
+                   <option value="Laki-laki" ${mode==='edit' && v3==='Laki-laki'?'selected':''}>Laki-laki</option>
+                   <option value="Perempuan" ${mode==='edit' && v3==='Perempuan'?'selected':''}>Perempuan</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label text-muted small fw-bold">Jabatan / Tugas</label>
+                <input type="text" class="form-control" id="fJabatan" value="${mode==='edit'?v4:''}" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label text-muted small fw-bold">No. HP Aktif</label>
+                <input type="text" class="form-control" id="fHp" value="${mode==='edit'?v5:''}" required>
+            </div>
+         `;
+      }
+      
+      new bootstrap.Modal(document.getElementById('modalFormCrud')).show();
+  }
+
+  function submitFormCrud(e) {
+      e.preventDefault();
+      const kat = document.getElementById('crudKategori').value;
+      const mode = document.getElementById('crudModeAksi').value;
+      const idTarget = document.getElementById('crudIdTarget').value;
+      
+      let dataObj = {};
+      if (kat === 'Siswa') {
+         dataObj = {
+             nisn: document.getElementById('fNisn').value,
+             nama_siswa: document.getElementById('fNama').value,
+             jenis_kelamin: document.getElementById('fJK').value,
+             kelas: document.getElementById('fKelas').value,
+             jurusan: document.getElementById('fJurusan').value,
+             no_hp_ortu: document.getElementById('fHp').value
+         };
+      } else {
+         dataObj = {
+             nip_nuptk: document.getElementById('fNip').value,
+             nama_guru: document.getElementById('fNama').value,
+             jenis_kelamin: document.getElementById('fJK').value,
+             jabatan_tugas: document.getElementById('fJabatan').value,
+             no_hp: document.getElementById('fHp').value
+         };
+      }
+      
+      const btn = document.getElementById('btnSubmitCrud');
+      btn.innerText = "Memproses Data...";
+      btn.disabled = true;
+      
+      if (typeof google === 'undefined' || typeof google.script === 'undefined') {
+          setTimeout(() => {
+              Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: `Simulasi: Data di${mode === 'tambah' ? 'tambahkan' : 'perbarui'}!`, showConfirmButton: false, timer: 2000 });
+              btn.innerText = "Evaluasi & Simpan"; btn.disabled = false;
+              bootstrap.Modal.getInstance(document.getElementById('modalFormCrud')).hide();
+              muatUlangDataCrud();
+          }, 600);
+          return;
+      }
+
+      if (mode === 'tambah') {
+          google.script.run.withSuccessHandler(res => {
+              btn.innerText = "Evaluasi & Simpan"; btn.disabled = false;
+              if(res && res.success) {
+                  bootstrap.Modal.getInstance(document.getElementById('modalFormCrud')).hide();
+                  muatUlangDataCrud();
+                  Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Data berhasil ditambahkan', showConfirmButton: false, timer: 2000 });
+              } else {
+                  Swal.fire({ icon: 'error', title: 'Gagal Menambah Data', text: res.message });
+              }
+          }).tambahDataMaster(kat, dataObj);
+      } else {
+          google.script.run.withSuccessHandler(res => {
+              btn.innerText = "Evaluasi & Simpan"; btn.disabled = false;
+              if(res && res.success) {
+                  bootstrap.Modal.getInstance(document.getElementById('modalFormCrud')).hide();
+                  muatUlangDataCrud();
+                  Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Data berhasil diperbarui', showConfirmButton: false, timer: 2000 });
+              } else {
+                  Swal.fire({ icon: 'error', title: 'Gagal Memperbarui Data', text: res.message });
+              }
+          }).editDataMaster(kat, idTarget, dataObj);
+      }
+  }
+
+  function hapusDataCrud(idTarget) {
+      Swal.fire({
+          title: 'Konfirmasi Penghapusan',
+          text: `Menghapus data ID: ${idTarget} secara permanen dari sistem?`,
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#d33',
+          cancelButtonColor: '#6c757d',
+          confirmButtonText: 'Ya, Hapus'
+      }).then((result) => {
+          if (result.isConfirmed) {
+              const kat = document.getElementById('crudKategori').value;
+              
+              if (typeof google === 'undefined' || typeof google.script === 'undefined') {
+                  Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Simulasi: Data Dihapus!', showConfirmButton: false, timer: 2000 });
+                  muatUlangDataCrud();
+                  return;
+              }
+              
+              google.script.run.withSuccessHandler(res => {
+                  if(res && res.success) {
+                      muatUlangDataCrud();
+                      Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Data berhasil dihapus', showConfirmButton: false, timer: 2000 });
+                  } else {
+                      Swal.fire({ icon: 'error', title: 'Gagal Menghapus', text: res.message });
+                  }
+              }).hapusDataMaster(kat, idTarget);
+          }
+      });
+  }
+
+  function excelParseFallback(e){
+     const file = e.target.files[0];
+     if(!file) return;
+     const reader = new FileReader();
+     reader.onload = function(ex){
+        const data = new Uint8Array(ex.target.result);
+        const workbook = XLSX.read(data, {type: 'array'});
+        const sheetTarget = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonReq = XLSX.utils.sheet_to_json(sheetTarget);
+        
+        const kat = document.getElementById('crudKategori').value;
+        Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Menginisialisasi upload...', showConfirmButton: false, timer: 1500 });
+        google.script.run.withSuccessHandler(r=>Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: r ? r.message : 'Upload selesai', showConfirmButton: false, timer: 2000 })).importDataMassal(kat, jsonReq);
+     };
+     reader.readAsArrayBuffer(file);
+  }
+  
+  // Expose function internally
+  window.prosesImportExcel = excelParseFallback;
+
+  // Print Logic ID Card & Data Export XLS
+  function exportDataExcel(mode = 'crud') {
+      let dataToExport = [];
+      let filename = "Export_Data.xlsx";
+      
+      if(mode === 'crud') {
+          const kat = document.getElementById('crudKategori').value;
+          const classFilter = document.getElementById('crudFilterKelas') ? document.getElementById('crudFilterKelas').value : '';
+          filename = `Data_${kat}_${classFilter || 'Semua'}.xlsx`;
+          
+          if(currentDataCrud && currentDataCrud.length > 0) {
+              dataToExport = currentDataCrud.filter(item => {
+                  if(kat === 'Siswa' && classFilter && item.kelas !== classFilter) return false;
+                  return true;
+              }).map(item => { 
+                  // Clean up internal keys if needed, but for now we clone
+                  let clone = Object.assign({}, item);
+                  return clone;
+              });
+          }
+      } else {
+          // Export HTML Table fallback for reports if needed
+          let table = document.getElementById('tableHasilLaporan');
+          if(!table) return Swal.fire({ icon: 'error', title: 'Peringatan', text: 'Data laporan kosong!' });
+          let wb = XLSX.utils.table_to_book(table, {sheet: "DataLaporan"});
+          XLSX.writeFile(wb, "Laporan_Absensi.xlsx");
+          return;
+      }
+      
+      if(dataToExport.length === 0) return Swal.fire({ icon: 'error', title: 'Peringatan', text: 'Tidak ada data untuk diekspor!' });
+      
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Data");
+      XLSX.writeFile(wb, filename);
+  }
+
+  function createIdCardHTML(id, nama, kat) {
+      let subDetail = "";
+      let nisnOrNip = "";
+      let cardClass = "id-card-student";
+      let roleLabel = kat === 'Siswa' ? 'SISWA' : 'GURU / STAF';
+      
+      if (currentDataCrud && currentDataCrud.length > 0) {
+          let ref = currentDataCrud.find(x => (kat === 'Siswa' ? x.id_siswa : x.id_guru) === id);
+          if (ref) {
+              if (kat === 'Siswa') {
+                  subDetail = `${ref.kelas || ''} ${ref.jurusan || ''}`;
+                  nisnOrNip = ref.nisn ? "NISN: " + ref.nisn : "";
+                  cardClass = "id-card-student";
+              } else {
+                  subDetail = ref.jabatan_tugas || "-";
+                  nisnOrNip = ref.nip_nuptk ? "NIP: " + ref.nip_nuptk : "";
+                  cardClass = "id-card-teacher";
+              }
+          }
+      }
+      
+      if (!subDetail) {
+          subDetail = kat === 'Siswa' ? 'SMK AL-HIKAM' : 'Staf Pengajar';
+          cardClass = kat === 'Siswa' ? 'id-card-student' : 'id-card-teacher';
+      }
+
+      return `
+        <div class="id-card ${cardClass}">
+            <div class="id-card-header-logo">
+                <div class="logo-circle"><i class="fa fa-graduation-cap"></i></div>
+                <div class="logo-text">SMK AL-HIKAM</div>
+            </div>
+            <div class="id-card-title">KARTU IDENTITAS</div>
+            <div class="id-card-photo">
+                <i class="fa fa-user fa-3x"></i>
+            </div>
+            <div class="id-card-name">${nama}</div>
+            <div class="id-card-role-badge">${roleLabel}</div>
+            <div class="id-card-details">
+                <div class="id-card-sub">${subDetail}</div>
+                <div class="id-card-num">${nisnOrNip || id}</div>
+            </div>
+            <div class="id-card-qr">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=QR-${id}" alt="QR Code">
+            </div>
+            <div class="id-card-footer">Scan QR untuk Kehadiran Digital</div>
+        </div>
+      `;
+  }
+
+  function cetakIdCardIndividu(id, nama, kat) {
+      const pc = document.getElementById('printCanvas');
+      if(!pc) return;
+      pc.innerHTML = createIdCardHTML(id, nama, kat);
+      
+      const imgs = pc.querySelectorAll('img');
+      let loadedCount = 0;
+      if (imgs.length === 0) {
+          window.print();
+          pc.innerHTML = '';
+          return;
+      }
+      imgs.forEach(img => {
+          img.onload = img.onerror = () => {
+              loadedCount++;
+              if (loadedCount === imgs.length) {
+                  setTimeout(() => {
+                      window.print();
+                      pc.innerHTML = '';
+                  }, 100);
+              }
+          };
+      });
+  }
+
+  function cetakIdCardMassal() {
+      const kat = document.getElementById('crudKategori').value;
+      const checkboxes = document.querySelectorAll('.cbRow:checked');
+      if(checkboxes.length === 0) return Swal.fire({ icon: 'error', title: 'Peringatan', text: 'Ceklis baris data terlebih dahulu!' });
+      
+      let html = '';
+      checkboxes.forEach(cb => {
+         const rowId = cb.value;
+         let nama = "";
+         if(currentDataCrud && currentDataCrud.length > 0) {
+             let ref = currentDataCrud.find(x => (kat === 'Siswa' ? x.id_siswa : x.id_guru) === rowId);
+             if(ref) nama = kat === 'Siswa' ? ref.nama_siswa : ref.nama_guru;
+         }
+         html += createIdCardHTML(rowId, nama || "Tanpa Nama", kat);
+      });
+      
+      const pc = document.getElementById('printCanvas');
+      if(pc) {
+          pc.innerHTML = html;
+          
+          const imgs = pc.querySelectorAll('img');
+          let loadedCount = 0;
+          if (imgs.length === 0) {
+              window.print();
+              pc.innerHTML = '';
+              return;
+          }
+          imgs.forEach(img => {
+              img.onload = img.onerror = () => {
+                  loadedCount++;
+                  if (loadedCount === imgs.length) {
+                      setTimeout(() => {
+                          window.print();
+                          pc.innerHTML = '';
+                      }, 100);
+                  }
+              };
+          });
+      }
+  }
+
+  // ============== MODUL LAPORAN ==============
+  function toggleFilterTypeLaporan() {
+      const type = document.getElementById('repJenisTgl').value;
+      const kat = document.getElementById('repKat').value;
+      
+      const bK = document.getElementById('boxFilterKelas');
+      if(bK) {
+          bK.style.display = kat === 'Guru' ? 'none' : 'block';
+      }
+
+      if (type === 'bulan') {
+          document.getElementById('boxTglBulan').style.display = 'block';
+          document.getElementById('boxTglMulai').style.display = 'none';
+          document.getElementById('boxTglSelesai').style.display = 'none';
+      } else {
+          document.getElementById('boxTglBulan').style.display = 'none';
+          document.getElementById('boxTglMulai').style.display = 'block';
+          document.getElementById('boxTglSelesai').style.display = 'block';
+      }
+  }
+
+  function getLaporanParams() {
+      const elKelas = document.getElementById('filterKelas');
+      return {
+          kategori: document.getElementById('repKat').value,
+          kelas: elKelas ? elKelas.value : 'Semua',
+          jenisFilter: document.getElementById('repJenisTgl').value,
+          bulan: document.getElementById('repBulan').value,
+          tglStart: document.getElementById('repStart').value,
+          tglEnd: document.getElementById('repEnd').value
+      };
+  }
+
+  function renderLaporanTable(data, mode) {
+      const tH = document.getElementById('thLaporanData');
+      const tB = document.getElementById('tbLaporanData');
+      
+      if (!data || data.length === 0) {
+          tH.innerHTML = "<th class='ps-4'>No Data</th>";
+          tB.innerHTML = "<tr><td class='text-center py-4 text-muted'>Tidak ada rekaman data sesuai filter.</td></tr>";
+          return;
+      }
+      
+      let htmlH = '';
+      let htmlB = '';
+      
+      if (mode === 'preview') {
+          // Dynamic Headers from JSON keys
+          let keys = Object.keys(data[0]);
+          keys.forEach(k => {
+              let label = k.replace(/_/g, ' ').toUpperCase();
+              htmlH += `<th>${label}</th>`;
+          });
+          
+          data.forEach(row => {
+              htmlB += `<tr>`;
+              keys.forEach(k => {
+                  htmlB += `<td>${row[k] || '-'}</td>`;
+              });
+              htmlB += `</tr>`;
+          });
+          
+          tH.innerHTML = htmlH;
+          tB.innerHTML = htmlB;
+      } else if (mode === 'rekap') {
+          htmlH = `
+             <th class="ps-4">ID ENTITAS</th>
+             <th>NAMA LENGKAP</th>
+             <th>JAM MASUK</th>
+             <th>JAM PULANG</th>
+             <th>TOTAL HADIR</th>
+             <th>SAKIT</th>
+             <th>IZIN / P.TUGAS</th>
+             <th>ALFA / TANPA KET</th>
+             <th>PERSENTASE (%)</th>
+          `;
+          
+          data.forEach(row => {
+              htmlB += `<tr>
+                 <td class="ps-4">${row.id}</td>
+                 <td class="fw-medium">${row.nama}</td>
+                 <td>${row.jam_masuk || '-'}</td>
+                 <td>${row.jam_pulang || '-'}</td>
+                 <td><span class="badge bg-success">${row.hadir} Hari</span></td>
+                 <td><span class="badge bg-warning text-dark">${row.sakit} Hari</span></td>
+                 <td><span class="badge bg-info text-dark">${row.izin} Hari</span></td>
+                 <td><span class="badge bg-danger">${row.alfa} Hari</span></td>
+                 <td><span class="badge bg-dark">${row.persentase}</span></td>
+              </tr>`;
+          });
+          
+          tH.innerHTML = htmlH;
+          tB.innerHTML = htmlB;
+      }
+  }
+
+  function tarikPreviewLaporan() {
+      const p = getLaporanParams();
+      const tB = document.getElementById('tbLaporanData');
+      const tH = document.getElementById('thLaporanData');
+      
+      if (p.jenisFilter === 'bulan' && !p.bulan) return Swal.fire({ icon: 'error', title: 'Peringatan', text: 'Pilih bulan target!' });
+      if (p.jenisFilter === 'rentang' && (!p.tglStart || !p.tglEnd)) return Swal.fire({ icon: 'error', title: 'Peringatan', text: 'Tentukan rentang tanggal!' });
+      
+      tH.innerHTML = "<th class='ps-4'>Memproses...</th>";
+      tB.innerHTML = '<tr><td class="text-center py-5 text-muted"><span class="spinner-border spinner-border-sm text-primary"></span> Menarik Data Laporan...</td></tr>';
+
+      if (typeof google === 'undefined' || typeof google.script === 'undefined') {
+          setTimeout(() => {
+              tH.innerHTML = "<th class='ps-4'>Peringatan Sistem</th>";
+              tB.innerHTML = '<tr><td class="text-center py-5 text-danger">Gagal menarik data. Server GAS tidak terdeteksi (Mode Lokal).</td></tr>';
+          }, 800);
+          return;
+      }
+
+      google.script.run.withSuccessHandler(res => {
+          if (res && res.success) {
+              renderLaporanTable(res.data, 'preview');
+          } else {
+              tH.innerHTML = "<th class='ps-4'>Error</th>";
+              tB.innerHTML = `<tr><td class="text-center py-5 text-danger">${res ? res.message : 'Koneksi terputus atau respon invalid'}</td></tr>`;
+          }
+      }).getLaporanFilter(p.kategori, p.kelas, p.jenisFilter, p.tglStart, p.tglEnd, p.bulan);
+  }
+
+  function tarikRekapLaporan() {
+      const p = getLaporanParams();
+      const tB = document.getElementById('tbLaporanData');
+      const tH = document.getElementById('thLaporanData');
+      
+      if (p.jenisFilter === 'bulan' && !p.bulan) return Swal.fire({ icon: 'error', title: 'Peringatan', text: 'Pilih bulan target!' });
+      if (p.jenisFilter === 'rentang' && (!p.tglStart || !p.tglEnd)) return Swal.fire({ icon: 'error', title: 'Peringatan', text: 'Tentukan rentang tanggal!' });
+      
+      tH.innerHTML = "<th class='ps-4'>Memproses Rekapitulasi...</th>";
+      tB.innerHTML = '<tr><td class="text-center py-5 text-muted"><span class="spinner-border spinner-border-sm text-primary"></span> Menghitung Rekap Data...</td></tr>';
+
+      if (typeof google === 'undefined' || typeof google.script === 'undefined') {
+          setTimeout(() => {
+              tH.innerHTML = "<th class='ps-4'>Peringatan Sistem</th>";
+              tB.innerHTML = '<tr><td class="text-center py-5 text-danger">Gagal menarik data. Server GAS tidak terdeteksi (Mode Lokal).</td></tr>';
+          }, 800);
+          return;
+      }
+
+      google.script.run.withSuccessHandler(res => {
+          if (res && res.success) {
+              renderLaporanTable(res.data, 'rekap');
+          } else {
+              tH.innerHTML = "<th class='ps-4'>Error</th>";
+              tB.innerHTML = `<tr><td class="text-center py-5 text-danger">${res ? res.message : 'Koneksi terputus atau respon invalid'}</td></tr>`;
+          }
+      }).hitungRekapPersentase(p.kategori, p.kelas, p.jenisFilter, p.tglStart, p.tglEnd, p.bulan);
+  }
+
+  function tarikDanExportLaporan(mode) {
+      const p = getLaporanParams();
+      if (p.jenisFilter === 'bulan' && !p.bulan) return Swal.fire({ icon: 'error', title: 'Peringatan', text: 'Pilih bulan target!' });
+      if (p.jenisFilter === 'rentang' && (!p.tglStart || !p.tglEnd)) return Swal.fire({ icon: 'error', title: 'Peringatan', text: 'Tentukan rentang tanggal!' });
+
+      if (typeof google === 'undefined' || typeof google.script === 'undefined') {
+          return Swal.fire({ icon: 'error', title: 'Peringatan', text: 'Export gagal: Mode lokal tidak didukung' });
+      }
+
+      Swal.fire({ icon: 'info', title: 'Informasi', text: 'Sedang menarik data untuk dieksport... Mohon tunggu.' });
+
+      if (mode === 'raw') {
+          google.script.run.withSuccessHandler(res => {
+              if (res && res.success && res.data.length > 0) {
+                  const ws = XLSX.utils.json_to_sheet(res.data);
+                  const wb = XLSX.utils.book_new();
+                  XLSX.utils.book_append_sheet(wb, ws, "Laporan");
+                  XLSX.writeFile(wb, `Laporan_${p.kategori}_${p.jenisFilter}.xlsx`);
+              } else {
+                  Swal.fire({ icon: 'info', title: 'Informasi', text: res ? res.message : 'Data kosong.' });
+              }
+          }).getLaporanFilter(p.kategori, p.kelas, p.jenisFilter, p.tglStart, p.tglEnd, p.bulan);
+      } else if (mode === 'rekap') {
+          google.script.run.withSuccessHandler(res => {
+              if (res && res.success && res.data.length > 0) {
+                  const ws = XLSX.utils.json_to_sheet(res.data);
+                  const wb = XLSX.utils.book_new();
+                  XLSX.utils.book_append_sheet(wb, ws, "Rekap");
+                  XLSX.writeFile(wb, `Rekap_${p.kategori}_${p.jenisFilter}.xlsx`);
+              } else {
+                  Swal.fire({ icon: 'info', title: 'Informasi', text: res ? res.message : 'Data kosong.' });
+              }
+          }).hitungRekapPersentase(p.kategori, p.kelas, p.jenisFilter, p.tglStart, p.tglEnd, p.bulan);
+      }
+  }
+
+  function renderChart(labelsParam, dataParam) {
+      const ctx = document.getElementById('attendanceChart');
+      if(!ctx) return;
+      if(dashChart) dashChart.destroy();
+      
+      let chartLabels = labelsParam || ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+      let chartData = dataParam || [0, 0, 0, 0, 0, 0];
+      
+      dashChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+              labels: chartLabels,
+              datasets: [{
+                  label: 'Tingkat Kehadiran',
+                  data: chartData,
+                  borderColor: '#3b82f6',
+                  backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                  tension: 0.4,
+                  fill: true
+              }]
+          },
+          options: { responsive: true, maintainAspectRatio: false }
+      });
+  }
+
+  // Aturan Jam logic mocks
+  function loadAturanJamUtama() {
+      if (typeof google === 'undefined' || typeof google.script === 'undefined') {
+          document.getElementById('formJamMulai').value = "06:00";
+          document.getElementById('formJamBatas').value = "07:15";
+          document.getElementById('formJamPulang').value = "15:30";
+          return;
+      }
+      google.script.run.withSuccessHandler(config=>{
+          if (config) {
+              if(config.jam_masuk_mulai) document.getElementById('formJamMulai').value = config.jam_masuk_mulai;
+              if(config.jam_masuk_batas) document.getElementById('formJamBatas').value = config.jam_masuk_batas;
+              if(config.jam_pulang_mulai) document.getElementById('formJamPulang').value = config.jam_pulang_mulai;
+          }
+      }).withFailureHandler(err => {
+          console.error("Gagal load jam operasional", err);
+          document.getElementById('formJamMulai').value = "06:00";
+          document.getElementById('formJamBatas').value = "07:15";
+          document.getElementById('formJamPulang').value = "15:30";
+      }).getPengaturanSemua();
+  }
+  function simpanAturanJam(e){
+      e.preventDefault();
+      const m = document.getElementById('formJamMulai').value;
+      const b = document.getElementById('formJamBatas').value;
+      const p = document.getElementById('formJamPulang').value;
+      const btn = document.getElementById('btnSimpanJam'); btn.innerText="Menyimpan...";
+      google.script.run.withSuccessHandler(r=>{ Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: r ? r.message : 'Disimpan', showConfirmButton: false, timer: 2000 }); btn.innerText="Konfigurasi Engine"; }).simpanKonfigurasiJam(m,b,p);
+  }
+
+  function tambahanLiburAction(e) {
+      e.preventDefault();
+      Swal.fire({ icon: 'info', title: 'Informasi', text: 'Fitur Libur Belum Diimplementasikan Sepenuhnya.' });
+  }
+
+  function loadKelasUtama() {
+      google.script.run.withSuccessHandler(kelasArray => {
+          window.kelasGlobal = kelasArray;
+          renderTabelKelas();
+          updateSelectKelas();
+      }).getKelasSemua();
+  }
+
+  function renderTabelKelas() {
+      const tb = document.getElementById('tbodyKelas');
+      if(!tb) return;
+      if(!window.kelasGlobal || window.kelasGlobal.length === 0) {
+          tb.innerHTML = '<tr><td class="text-center text-muted py-3">Tidak ada data kelas</td></tr>';
+          return;
+      }
+      tb.innerHTML = window.kelasGlobal.map(k => `
+          <tr>
+              <td class="align-middle fw-bold ps-3">${k}</td>
+              <td class="text-end pe-3">
+                  <button class="btn btn-sm btn-outline-primary border-0 me-1" onclick="editKelasAction('${k}')"><i class="fa fa-edit"></i></button>
+                  <button class="btn btn-sm btn-outline-danger border-0" onclick="hapusKelasAction('${k}')"><i class="fa fa-trash"></i></button>
+              </td>
+          </tr>
+      `).join('');
+  }
+
+  function updateSelectKelas() {
+      // Update form crud
+      const selCrud = document.getElementById('crudFilterKelas');
+      if (selCrud) {
+          const prevVal = selCrud.value;
+          selCrud.innerHTML = '<option value="">Semua Kelas</option>' + 
+                              (window.kelasGlobal || []).map(k => `<option value="${k}">${k}</option>`).join('');
+          if(prevVal && window.kelasGlobal.includes(prevVal)) selCrud.value = prevVal;
+      }
+      
+      // Update filter laporan
+      const selLap = document.getElementById('filterKelas');
+      if (selLap) {
+          const prevValLap = selLap.value;
+          selLap.innerHTML = '<option value="Semua">Semua Kelas / Jabatan</option>' + 
+                             (window.kelasGlobal || []).map(k => `<option value="${k}">${k}</option>`).join('');
+          if(prevValLap && window.kelasGlobal.includes(prevValLap)) selLap.value = prevValLap;
+      }
+
+      // Update filter absensi
+      const selAbsen = document.getElementById('filterKelasAbsen');
+      if (selAbsen) {
+          const prevValAbsen = selAbsen.value;
+          selAbsen.innerHTML = '<option value="">Semua Kelas</option>' + 
+                             (window.kelasGlobal || []).map(k => `<option value="${k}">${k}</option>`).join('');
+          if(prevValAbsen && window.kelasGlobal.includes(prevValAbsen)) selAbsen.value = prevValAbsen;
+      }
+  }
+
+  function tambahanKelasAction(e) {
+      e.preventDefault();
+      const input = document.getElementById('inputNamaKelas');
+      const val = input.value.trim();
+      if(!val) return;
+      
+      const btn = document.getElementById('btnTamKelas');
+      const originalHtml = btn.innerHTML;
+      btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+      btn.disabled = true;
+      
+      google.script.run.withSuccessHandler(r => {
+          if (r && r.success) {
+              if(!window.kelasGlobal) window.kelasGlobal = [];
+              if(!window.kelasGlobal.includes(val)) window.kelasGlobal.push(val);
+              input.value = '';
+              renderTabelKelas();
+              updateSelectKelas();
+          } else {
+              Swal.fire({ icon: 'error', title: 'Error', text: r ? r.message : 'Error menambahkan kelas' });
+          }
+          btn.innerHTML = originalHtml;
+          btn.disabled = false;
+      }).tambahKelas(val);
+  }
+
+  function hapusKelasAction(namaKelas) {
+      Swal.fire({
+          title: 'Konfirmasi Penghapusan',
+          text: 'Hapus kelas ' + namaKelas + '?',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#d33',
+          cancelButtonColor: '#6c757d',
+          confirmButtonText: 'Ya, Hapus'
+      }).then((result) => {
+          if (result.isConfirmed) {
+              google.script.run.withSuccessHandler(r => {
+                  if (r && r.success) {
+                      window.kelasGlobal = window.kelasGlobal.filter(k => k !== namaKelas);
+                      renderTabelKelas();
+                      updateSelectKelas();
+                      Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Kelas dihapus', showConfirmButton: false, timer: 2000 });
+                  } else {
+                      Swal.fire({ icon: 'error', title: 'Error', text: r ? r.message : 'Error menghapus kelas' });
+                  }
+              }).hapusKelas(namaKelas);
+          }
+      });
+  }
+
+  function editKelasAction(kelasLama) {
+      Swal.fire({
+          title: 'Edit Kelas',
+          input: 'text',
+          inputLabel: 'Masukkan nama kelas baru',
+          inputValue: kelasLama,
+          showCancelButton: true,
+          confirmButtonColor: '#0d6efd',
+          cancelButtonColor: '#6c757d',
+          inputValidator: (value) => {
+              if (!value) {
+                  return 'Nama kelas tidak boleh kosong!';
+              }
+          }
+      }).then((result) => {
+          if (result.isConfirmed) {
+              const val = result.value.trim();
+              if (val === kelasLama) return;
+              
+              google.script.run.withSuccessHandler(r => {
+                  if (r && r.success) {
+                      const idx = window.kelasGlobal.indexOf(kelasLama);
+                      if (idx !== -1) {
+                          window.kelasGlobal[idx] = val;
+                      }
+                      renderTabelKelas();
+                      updateSelectKelas();
+                      Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Kelas diubah', showConfirmButton: false, timer: 2000 });
+                  } else {
+                      Swal.fire({ icon: 'error', title: 'Error', text: r ? r.message : 'Error mengubah kelas' });
+                  }
+              }).editKelas(kelasLama, val);
+          }
+      });
+  }
+
+  function updateSandiVault(e) {
+      e.preventDefault();
+      Swal.fire({ icon: 'info', title: 'Informasi', text: 'Sandi Vault berhasil dimutasi (simulasi).' });
+  }
+
+  // Handle cbAll click via event delegation
+  document.addEventListener('change', function(e) {
+      if (e.target && e.target.id === 'cbAll') {
+          const isChecked = e.target.checked;
+          const checkboxes = document.querySelectorAll('.cbRow');
+          checkboxes.forEach(cb => {
+              cb.checked = isChecked;
+          });
+      }
+      
+      // Update cbAll state if cbRow is changed
+      if (e.target && e.target.classList.contains('cbRow')) {
+          const cbAll = document.getElementById('cbAll');
+          if (cbAll) {
+              const totalItems = document.querySelectorAll('.cbRow').length;
+              const totalChecked = document.querySelectorAll('.cbRow:checked').length;
+              cbAll.checked = (totalItems > 0 && totalItems === totalChecked);
+              cbAll.indeterminate = totalChecked > 0 && totalChecked < totalItems;
+          }
+      }
+  });
+
+</script>

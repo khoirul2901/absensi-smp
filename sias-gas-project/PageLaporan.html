@@ -1,0 +1,78 @@
+<!-- ========================================== -->
+<!-- FILE: PageLaporan.html                     -->
+<!-- ========================================== -->
+<div class="p-4">
+    <div class="mb-4">
+        <h2 class="h4 fw-bold mb-1">Intelligence Area</h2>
+        <p class="text-muted text-sm mb-0">Pusat penganalisa rekapitulasi data kehadiran.</p>
+    </div>
+
+    <!-- Filter Control Panel -->
+    <div class="card shadow-sm border-0 stat-card mb-4 bg-white">
+        <div class="card-body p-4">
+             <div class="row g-3 align-items-end">
+                  <div class="col-md-2">
+                      <label class="form-label text-muted small fw-bold">Skop Entitas</label>
+                      <select class="form-select bg-light border-0 shadow-sm" id="repKat" onchange="toggleFilterTypeLaporan()">
+                          <option value="Siswa">Siswa</option>
+                          <option value="Guru">Guru</option>
+                      </select>
+                  </div>
+                  <div class="col-md-2" id="boxFilterKelas">
+                      <label class="form-label text-muted small fw-bold">Kelas</label>
+                      <select class="form-select bg-light border-0 shadow-sm" id="filterKelas">
+                          <option value="Semua">Semua Kelas</option>
+                      </select>
+                  </div>
+                  <div class="col-md-2">
+                      <label class="form-label text-muted small fw-bold">Spesifikasi Filter</label>
+                      <select class="form-select bg-light border-0 shadow-sm" id="repJenisTgl" onchange="toggleFilterTypeLaporan()">
+                          <option value="bulan">Per Bulan</option>
+                          <option value="rentang">Rentang Tanggal</option>
+                      </select>
+                  </div>
+                  
+                  <div class="col-md-2" id="boxTglBulan">
+                      <label class="form-label text-muted small fw-bold">Bulan Target</label>
+                      <input type="month" class="form-control bg-light border-0 shadow-sm" id="repBulan">
+                  </div>
+                  
+                  <div class="col-md-2" id="boxTglMulai" style="display:none;">
+                      <label class="form-label text-muted small fw-bold">Tanggal Tetas</label>
+                      <input type="date" class="form-control bg-light border-0 shadow-sm" id="repStart">
+                  </div>
+                  <div class="col-md-2" id="boxTglSelesai" style="display:none;">
+                      <label class="form-label text-muted small fw-bold">Tanggal Padam</label>
+                      <input type="date" class="form-control bg-light border-0 shadow-sm" id="repEnd">
+                  </div>
+
+                  <div class="col-md-4 ms-auto text-end">
+                      <button class="btn btn-outline-primary fw-medium px-4 me-2 shadow-sm" onclick="tarikPreviewLaporan()"><i class="fa fa-eye"></i> Tampilkan</button>
+                      <button class="btn btn-primary fw-medium px-4 shadow-sm" onclick="tarikRekapLaporan()"><i class="fa fa-calculator"></i> Lakukan Rekap</button>
+                  </div>
+             </div>
+        </div>
+    </div>
+
+    <!-- Visual Output Sandbox -->
+    <div class="card shadow-sm border-0 stat-card">
+         <div class="card-body p-0">
+             <div class="text-end p-3 border-bottom bg-white d-flex justify-content-end gap-2">
+                 <button class="btn btn-sm btn-outline-success fw-bold shadow-sm" onclick="tarikDanExportLaporan('raw')"><i class="fa fa-file-excel"></i> Eksport Laporan</button>
+                 <button class="btn btn-sm btn-success fw-bold shadow-sm" onclick="tarikDanExportLaporan('rekap')"><i class="fa fa-file-excel"></i> Eksport Rekap</button>
+             </div>
+             <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 text-sm" id="tableHasilLaporan">
+                    <thead class="table-light text-muted border-bottom-0">
+                        <tr id="thLaporanData">
+                            <th class='ps-4'>Memerlukan eksekusi parameter.</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbLaporanData">
+                        <tr><td class="text-center py-5 text-muted"><i class="fa fa-inbox fa-3x mb-3 text-light"></i><br>Area Sandbox Kosong</td></tr>
+                    </tbody>
+                </table>
+             </div>
+         </div>
+    </div>
+</div>

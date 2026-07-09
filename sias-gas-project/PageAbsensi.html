@@ -1,0 +1,151 @@
+<!-- ========================================== -->
+<!-- FILE: PageAbsensi.html                     -->
+<!-- ========================================== -->
+<div class="p-4" style="max-width: 1400px; margin: 0 auto;">
+    
+    <div class="row g-4">
+        <!-- Kamera Scanner -->
+        <div class="col-lg-4 col-md-12">
+            <div class="card shadow-sm border-0 stat-card h-100">
+                <div class="card-body text-center p-4 d-flex flex-column justify-content-center">
+                    <h5 class="fw-bold mb-3"><i class="fa fa-camera text-primary me-2"></i> Pindai QR Code</h5>
+                    <p class="text-muted small mb-4">Pindai QR Code pada Kartu Pelajar / ID Guru untuk melakukan absensi hari ini.</p>
+                    <div id="reader" style="width:100%; display:none;" class="mb-3 overflow-hidden rounded shadow-sm border"></div>
+                    <button id="btnToggleKamera" class="btn btn-primary btn-lg w-100 py-3 fw-bold shadow-sm" onclick="toggleKameraLive()">
+                        <i class="fa fa-video fa-lg me-2"></i> Mulai Kamera Live
+                    </button>
+                    
+                    <input type="file" id="qrFileInput" accept="image/*" capture="environment" style="display:none;" onchange="handleQrFileUpload(event)">
+                    <button id="btnFotoKamera" class="btn btn-outline-secondary w-100 mt-3 py-2 fw-bold" onclick="bukaModalKamera()">
+                        <i class="fa fa-image me-2"></i> Scan dari Foto (Alternatif)
+                    </button>
+                    
+                    <hr class="my-4 text-muted">
+                    <p class="text-muted small mb-2 fw-bold text-start text-primary">Solusi Tercepat untuk Ratusan Siswa (Scanner Fisik):</p>
+                    <div class="input-group shadow-sm border-primary" style="border: 2px solid #0d6efd; border-radius: 6px;">
+                        <span class="input-group-text bg-primary text-white border-end-0"><i class="fa fa-barcode"></i></span>
+                        <input type="text" id="manualBarcode" class="form-control border-start-0 ps-2 fw-bold" placeholder="Scan Kartu Disini..." onkeypress="handleManualBarcode(event)" autocomplete="off">
+                        <button class="btn btn-primary px-3 fw-bold" type="button" onclick="submitManualBarcode()"><i class="fa fa-paper-plane"></i></button>
+                    </div>
+
+                    <div class="alert alert-info text-start mt-4 mb-0" style="font-size: 0.75rem;">
+                        <i class="fa fa-info-circle me-1"></i> <b>Tips Absensi Cepat:</b> Anda dapat menjepret foto QR Code menggunakan tombol di atas.<br><br>
+                        Namun, untuk absensi <b>ratusan siswa secara masal</b>, sangat disarankan menggunakan <b>Scanner Barcode USB/Bluetooth</b> (klik kotak input biru di atas lalu mulai scan kartu).
+                    </div>
+                    <div id="hiddenReader" style="visibility:hidden; width: 1px; height: 1px; overflow: hidden;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Kendali Utama Tabel -->
+        <div class="col-lg-8 col-md-12">
+            <div class="card shadow-sm border-0 h-100 stat-card">
+                <div class="card-header bg-white border-bottom pb-0 pt-4 px-4 d-flex justify-content-between align-items-center flex-wrap">
+                    <!-- Nav Tingkat 1 -->
+                    <ul class="nav nav-tabs border-bottom-0 gap-1 pb-2">
+                      <li class="nav-item">
+                        <a class="nav-link active px-4 fw-bold" id="tabKategoriSiswa" style="cursor: pointer;" onclick="ubahTabKategori('Siswa', this)">Data Siswa</a>
+                      </li>
+                      <li class="nav-item">
+                        <a class="nav-link text-muted px-4" id="tabKategoriGuru" style="cursor: pointer;" onclick="ubahTabKategori('Guru', this)">Data Guru</a>
+                      </li>
+                    </ul>
+                    
+                    <button class="btn btn-sm btn-outline-primary mb-2 shadow-sm" onclick="muatUlangTabelAbsen()"><i class="fa fa-sync-alt"></i> Segarkan</button>
+                </div>
+                
+                <div class="card-body p-4 bg-gray-50">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <!-- Nav Tingkat 2 -->
+                        <div class="btn-group shadow-sm" role="group">
+                          <input type="radio" class="btn-check" name="btnradio" id="tabModeMasuk" autocomplete="off" checked onclick="ubahTabMode('Masuk')">
+                          <label class="btn btn-outline-primary px-4 fw-medium" for="tabModeMasuk">Sesi Masuk</label>
+
+                          <input type="radio" class="btn-check" name="btnradio" id="tabModePulang" autocomplete="off" onclick="ubahTabMode('Pulang')">
+                          <label class="btn btn-outline-primary px-4 fw-medium" for="tabModePulang">Sesi Pulang</label>
+                        </div>
+                        
+                        <select class="form-select w-auto shadow-sm" id="filterKelasAbsen" onchange="filterTabelAbsen()">
+                            <option value="">Semua Kelas</option>
+                            <option value="X">Kelas X</option>
+                            <option value="XI">Kelas XI</option>
+                            <option value="XII">Kelas XII</option>
+                        </select>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-3 p-3 bg-white border rounded shadow-sm">
+                        <div class="d-flex align-items-center gap-2">
+                            <select class="form-select form-select-sm w-auto fw-bold" id="bulkStatus">
+                                <option value="Hadir Manual">Hadir Manual</option>
+                                <option value="Sakit">Sakit</option>
+                                <option value="Izin">Izin</option>
+                                <option value="Alfa">Alfa</option>
+                            </select>
+                            <button class="btn btn-sm btn-primary fw-bold" onclick="submitBulkAbsen()" id="btnBulkSubmit">
+                                <i class="fa fa-check-square me-1"></i> Absen Kolektif
+                            </button>
+                        </div>
+                        <span class="text-muted small" id="bulkCountDisplay">0 Terpilih</span>
+                    </div>
+
+                    <div class="table-responsive rounded shadow-sm border bg-white">
+                        <table class="table table-hover align-middle mb-0" id="tabelLiveAbsen">
+                            <thead class="table-light text-muted small">
+                                <tr>
+                                    <th style="width: 40px;" class="text-center">
+                                        <input class="form-check-input" type="checkbox" id="checkAll" onchange="toggleCheckAll(this)">
+                                    </th>
+                                    <th>ID</th>
+                                    <th>Nama Lengkap</th>
+                                    <th id="thWaktuTarget">Jam Masuk</th>
+                                    <th>Status Catatan</th>
+                                    <th class="text-end">Aksi Instruktur</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbodyLiveAbsen">
+                                <tr><td colspan="6" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Menarik Data...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Absen Manual Coreksi -->
+<div class="modal fade" id="modalAbsenManual" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-primary text-white border-0">
+        <h5 class="modal-title">Koreksi Absensi Manual</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-4">
+        <form id="formAbsenManual" onsubmit="submitAbsenManual(event)">
+            <input type="hidden" id="manualIdTarget">
+            <div class="mb-3">
+                <label class="form-label text-muted small fw-bold">Nama Sasaran</label>
+                <input type="text" id="manualNama" class="form-control bg-light" readonly>
+            </div>
+            <div class="mb-3">
+                <label class="form-label text-muted small fw-bold">Koreksi Status</label>
+                <select class="form-select" id="manualStatus" required>
+                    <option value="Hadir Manual">Hadir Manual (Kompensasi)</option>
+                    <option value="Sakit">Sakit</option>
+                    <option value="Izin">Izin / Keperluan Luar</option>
+                    <option value="Alfa">Alfa / Tanpa Keterangan</option>
+                </select>
+            </div>
+            <div class="mb-4">
+                <label class="form-label text-muted small fw-bold">Keterangan Jurnal</label>
+                <textarea class="form-control" id="manualKet" rows="3" placeholder="Sertakan detail pendukung log..." required></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary w-100 py-2 fw-bold" id="btnSubmitManual">Amankan Log</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+

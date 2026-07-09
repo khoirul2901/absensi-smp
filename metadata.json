@@ -1,0 +1,10 @@
+{
+  "name": "SIAS SMK Al-Hikam",
+  "description": "Sistem Informasi Absensi Sekolah Modern terintegrasi Google Apps Script & Google Sheets",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
