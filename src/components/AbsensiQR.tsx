@@ -131,6 +131,7 @@ export default function AbsensiQR() {
   useEffect(() => {
     if (cameraActive) {
       const html5Qrcode = new Html5Qrcode("qr-scanner-frame", {
+        verbose: false,
         formatsToSupport: [
           Html5QrcodeSupportedFormats.QR_CODE,
           Html5QrcodeSupportedFormats.CODE_128,
