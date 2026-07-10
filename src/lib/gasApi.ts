@@ -84,24 +84,17 @@ function callMock(action: string, args: any[]): any {
       // 2. Check mock teachers
       const teachers = getStorage("data_guru");
       const foundTeacher = teachers.find((t: any) => {
-        const idGuru = String(t.id_guru || "").trim();
-        const nipGuru = String(t.nip_nuptk || "").trim();
         const namaGuru = String(t.nama_guru || "").trim();
+        const teacherUsername = namaGuru.replace(/\s+/g, "").toLowerCase();
+        const inputUserLower = String(username).replace(/\s+/g, "").toLowerCase();
         
-        const inputUserLower = String(username).toLowerCase().trim();
-        const matchUser = (
-          inputUserLower === idGuru.toLowerCase() ||
-          (nipGuru && nipGuru !== "-" && inputUserLower === nipGuru.toLowerCase()) ||
-          inputUserLower === namaGuru.toLowerCase()
-        );
+        // Match user by teacher's lowercase name without spaces
+        const matchUser = (inputUserLower === teacherUsername);
         
         if (matchUser) {
           const inputPass = String(password).trim();
-          const possiblePasswords = ["guru123", idGuru];
-          if (nipGuru && nipGuru !== "-") {
-            possiblePasswords.push(nipGuru);
-          }
-          return possiblePasswords.includes(inputPass);
+          const dbPass = String(t.password || "guru123").trim();
+          return inputPass === dbPass;
         }
         return false;
       });
@@ -116,11 +109,13 @@ function callMock(action: string, args: any[]): any {
         };
       }
       
-      return { success: false, message: "Kredensial Salah! (Admin: admin / admin123, Guru: NIP Guru / NIP Guru atau 'guru123')" };
+      return { success: false, message: "Kredensial Salah! (Admin: admin / admin123, Guru: Nama tanpa spasi & huruf kecil, password default 'guru123')" };
     }
     
     case "ubahPasswordUser": {
       const [username, passwordLama, passwordBaru] = args;
+      
+      // Try admin users
       const users = getStorage("users");
       const index = users.findIndex((u: any) => u.username === username && u.password === passwordLama);
       if (index !== -1) {
@@ -128,7 +123,28 @@ function callMock(action: string, args: any[]): any {
         setStorage("users", users);
         return { success: true, message: "Password berhasil diperbarui (SIMULASI)!" };
       }
-      return { success: false, message: "Password lama tidak sesuai." };
+      
+      // Try teachers
+      const teachers = getStorage("data_guru");
+      const idxT = teachers.findIndex((t: any) => {
+        const namaGuru = String(t.nama_guru || "").trim();
+        const teacherUsername = namaGuru.replace(/\s+/g, "").toLowerCase();
+        const inputUserLower = String(username).replace(/\s+/g, "").toLowerCase();
+        
+        if (inputUserLower === teacherUsername || String(username).toLowerCase().trim() === namaGuru.toLowerCase()) {
+          const dbPass = String(t.password || "guru123").trim();
+          return passwordLama === dbPass;
+        }
+        return false;
+      });
+      
+      if (idxT !== -1) {
+        teachers[idxT].password = passwordBaru;
+        setStorage("data_guru", teachers);
+        return { success: true, message: "Password Guru berhasil diperbarui (SIMULASI)!" };
+      }
+      
+      return { success: false, message: "Password lama tidak sesuai / User tidak dikenali." };
     }
 
     case "getPengaturanSemua": {
