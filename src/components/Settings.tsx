@@ -21,7 +21,7 @@ import {
   CreditCard,
   Image as ImageIcon
 } from "lucide-react";
-import { callGas, getGasUrl, setGasUrl, isUsingMock } from "../lib/gasApi";
+import { callGas, getGasUrl, setGasUrl, getGasToken, setGasToken, isUsingMock } from "../lib/gasApi";
 import { ConfigJam, HariLibur } from "../types";
 
 export default function Settings() {
@@ -79,6 +79,7 @@ export default function Settings() {
   };
 
   const [gasUrl, setGasUrlState] = useState("");
+  const [gasToken, setGasTokenState] = useState("");
   const [connectionStatus, setConnectionStatus] = useState<"connected" | "disconnected" | "testing" | null>(null);
   const [connectionMsg, setConnectionMsg] = useState<string | null>(null);
 
@@ -134,6 +135,8 @@ export default function Settings() {
       setLoading(true);
       const url = getGasUrl();
       setGasUrlState(url);
+      const token = getGasToken();
+      setGasTokenState(token);
       
       if (url) {
         setConnectionStatus("testing");
@@ -182,6 +185,7 @@ export default function Settings() {
       setConnectionStatus("testing");
       setConnectionMsg(null);
       setGasUrl(gasUrl);
+      setGasToken(gasToken);
       
       if (!gasUrl.trim()) {
         setConnectionStatus(null);
@@ -468,19 +472,39 @@ export default function Settings() {
             </span>
           </div>
 
-          <div className="flex gap-2">
-            <input 
-              type="text"
-              placeholder="https://script.google.com/macros/s/.../exec"
-              value={gasUrl}
-              onChange={(e) => setGasUrlState(e.target.value)}
-              className="flex-grow bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs text-gray-800 font-mono focus:outline-none focus:border-blue-500"
-            />
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <input 
+                type="text"
+                placeholder="https://script.google.com/macros/s/.../exec"
+                value={gasUrl}
+                onChange={(e) => setGasUrlState(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs text-gray-800 font-mono focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-bold text-gray-600">Token Keamanan API (Security Token)</label>
+              </div>
+              <input 
+                type="text"
+                placeholder="Masukkan token keamanan (default: sias_token_smkalhikam)"
+                value={gasToken}
+                onChange={(e) => setGasTokenState(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs text-gray-800 font-mono focus:outline-none focus:border-blue-500"
+              />
+              <p className="text-[10px] text-gray-400 font-semibold leading-relaxed">
+                Token ini harus sesuai dengan baris/nilai <strong>api_token</strong> di spreadsheet atau Script Properties Anda agar data aman dari akses luar tak dikenal.
+              </p>
+            </div>
+
             <button 
               onClick={handleSaveUrl}
-              className="bg-blue-600 text-white font-bold text-xs px-5 py-2.5 rounded-xl hover:bg-blue-700 transition-all duration-150 shadow-sm whitespace-nowrap"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 rounded-xl transition-all duration-150 shadow-sm flex items-center justify-center gap-1.5"
             >
-              Simpan & Tes
+              <Save className="w-4 h-4" />
+              Simpan & Tes Koneksi
             </button>
           </div>
 
