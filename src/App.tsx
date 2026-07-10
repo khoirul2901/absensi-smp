@@ -261,7 +261,7 @@ export default function App() {
                   className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-bold transition-all duration-150 ${
                     isActive 
                       ? "bg-slate-900 text-white border border-slate-800 shadow-sm" 
-                      : "hover:text-slate-200 hover:bg-slate-900/40"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/40"
                   }`}
                 >
                   <Icon className={`w-4 h-4 ${isActive ? "text-blue-500" : "text-slate-400"}`} />
@@ -332,10 +332,10 @@ export default function App() {
                         key={item.id}
                         onClick={() => { setActiveTab(item.id); setSidebarOpen(false); }}
                         className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-bold transition-all duration-150 ${
-                          isActive ? "bg-slate-900 text-white" : "hover:bg-slate-900/50"
+                          isActive ? "bg-slate-900 text-white" : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/50"
                         }`}
                       >
-                        <Icon className="w-4 h-4 text-slate-400" />
+                        <Icon className={`w-4 h-4 ${isActive ? "text-blue-500" : "text-slate-400"}`} />
                         {item.label}
                       </button>
                     );
