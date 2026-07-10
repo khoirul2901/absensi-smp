@@ -17,10 +17,12 @@ import {
   X, 
   CheckCircle,
   FileSpreadsheet,
-  AlertTriangle
+  AlertTriangle,
+  Printer
 } from "lucide-react";
 import { callGas } from "../lib/gasApi";
 import { Siswa, Guru } from "../types";
+import { IdCard } from "./IdCard";
 
 export default function DataMaster() {
   const [kategori, setKategori] = useState<"Siswa" | "Guru">("Siswa");
@@ -261,7 +263,8 @@ export default function DataMaster() {
   });
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <>
+    <div className="space-y-6 animate-fade-in no-print">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-xl font-extrabold text-gray-900 tracking-tight">Data Master Sekolah</h1>
@@ -286,6 +289,15 @@ export default function DataMaster() {
               Guru
             </button>
           </div>
+
+          <button 
+            onClick={() => window.print()}
+            disabled={filteredData.length === 0}
+            className="bg-white border border-gray-200 text-gray-700 font-bold text-xs px-3.5 py-2.5 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-all duration-150 flex items-center gap-1.5 shadow-sm"
+          >
+            <Printer className="w-4 h-4" />
+            Cetak Semua Kartu
+          </button>
 
           <button 
             onClick={() => setShowImportModal(true)}
@@ -653,10 +665,10 @@ export default function DataMaster() {
       {/* QR MODAL */}
       {showQrModal.open && showQrModal.item && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl max-w-xs w-full overflow-hidden text-center p-6 space-y-6">
-            <div className="flex justify-between items-center">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl overflow-hidden p-6 space-y-6 flex flex-col items-center">
+            <div className="flex justify-between items-center w-full">
               <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                Kartu Digital {kategori}
+                Preview Kartu {kategori}
               </span>
               <button 
                 onClick={() => setShowQrModal({ open: false, item: null })}
@@ -666,30 +678,8 @@ export default function DataMaster() {
               </button>
             </div>
 
-            <div className="space-y-1">
-              <h4 className="font-extrabold text-gray-900 text-base">
-                {kategori === "Siswa" ? showQrModal.item.nama_siswa : showQrModal.item.nama_guru}
-              </h4>
-              <p className="text-xs text-gray-500 font-mono">
-                {kategori === "Siswa" ? showQrModal.item.id_siswa : showQrModal.item.id_guru}
-              </p>
-            </div>
-
-            <div className="bg-gray-50 p-4 rounded-xl inline-block border border-gray-100">
-              {/* Google Chart QR generation API */}
-              <img 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(showQrModal.item.qr_content)}`} 
-                alt="QR Code" 
-                className="w-40 h-40 mx-auto"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-
-            <div className="space-y-1 text-xs">
-              <div className="text-gray-400">Isi Sandi QR:</div>
-              <div className="font-mono font-bold text-gray-800 bg-slate-100 py-1.5 px-3 rounded-lg inline-block">
-                {showQrModal.item.qr_content}
-              </div>
+            <div className="flex justify-center w-full scale-90 sm:scale-100">
+              <IdCard item={showQrModal.item} kategori={kategori} />
             </div>
 
             <button 
@@ -704,11 +694,18 @@ export default function DataMaster() {
               className="bg-slate-900 text-white font-bold text-xs w-full py-2.5 rounded-xl hover:bg-slate-800 transition-all duration-150 flex items-center justify-center gap-1.5"
             >
               <Download className="w-4 h-4" />
-              Download Kartu QR
+              Download Kode QR Saja
             </button>
           </div>
         </div>
       )}
     </div>
+    
+    <div className="print-only hidden flex-wrap justify-center gap-6 w-full p-4">
+      {filteredData.map((item, index) => (
+        <IdCard key={index} item={item} kategori={kategori} />
+      ))}
+    </div>
+    </>
   );
 }
