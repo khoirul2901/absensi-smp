@@ -73,12 +73,50 @@ function callMock(action: string, args: any[]): any {
   switch (action) {
     case "verifikasiLogin": {
       const [username, password] = args;
+      
+      // 1. Check mock users first (admin)
       const users = getStorage("users");
       const found = users.find((u: any) => u.username === username && u.password === password);
       if (found) {
         return { success: true, role: found.role, target_id: found.target_id, username: found.username, message: "Login Berhasil (SIMULASI)" };
       }
-      return { success: false, message: "Kredensial Salah! (User default: admin / admin123)" };
+      
+      // 2. Check mock teachers
+      const teachers = getStorage("data_guru");
+      const foundTeacher = teachers.find((t: any) => {
+        const idGuru = String(t.id_guru || "").trim();
+        const nipGuru = String(t.nip_nuptk || "").trim();
+        const namaGuru = String(t.nama_guru || "").trim();
+        
+        const inputUserLower = String(username).toLowerCase().trim();
+        const matchUser = (
+          inputUserLower === idGuru.toLowerCase() ||
+          (nipGuru && nipGuru !== "-" && inputUserLower === nipGuru.toLowerCase()) ||
+          inputUserLower === namaGuru.toLowerCase()
+        );
+        
+        if (matchUser) {
+          const inputPass = String(password).trim();
+          const possiblePasswords = ["guru123", idGuru];
+          if (nipGuru && nipGuru !== "-") {
+            possiblePasswords.push(nipGuru);
+          }
+          return possiblePasswords.includes(inputPass);
+        }
+        return false;
+      });
+      
+      if (foundTeacher) {
+        return {
+          success: true,
+          role: "Guru",
+          target_id: foundTeacher.id_guru,
+          username: foundTeacher.nama_guru,
+          message: "Login Berhasil (SIMULASI - Otomatis Guru)!"
+        };
+      }
+      
+      return { success: false, message: "Kredensial Salah! (Admin: admin / admin123, Guru: NIP Guru / NIP Guru atau 'guru123')" };
     }
     
     case "ubahPasswordUser": {
