@@ -148,7 +148,8 @@ export default function DataMaster() {
       nama_guru: "",
       jenis_kelamin: "Laki-laki",
       jabatan_tugas: "Guru Mapel",
-      no_hp: ""
+      no_hp: "",
+      password: "guru123"
     });
     setShowFormModal(true);
   };
@@ -372,6 +373,7 @@ export default function DataMaster() {
                   <th className="py-3.5 px-6">JK</th>
                   <th className="py-3.5 px-6">{kategori === "Siswa" ? "Kelas & Jurusan" : "Jabatan"}</th>
                   <th className="py-3.5 px-6">{kategori === "Siswa" ? "HP Wali" : "No HP"}</th>
+                  {kategori === "Guru" && <th className="py-3.5 px-6">Password</th>}
                   <th className="py-3.5 px-6 text-center">Aksi</th>
                 </tr>
               </thead>
@@ -391,6 +393,9 @@ export default function DataMaster() {
                       <td className="py-3.5 px-6 text-gray-500 font-medium">{item.jenis_kelamin}</td>
                       <td className="py-3.5 px-6 text-gray-600 font-semibold">{position}</td>
                       <td className="py-3.5 px-6 text-gray-500">{phone}</td>
+                      {kategori === "Guru" && (
+                        <td className="py-3.5 px-6 font-mono text-gray-500">{item.password || "guru123"}</td>
+                      )}
                       <td className="py-3.5 px-6 text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           <button 
@@ -568,6 +573,17 @@ export default function DataMaster() {
                       onChange={(e) => setFormData({ ...formData, jabatan_tugas: e.target.value })}
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800"
                       placeholder="Contoh: Waka Kurikulum, Ka. RPL"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-gray-500">Password Akun</label>
+                    <input 
+                      type="text"
+                      required
+                      value={formData.password || "guru123"}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-mono"
+                      placeholder="Sandi login guru (default: guru123)"
                     />
                   </div>
                 </>
