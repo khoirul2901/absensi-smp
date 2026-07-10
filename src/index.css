@@ -24,3 +24,10 @@ body {
   background-color: #f8fafc;
   font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
 }
+
+@media print {
+  @page {
+    margin: 1cm;
+    size: A4 portrait;
+  }
+}
