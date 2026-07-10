@@ -5,9 +5,6 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    // Sesuaikan base path jika di-deploy ke GitHub Pages.
-    // Jika nama repositori Anda 'sias-smk', ganti menjadi: '/sias-smk/'
-    // Jika menggunakan custom domain, biarkan tetap '/'
     base: process.env.NODE_ENV === 'production' ? './' : '/',
     plugins: [react(), tailwindcss()],
     resolve: {
@@ -15,11 +12,11 @@ export default defineConfig(() => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    build: {
+      chunkSizeWarningLimit: 2000,
+    },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
   };
