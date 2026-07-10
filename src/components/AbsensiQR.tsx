@@ -37,6 +37,25 @@ export default function AbsensiQR() {
   const [filterKelas, setFilterKelas] = useState("Semua");
   const [classList, setClassList] = useState<string[]>([]);
   
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("SIAS_SESSION");
+    if (saved) {
+      try {
+        setCurrentUser(JSON.parse(saved));
+      } catch (e) {}
+    }
+  }, []);
+
+  const isGuru = currentUser?.role === "Guru";
+
+  useEffect(() => {
+    if (isGuru) {
+      setKategori("Siswa");
+    }
+  }, [isGuru]);
+  
   // States for Manual Dialog
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualTarget, setManualTarget] = useState<string>(""); // id_siswa or id_guru
@@ -305,25 +324,27 @@ export default function AbsensiQR() {
             <h3 className="font-bold text-gray-800 text-sm tracking-wide uppercase">Konfigurasi Kamera</h3>
             
             {/* Category selection */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-gray-500">Kategori Absensi</label>
-              <div className="grid grid-cols-2 gap-2 bg-gray-50 p-1 rounded-xl border border-gray-100">
-                <button 
-                  onClick={() => { setKategori("Siswa"); setSelectedIds([]); }}
-                  className={`py-2 rounded-lg text-xs font-bold transition-all duration-200 ${kategori === "Siswa" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
-                >
-                  <Users className="w-3.5 h-3.5 inline mr-1.5" />
-                  Siswa
-                </button>
-                <button 
-                  onClick={() => { setKategori("Guru"); setSelectedIds([]); }}
-                  className={`py-2 rounded-lg text-xs font-bold transition-all duration-200 ${kategori === "Guru" ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
-                >
-                  <UserCheck className="w-3.5 h-3.5 inline mr-1.5" />
-                  Guru
-                </button>
+            {!isGuru && (
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-gray-500">Kategori Absensi</label>
+                <div className="grid grid-cols-2 gap-2 bg-gray-50 p-1 rounded-xl border border-gray-100">
+                  <button 
+                    onClick={() => { setKategori("Siswa"); setSelectedIds([]); }}
+                    className={`py-2 rounded-lg text-xs font-bold transition-all duration-200 ${kategori === "Siswa" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+                  >
+                    <Users className="w-3.5 h-3.5 inline mr-1.5" />
+                    Siswa
+                  </button>
+                  <button 
+                    onClick={() => { setKategori("Guru"); setSelectedIds([]); }}
+                    className={`py-2 rounded-lg text-xs font-bold transition-all duration-200 ${kategori === "Guru" ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+                  >
+                    <UserCheck className="w-3.5 h-3.5 inline mr-1.5" />
+                    Guru
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Mode selection */}
             <div className="space-y-2">
