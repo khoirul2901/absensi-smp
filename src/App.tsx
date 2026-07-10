@@ -98,6 +98,8 @@ export default function App() {
     }
   };
 
+  const isGuru = session?.role === "Guru";
+
   // Render sub-views dynamically
   const renderView = () => {
     switch (activeTab) {
@@ -106,23 +108,32 @@ export default function App() {
       case "absensi":
         return <AbsensiQR />;
       case "data_master":
+        if (isGuru) return <Dashboard />;
         return <DataMaster />;
       case "laporan":
         return <Laporan />;
       case "settings":
+        if (isGuru) return <Dashboard />;
         return <Settings />;
       default:
         return <Dashboard />;
     }
   };
 
-  const navItems = [
+  const allNavItems = [
     { id: "dashboard" as TabType, label: "Dashboard", icon: LayoutDashboard, color: "text-blue-500 hover:bg-blue-50/50" },
     { id: "absensi" as TabType, label: "Absensi QR", icon: ScanQrCode, color: "text-emerald-500 hover:bg-emerald-50/50" },
     { id: "data_master" as TabType, label: "Data Master", icon: Database, color: "text-indigo-500 hover:bg-indigo-50/50" },
     { id: "laporan" as TabType, label: "Laporan & Rekap", icon: FilePieChart, color: "text-purple-500 hover:bg-purple-50/50" },
     { id: "settings" as TabType, label: "Pengaturan", icon: SettingsIcon, color: "text-slate-500 hover:bg-slate-50/50" },
   ];
+
+  const navItems = allNavItems.filter((item) => {
+    if (isGuru) {
+      return item.id === "dashboard" || item.id === "absensi" || item.id === "laporan";
+    }
+    return true;
+  });
 
   if (!session) {
     /* HIGH-FIDELITY LOGIN PANEL */
