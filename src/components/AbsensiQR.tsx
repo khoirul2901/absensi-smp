@@ -22,7 +22,7 @@ import {
   Square,
   LogOut
 } from "lucide-react";
-import { Html5Qrcode } from "html5-qrcode";
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { callGas } from "../lib/gasApi";
 import { LiveAbsen, Siswa, Guru } from "../types";
 
@@ -130,18 +130,25 @@ export default function AbsensiQR() {
   // QR Scanning Lifecycles
   useEffect(() => {
     if (cameraActive) {
-      const html5Qrcode = new Html5Qrcode("qr-scanner-frame");
+      const html5Qrcode = new Html5Qrcode("qr-scanner-frame", {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.CODE_93,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.ITF,
+        ]
+      });
       qrReaderRef.current = html5Qrcode;
 
       html5Qrcode.start(
         { facingMode: "environment" },
         {
-          fps: 10,
-          qrbox: (width, height) => {
-            const min = Math.min(width, height);
-            const size = Math.floor(min * 0.7);
-            return { width: size, height: size };
-          }
+          fps: 10
         },
         handleScanSuccess,
         () => {} // silent on failure
