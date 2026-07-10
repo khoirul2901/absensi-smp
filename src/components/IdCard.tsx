@@ -77,17 +77,15 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori }) => {
         {/* Content Area */}
         <div className="absolute top-[72px] left-0 w-full px-3 flex gap-3 z-20">
           
-          {/* QR Code Box */}
-          <div className="w-[85px] h-[100px] bg-[#d97706] p-1 shadow-sm shrink-0 flex flex-col justify-center mt-1">
-            <div className="w-full h-full bg-white flex flex-col items-center justify-center relative">
+                    {/* QR Code Box */}
+          <div className="w-[85px] h-[100px] shrink-0 flex flex-col justify-center items-center mt-1 z-20">
                <img 
-                 src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrContent)}`} 
-                 alt="QR Code" 
-                 className="w-[65px] h-[65px] object-contain"
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrContent)}&bgcolor=e6e6e6`} 
+                  alt="QR Code" 
+                  className="w-[70px] h-[70px] object-contain mix-blend-multiply"
                  referrerPolicy="no-referrer"
                />
                <span className="text-[7px] font-bold text-gray-500 mt-1 uppercase text-center leading-none">QR Absensi</span>
-            </div>
           </div>
 
           {/* Biodata & Signature */}
