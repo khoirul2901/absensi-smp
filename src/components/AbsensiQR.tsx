@@ -1,3 +1,8 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { useEffect, useRef, useState, FormEvent } from "react";
 import { 
   Scan, 
