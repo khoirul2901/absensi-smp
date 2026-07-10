@@ -142,15 +142,40 @@ export default function App() {
             <div className="w-14 h-14 bg-blue-600/10 border border-blue-500/20 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-3">
               <GraduationCap className="w-7 h-7" />
             </div>
-            <h1 className="text-xl font-extrabold text-white tracking-tight">SIAS SMP AL-HIKAM</h1>
+            <h1 className="text-xl font-extrabold text-white tracking-tight">SIAS SMK AL-HIKAM</h1>
             <p className="text-xs text-slate-400">Sistem Informasi Absensi Sekolah Modern</p>
           </div>
 
           <form onSubmit={handleLoginSubmit} className="space-y-4 relative z-10">
             {loginError && (
-              <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 p-3.5 rounded-xl text-xs flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                <span>{loginError}</span>
+              <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 p-4 rounded-xl text-xs flex flex-col gap-2">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>{loginError}</span>
+                </div>
+                {(loginError.includes("Failed to fetch") || loginError.includes("Gagal menghubungkan") || !usingMock) && (
+                  <div className="mt-1 p-2 bg-slate-900 rounded-lg text-[10px] text-slate-400 space-y-2">
+                    <p className="font-semibold text-amber-400">Tips Hubungan Google Apps Script:</p>
+                    <ol className="list-decimal pl-4 space-y-1">
+                      <li>Pastikan URL Web App Anda berakhiran <code className="text-blue-300">/exec</code>, bukan <code className="text-blue-300">/edit</code>.</li>
+                      <li>Di Google Apps Script, klik <b>Deploy &gt; Kelola penerapan (Manage deployments)</b>. Pastikan <b>Who has access</b> diatur ke <b>"Anyone"</b> (Siapa saja), dan <b>Execute as</b> diatur ke <b>"Me"</b>.</li>
+                    </ol>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        localStorage.removeItem("SIAS_GAS_URL");
+                        setUsingMock(true);
+                        setLoginError(null);
+                        setUsername("");
+                        setPassword("");
+                        window.location.reload();
+                      }}
+                      className="w-full mt-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold py-1.5 px-2 rounded text-[10px] transition-all cursor-pointer text-center"
+                    >
+                      Beralih ke Mode Simulasi Offline (Bisa Langsung Login)
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -207,10 +232,10 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/50 flex">
+    <div className="min-h-screen print:min-h-0 print:h-auto bg-slate-50/50 flex print:block">
       
       {/* SIDEBAR NAVIGATION (Desktop) */}
-      <aside className="hidden md:flex flex-col w-64 bg-slate-950 border-r border-slate-800 text-slate-400 p-5 shrink-0 justify-between">
+      <aside className="hidden md:flex print:hidden flex-col w-64 bg-slate-950 border-r border-slate-800 text-slate-400 p-5 shrink-0 justify-between">
         <div className="space-y-8">
           {/* Logo Brand */}
           <div className="flex items-center gap-3 border-b border-slate-800/60 pb-5">
@@ -218,7 +243,7 @@ export default function App() {
               <GraduationCap className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-extrabold text-white tracking-tight uppercase leading-none">SMP Al-Hikam</h2>
+              <h2 className="text-sm font-extrabold text-white tracking-tight uppercase leading-none">SMK Al-Hikam</h2>
               <span className="text-[10px] text-slate-500 font-semibold tracking-wider uppercase">SIAS PANEL v2.0</span>
             </div>
           </div>
@@ -270,11 +295,11 @@ export default function App() {
       </aside>
 
       {/* MOBILE HEADER & SIDEBAR BAR */}
-      <div className="md:hidden flex flex-col w-full min-h-screen">
+      <div className="md:hidden print:hidden flex flex-col w-full min-h-screen">
         <header className="bg-slate-950 text-slate-400 p-4 border-b border-slate-800 flex justify-between items-center relative z-20">
           <div className="flex items-center gap-2.5">
             <GraduationCap className="w-6 h-6 text-blue-500" />
-            <h2 className="text-xs font-black text-white uppercase tracking-wider">SMP AL-HIKAM SIAS</h2>
+            <h2 className="text-xs font-black text-white uppercase tracking-wider">SMK AL-HIKAM SIAS</h2>
           </div>
           <button 
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -294,7 +319,7 @@ export default function App() {
                     <GraduationCap className="w-4.5 h-4.5" />
                   </div>
                   <div>
-                    <h2 className="text-xs font-extrabold text-white uppercase tracking-tight">SMP AL-HIKAM</h2>
+                    <h2 className="text-xs font-extrabold text-white uppercase tracking-tight">SMK AL-HIKAM</h2>
                   </div>
                 </div>
 
@@ -360,13 +385,13 @@ export default function App() {
       </div>
 
       {/* DESKTOP CONTENT AREA */}
-      <div className="hidden md:flex flex-col flex-grow min-h-screen overflow-hidden">
+      <div className="hidden md:flex print:block flex-col flex-grow min-h-screen print:min-h-0 print:h-auto overflow-hidden print:overflow-visible">
         {/* Main top header */}
         <header className="bg-white border-b border-gray-100 px-8 py-4 flex justify-between items-center print:hidden">
           <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold">
             <span>Sistem Informasi Absensi Sekolah</span>
             <span>&bull;</span>
-            <span className="text-slate-600">SMP  AL-HIKAM SENDANG MULYO</span>
+            <span className="text-slate-600">SMK AL-HIKAM KREJENGAN PROBOLINGGO</span>
           </div>
 
           <div className="flex items-center gap-4">
@@ -390,7 +415,7 @@ export default function App() {
         </header>
 
         {/* Desktop Page Content Area */}
-        <main className="flex-grow p-8 overflow-y-auto max-w-7xl w-full mx-auto">
+        <main className="flex-grow p-8 print:p-0 print:w-full print:max-w-none overflow-y-auto print:overflow-visible max-w-7xl w-full mx-auto">
           {/* SIMULATOR BANNER */}
           {usingMock && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3.5 rounded-2xl mb-6 flex items-start gap-3 shadow-sm">
