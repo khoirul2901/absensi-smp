@@ -113,7 +113,6 @@ export default function App() {
       case "laporan":
         return <Laporan />;
       case "settings":
-        if (isGuru) return <Dashboard />;
         return <Settings />;
       default:
         return <Dashboard />;
@@ -130,9 +129,14 @@ export default function App() {
 
   const navItems = allNavItems.filter((item) => {
     if (isGuru) {
-      return item.id === "dashboard" || item.id === "absensi" || item.id === "laporan";
+      return item.id === "dashboard" || item.id === "absensi" || item.id === "laporan" || item.id === "settings";
     }
     return true;
+  }).map((item) => {
+    if (isGuru && item.id === "settings") {
+      return { ...item, label: "Ubah Password" };
+    }
+    return item;
   });
 
   if (!session) {
