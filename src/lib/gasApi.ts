@@ -5,6 +5,7 @@
 
 // Key for storing the GAS URL
 export const GAS_URL_STORAGE_KEY = "SIAS_GAS_URL";
+export const GAS_TOKEN_STORAGE_KEY = "SIAS_GAS_TOKEN";
 
 export function getGasUrl(): string {
   const saved = localStorage.getItem(GAS_URL_STORAGE_KEY);
@@ -14,6 +15,17 @@ export function getGasUrl(): string {
 
 export function setGasUrl(url: string): void {
   localStorage.setItem(GAS_URL_STORAGE_KEY, url.trim());
+}
+
+export function getGasToken(): string {
+  const saved = localStorage.getItem(GAS_TOKEN_STORAGE_KEY);
+  if (saved) return saved.trim();
+  // Default fallback token to match the default spreadsheet setting
+  return ((import.meta as any).env?.VITE_GAS_TOKEN as string) || "sias_token_smkalhikam";
+}
+
+export function setGasToken(token: string): void {
+  localStorage.setItem(GAS_TOKEN_STORAGE_KEY, token.trim());
 }
 
 export function isUsingMock(): boolean {
@@ -733,6 +745,7 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
   }
   
   const url = getGasUrl();
+  const token = getGasToken();
   try {
     const response = await fetch(url, {
       method: "POST",
@@ -740,7 +753,7 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
       headers: {
         "Content-Type": "text/plain",
       },
-      body: JSON.stringify({ action, args }),
+      body: JSON.stringify({ action, args, token }),
     });
     
     if (!response.ok) {
