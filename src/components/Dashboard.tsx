@@ -30,6 +30,18 @@ export default function Dashboard() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("SIAS_SESSION");
+    if (saved) {
+      try {
+        setCurrentUser(JSON.parse(saved));
+      } catch (e) {}
+    }
+  }, []);
+
+  const isGuru = currentUser?.role === "Guru";
 
   useEffect(() => {
     async function loadMetrics() {
@@ -62,12 +74,51 @@ export default function Dashboard() {
   }
 
   if (error) {
+    const isFetchError = error.includes("Failed to fetch") || error.includes("Gagal menghubungkan");
     return (
-      <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-start gap-3">
-        <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" />
-        <div>
-          <h4 className="font-semibold">Terjadi Kesalahan</h4>
-          <p className="text-sm opacity-90">{error}</p>
+      <div className="bg-rose-50 border border-rose-200 text-rose-700 p-6 rounded-2xl space-y-4 shadow-sm max-w-2xl">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="w-6 h-6 text-rose-500 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <h4 className="font-extrabold text-base text-rose-950">Gagal Menghubungkan ke Google Apps Script</h4>
+            <p className="text-xs text-rose-700 font-mono bg-rose-100/50 p-2 rounded-lg border border-rose-200/50 break-all">{error}</p>
+          </div>
+        </div>
+
+        {isFetchError && (
+          <div className="bg-white rounded-xl p-4 border border-rose-100 text-xs text-gray-700 space-y-2">
+            <h5 className="font-bold text-amber-700 flex items-center gap-1.5">
+              <span className="inline-flex items-center justify-center w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+              Panduan Solusi (Cara Memperbaiki):
+            </h5>
+            <ol className="list-decimal pl-4 space-y-1.5 text-gray-600">
+              <li>
+                <strong>Atur Akses ke "Anyone" (Siapa saja):</strong> Di halaman editor Google Apps Script Anda, klik tombol biru <strong>Terapkan (Deploy) &gt; Kelola penerapan (Manage deployments)</strong>. Edit penerapan aktif, lalu pastikan kolom <strong>Siapa yang memiliki akses (Who has access)</strong> diatur ke <strong>"Siapa saja" (Anyone)</strong>, bukan "Hanya saya". Ini adalah penyebab paling sering!
+              </li>
+              <li>
+                <strong>Gunakan URL /exec yang benar:</strong> Pastikan URL yang disimpan berakhiran dengan <code>/exec</code>, bukan <code>/edit</code>. Contoh format yang benar: <br />
+                <code className="text-blue-600 select-all font-mono break-all text-[10px]">https://script.google.com/macros/s/.../exec</code>
+              </li>
+              <li>
+                <strong>Deploy Ulang (Versi Baru):</strong> Setiap kali Anda mengubah kode Google Apps Script di Google Sheets, Anda harus membuat penerapan baru (New deployment) agar perubahan kodenya aktif.
+              </li>
+            </ol>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-3 pt-2">
+          <button
+            onClick={() => {
+              localStorage.removeItem("SIAS_GAS_URL");
+              window.location.reload();
+            }}
+            className="bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer"
+          >
+            Beralih ke Mode Simulasi Offline (Bisa Dicoba Langsung)
+          </button>
+          <span className="text-xs text-gray-500">
+            atau klik menu <strong>Pengaturan</strong> di sidebar kiri untuk mengecek URL Anda.
+          </span>
         </div>
       </div>
     );
@@ -203,30 +254,32 @@ export default function Dashboard() {
       </div>
 
       {/* Grid Status Guru */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <span className="w-1.5 h-6 bg-indigo-600 rounded-full"></span>
-          <h2 className="text-lg font-bold text-gray-800 tracking-tight">Ringkasan Absensi Guru</h2>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {cardsGuru.map((card, idx) => (
-            <div key={idx} className={`bg-white rounded-xl border p-5 flex items-start justify-between shadow-sm hover:shadow-md transition-all duration-200 ${card.bgLight}`}>
-              <div className="space-y-3">
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{card.title}</p>
-                <h3 className="text-3xl font-extrabold text-gray-900 tracking-tight">{card.value}</h3>
-                {card.subtitle && (
-                  <p className="text-xs text-gray-600 font-medium flex items-center gap-1">
-                    {card.subtitle}
-                  </p>
-                )}
+      {!isGuru && (
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <span className="w-1.5 h-6 bg-indigo-600 rounded-full"></span>
+            <h2 className="text-lg font-bold text-gray-800 tracking-tight">Ringkasan Absensi Guru</h2>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {cardsGuru.map((card, idx) => (
+              <div key={idx} className={`bg-white rounded-xl border p-5 flex items-start justify-between shadow-sm hover:shadow-md transition-all duration-200 ${card.bgLight}`}>
+                <div className="space-y-3">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{card.title}</p>
+                  <h3 className="text-3xl font-extrabold text-gray-900 tracking-tight">{card.value}</h3>
+                  {card.subtitle && (
+                    <p className="text-xs text-gray-600 font-medium flex items-center gap-1">
+                      {card.subtitle}
+                    </p>
+                  )}
+                </div>
+                <div className={`p-3 rounded-lg ${card.color}`}>
+                  <card.icon className="w-5 h-5" />
+                </div>
               </div>
-              <div className={`p-3 rounded-lg ${card.color}`}>
-                <card.icon className="w-5 h-5" />
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Analytics Chart & Detail */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -281,23 +334,34 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs font-semibold text-gray-700">
-                  <span>Kehadiran Tepat Waktu (Guru)</span>
-                  <span>{metrics.guruTepat}</span>
+              {!isGuru && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs font-semibold text-gray-700">
+                    <span>Kehadiran Tepat Waktu (Guru)</span>
+                    <span>{metrics.guruTepat}</span>
+                  </div>
+                  <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                    <div className="bg-indigo-500 h-full rounded-full transition-all duration-500" style={{ width: `${metrics.guruTepatInt}%` }}></div>
+                  </div>
                 </div>
-                <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-                  <div className="bg-indigo-500 h-full rounded-full transition-all duration-500" style={{ width: `${metrics.guruTepatInt}%` }}></div>
-                </div>
-              </div>
+              )}
 
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs font-semibold text-gray-700">
                   <span>Rata-rata Tingkat Kehadiran</span>
-                  <span>{Math.round(((metrics.siswaMasuk + metrics.guruMasuk) / Math.max(1, metrics.totalSiswa + metrics.totalGuru)) * 100)}%</span>
+                  <span>
+                    {isGuru 
+                      ? `${Math.round((metrics.siswaMasuk / Math.max(1, metrics.totalSiswa)) * 100)}%`
+                      : `${Math.round(((metrics.siswaMasuk + metrics.guruMasuk) / Math.max(1, metrics.totalSiswa + metrics.totalGuru)) * 100)}%`
+                    }
+                  </span>
                 </div>
                 <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-                  <div className="bg-blue-600 h-full rounded-full transition-all duration-500" style={{ width: `${Math.round(((metrics.siswaMasuk + metrics.guruMasuk) / Math.max(1, metrics.totalSiswa + metrics.totalGuru)) * 100)}%` }}></div>
+                  <div className="bg-blue-600 h-full rounded-full transition-all duration-500" style={{ 
+                    width: isGuru 
+                      ? `${Math.round((metrics.siswaMasuk / Math.max(1, metrics.totalSiswa)) * 100)}%`
+                      : `${Math.round(((metrics.siswaMasuk + metrics.guruMasuk) / Math.max(1, metrics.totalSiswa + metrics.totalGuru)) * 100)}%`
+                  }}></div>
                 </div>
               </div>
             </div>
