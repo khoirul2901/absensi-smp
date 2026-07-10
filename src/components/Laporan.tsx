@@ -26,6 +26,25 @@ export default function Laporan() {
   const [viewMode, setViewMode] = useState<"detail" | "rekap">("detail");
   const [jenisFilter, setJenisFilter] = useState<"rentang" | "bulan">("bulan");
   
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("SIAS_SESSION");
+    if (saved) {
+      try {
+        setCurrentUser(JSON.parse(saved));
+      } catch (e) {}
+    }
+  }, []);
+
+  const isGuru = currentUser?.role === "Guru";
+
+  useEffect(() => {
+    if (isGuru) {
+      setKategori("Siswa");
+    }
+  }, [isGuru]);
+  
   // Filter Fields
   const [tanggalMulai, setTanggalMulai] = useState("");
   const [tanggalSelesai, setTanggalSelesai] = useState("");
@@ -193,20 +212,22 @@ export default function Laporan() {
         </div>
 
         {/* Categories Selector */}
-        <div className="flex bg-gray-50 border border-gray-200 p-1 rounded-xl">
-          <button 
-            onClick={() => setKategori("Siswa")}
-            className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all duration-150 ${kategori === "Siswa" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
-          >
-            Siswa
-          </button>
-          <button 
-            onClick={() => setKategori("Guru")}
-            className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all duration-150 ${kategori === "Guru" ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
-          >
-            Guru
-          </button>
-        </div>
+        {!isGuru && (
+          <div className="flex bg-gray-50 border border-gray-200 p-1 rounded-xl">
+            <button 
+              onClick={() => setKategori("Siswa")}
+              className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all duration-150 ${kategori === "Siswa" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+            >
+              Siswa
+            </button>
+            <button 
+              onClick={() => setKategori("Guru")}
+              className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all duration-150 ${kategori === "Guru" ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+            >
+              Guru
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Navigation Filter Panel (Hidden on print) */}
