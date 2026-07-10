@@ -25,6 +25,59 @@ import { callGas, getGasUrl, setGasUrl, isUsingMock } from "../lib/gasApi";
 import { ConfigJam, HariLibur } from "../types";
 
 export default function Settings() {
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("SIAS_SESSION");
+    if (saved) {
+      try {
+        setCurrentUser(JSON.parse(saved));
+      } catch (e) {}
+    }
+  }, []);
+
+  const isGuru = currentUser?.role === "Guru";
+
+  // Change Password Form
+  const [passLama, setPassLama] = useState("");
+  const [passBaru, setPassBaru] = useState("");
+  const [passKonfirm, setPassKonfirm] = useState("");
+  const [passStatus, setPassStatus] = useState<string | null>(null);
+  const [passError, setPassError] = useState<string | null>(null);
+
+  const handleUbahPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setPassStatus(null);
+    setPassError(null);
+
+    if (passBaru !== passKonfirm) {
+      setPassError("Konfirmasi password baru tidak cocok.");
+      return;
+    }
+
+    if (!passBaru.trim()) {
+      setPassError("Password baru tidak boleh kosong.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const res = await callGas("ubahPasswordUser", [currentUser.username, passLama, passBaru]);
+      if (res && res.success) {
+        setPassStatus("Password berhasil diperbarui!");
+        setPassLama("");
+        setPassBaru("");
+        setPassKonfirm("");
+      } else {
+        setPassError(res?.message || "Gagal mengubah password.");
+      }
+    } catch (err: any) {
+      setPassError("Error: " + err.toString());
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const [gasUrl, setGasUrlState] = useState("");
   const [connectionStatus, setConnectionStatus] = useState<"connected" | "disconnected" | "testing" | null>(null);
   const [connectionMsg, setConnectionMsg] = useState<string | null>(null);
@@ -59,12 +112,12 @@ export default function Settings() {
     logoRightUrl: localStorage.getItem('cardLogoRightUrl') || ''
   });
 
-  const handleCardConfigChange = (e) => {
+  const handleCardConfigChange = (e: any) => {
     const { name, value } = e.target;
     setCardConfig(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSaveCardConfig = (e) => {
+  const handleSaveCardConfig = (e: any) => {
     e.preventDefault();
     localStorage.setItem('cardSchoolName', cardConfig.schoolName);
     localStorage.setItem('cardSchoolAddress', cardConfig.schoolAddress);
@@ -301,6 +354,83 @@ export default function Settings() {
       setLoading(false);
     }
   };
+
+  if (isGuru) {
+    return (
+      <div className="max-w-md mx-auto space-y-6 pt-6">
+        <div className="flex items-center gap-2.5 mb-2">
+          <span className="w-1.5 h-6 bg-indigo-600 rounded-full"></span>
+          <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">Ubah Password Akun Anda</h2>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+          <p className="text-xs text-gray-500 leading-relaxed font-semibold">
+            Halo <span className="text-gray-900 font-bold">{currentUser?.username}</span>, silakan isi form di bawah ini untuk mengganti password login Anda. Username login Anda adalah nama Anda tanpa spasi dan huruf kecil: <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-indigo-600 font-bold">{currentUser?.username?.replace(/\s+/g, "").toLowerCase()}</span>.
+          </p>
+
+          <form onSubmit={handleUbahPassword} className="space-y-4">
+            {passStatus && (
+              <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs rounded-xl font-semibold flex items-center gap-1.5">
+                <CheckCircle className="w-4 h-4 shrink-0" />
+                {passStatus}
+              </div>
+            )}
+            {passError && (
+              <div className="p-3 bg-rose-50 border border-rose-100 text-rose-700 text-xs rounded-xl font-semibold flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                {passError}
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">Password Lama</label>
+              <input 
+                type="password"
+                required
+                value={passLama}
+                onChange={(e) => setPassLama(e.target.value)}
+                placeholder="Masukkan kata sandi lama"
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">Password Baru</label>
+              <input 
+                type="password"
+                required
+                value={passBaru}
+                onChange={(e) => setPassBaru(e.target.value)}
+                placeholder="Sandi baru"
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-500">Konfirmasi Password Baru</label>
+              <input 
+                type="password"
+                required
+                value={passKonfirm}
+                onChange={(e) => setPassKonfirm(e.target.value)}
+                placeholder="Ulangi sandi baru"
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <button 
+              type="submit"
+              disabled={loading}
+              className="bg-slate-900 text-white font-bold text-xs w-full py-2.5 rounded-xl hover:bg-slate-800 transition-all duration-150 shadow-sm flex items-center justify-center gap-1.5"
+            >
+              <Save className="w-4 h-4" />
+              {loading ? "Menyimpan..." : "Simpan Password Baru"}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto animate-fade-in">
