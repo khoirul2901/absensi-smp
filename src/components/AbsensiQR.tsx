@@ -347,7 +347,7 @@ export default function AbsensiQR() {
             </div>
 
             {/* Live Camera Feed Frame */}
-            <div className="relative bg-slate-900 rounded-xl overflow-hidden aspect-video border border-slate-800 flex flex-col items-center justify-center">
+            <div className="relative bg-slate-900 rounded-xl overflow-hidden aspect-[4/5] sm:aspect-video min-h-[300px] border border-slate-800 flex flex-col items-center justify-center">
               {cameraActive ? (
                 <>
                   <div id="qr-scanner-frame" className="w-full h-full object-cover"></div>
