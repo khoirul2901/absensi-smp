@@ -17,7 +17,9 @@ import {
   CheckCircle,
   AlertTriangle,
   Link2,
-  HelpCircle
+  HelpCircle,
+  CreditCard,
+  Image as ImageIcon
 } from "lucide-react";
 import { callGas, getGasUrl, setGasUrl, isUsingMock } from "../lib/gasApi";
 import { ConfigJam, HariLibur } from "../types";
@@ -47,6 +49,32 @@ export default function Settings() {
 
   const [loading, setLoading] = useState(false);
 
+  // Card Settings
+  const [cardConfig, setCardConfig] = useState({
+    schoolName: localStorage.getItem('cardSchoolName') || 'SMK AL-HIKAM KREJENGAN',
+    schoolAddress: localStorage.getItem('cardSchoolAddress') || 'Krejengan Kec. Krejengan Kab. Probolinggo',
+    principalName: localStorage.getItem('cardPrincipalName') || 'Fulan, S.Pd',
+    signatureUrl: localStorage.getItem('cardSignatureUrl') || '',
+    logoLeftUrl: localStorage.getItem('cardLogoLeftUrl') || '',
+    logoRightUrl: localStorage.getItem('cardLogoRightUrl') || ''
+  });
+
+  const handleCardConfigChange = (e) => {
+    const { name, value } = e.target;
+    setCardConfig(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSaveCardConfig = (e) => {
+    e.preventDefault();
+    localStorage.setItem('cardSchoolName', cardConfig.schoolName);
+    localStorage.setItem('cardSchoolAddress', cardConfig.schoolAddress);
+    localStorage.setItem('cardPrincipalName', cardConfig.principalName);
+    localStorage.setItem('cardSignatureUrl', cardConfig.signatureUrl);
+    localStorage.setItem('cardLogoLeftUrl', cardConfig.logoLeftUrl);
+    localStorage.setItem('cardLogoRightUrl', cardConfig.logoRightUrl);
+    alert('Pengaturan kartu berhasil disimpan!');
+  };
+
   // Load config & data
   const loadConfig = async () => {
     try {
@@ -57,12 +85,12 @@ export default function Settings() {
       if (url) {
         setConnectionStatus("testing");
         const testRes = await callGas("getPengaturanSemua");
-        if (testRes && !testRes.error) {
+        if (testRes && testRes.success !== false) {
           setConnectionStatus("connected");
           setConfigJam(testRes);
         } else {
           setConnectionStatus("disconnected");
-          setConnectionMsg(testRes?.error || "Gagal menghubungi API Google Apps Script");
+          setConnectionMsg(testRes?.message || "Gagal menghubungi API Google Apps Script");
         }
       } else {
         setConnectionStatus(null);
@@ -110,14 +138,14 @@ export default function Settings() {
 
       // Test connection
       const testRes = await callGas("getPengaturanSemua");
-      if (testRes && !testRes.error) {
+      if (testRes && testRes.success !== false) {
         setConnectionStatus("connected");
         alert("Sukses! Koneksi ke Google Apps Script berhasil terjalin.");
         loadConfig();
       } else {
         setConnectionStatus("disconnected");
-        setConnectionMsg(testRes?.error || "Koneksi gagal. Periksa kembali URL Web App GAS Anda.");
-        alert("Gagal mengkoneksikan URL Apps Script.");
+        setConnectionMsg(testRes?.message || "Koneksi gagal. Periksa kembali URL Web App GAS Anda.");
+        alert("Gagal mengkoneksikan URL Apps Script: " + (testRes?.message || "Silakan cek kembali URL atau izin akses Apps Script Anda."));
       }
     } catch (err: any) {
       setConnectionStatus("disconnected");
@@ -332,19 +360,25 @@ export default function Settings() {
             </div>
           )}
 
-          {isUsingMock() && (
+          {(isUsingMock() || connectionStatus === "disconnected") && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl text-xs space-y-2">
               <div className="flex gap-2 font-bold">
-                <HelpCircle className="w-4 h-4 text-amber-600" />
-                <span>Panduan Deploiyment Google Apps Script:</span>
+                <HelpCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>Panduan Penting Penyelesaian Error Koneksi (Failed to fetch):</span>
               </div>
-              <ol className="list-decimal pl-4 space-y-1 text-[11px] leading-relaxed opacity-90">
-                <li>Buka Editor Apps Script di Google Sheets Anda.</li>
-                <li>Salin seluruh kode dari file <code className="font-mono bg-amber-100 px-1 py-0.5 rounded">sias-gas-project/Main.gs</code> dan file pendukung lainnya.</li>
-                <li>Klik tombol <strong>Terapkan (Deploy)</strong> &gt; <strong>Penerapan baru (New deployment)</strong>.</li>
-                <li>Pilih jenis penerapan: <strong>Aplikasi web (Web app)</strong>.</li>
-                <li>Setel Jalankan sebagai: <strong>Saya (Admin)</strong>, dan Siapa yang memiliki akses: <strong>Siapa saja (Anyone)</strong>.</li>
-                <li>Salin <strong>URL Aplikasi Web</strong> yang dihasilkan dan tempelkan di atas lalu klik Simpan.</li>
+              <ol className="list-decimal pl-4 space-y-1.5 text-[11px] leading-relaxed opacity-90">
+                <li>
+                  <strong>Ubah Siapa yang Mengakses (Who has access):</strong> Di Google Apps Script Anda, klik tombol biru <strong>Terapkan (Deploy)</strong> &gt; <strong>Kelola penerapan (Manage deployments)</strong>. Klik ikon Edit (pensil) pada deployment aktif Anda. Ubah bagian <strong>Siapa yang memiliki akses (Who has access)</strong> dari "Hanya saya" menjadi <strong>"Siapa saja" (Anyone)</strong>. Ini adalah penyebab paling sering dari error <code>TypeError: Failed to fetch</code>!
+                </li>
+                <li>
+                  <strong>Gunakan URL yang benar:</strong> Pastikan URL yang dimasukkan berakhiran dengan <code>/exec</code>, bukan <code>/edit</code>. Contoh format: <code>https://script.google.com/macros/s/.../exec</code>
+                </li>
+                <li>
+                  <strong>Terapkan Ulang Aplikasi Web:</strong> Setiap kali Anda mengubah kode Google Apps Script di Google Sheets, Anda wajib melakukan <strong>Deploy Ulang (New deployment)</strong> dengan memilih opsi Versi Baru (New version) agar perubahan kodenya aktif di URL Web App Anda.
+                </li>
+                <li>
+                  <strong>Butuh Kembali ke Offline?</strong> Jika Anda ingin mencoba aplikasi dengan cepat tanpa database Google Sheets, cukup kosongkan kotak isian Web App URL di atas, lalu klik <strong>Simpan & Tes</strong> untuk kembali ke Mode Simulasi Offline.
+                </li>
               </ol>
             </div>
           )}
@@ -487,6 +521,46 @@ export default function Settings() {
             </table>
           </div>
         </div>
+      </div>
+
+            {/* CARD SETTINGS MANAGER */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+        <div className="flex items-center gap-2 border-b border-gray-50 pb-3">
+          <CreditCard className="w-5 h-5 text-fuchsia-500" />
+          <h3 className="font-bold text-gray-800 text-sm">Pengaturan Desain Kartu</h3>
+        </div>
+        <form onSubmit={handleSaveCardConfig} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-gray-500">Nama Sekolah</label>
+            <input type="text" name="schoolName" value={cardConfig.schoolName} onChange={handleCardConfigChange} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-800 focus:outline-none focus:border-indigo-500" required />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-gray-500">Alamat Sekolah</label>
+            <input type="text" name="schoolAddress" value={cardConfig.schoolAddress} onChange={handleCardConfigChange} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-800 focus:outline-none focus:border-indigo-500" required />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-gray-500">Nama Kepala Sekolah</label>
+            <input type="text" name="principalName" value={cardConfig.principalName} onChange={handleCardConfigChange} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-800 focus:outline-none focus:border-indigo-500" required />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-gray-500">URL Tanda Tangan (Opsional)</label>
+            <input type="text" name="signatureUrl" value={cardConfig.signatureUrl} onChange={handleCardConfigChange} placeholder="https://..." className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-800 focus:outline-none focus:border-indigo-500" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-gray-500">URL Logo Kiri (Opsional)</label>
+            <input type="text" name="logoLeftUrl" value={cardConfig.logoLeftUrl} onChange={handleCardConfigChange} placeholder="https://..." className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-800 focus:outline-none focus:border-indigo-500" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-gray-500">URL Logo Kanan (Opsional)</label>
+            <input type="text" name="logoRightUrl" value={cardConfig.logoRightUrl} onChange={handleCardConfigChange} placeholder="https://..." className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-800 focus:outline-none focus:border-indigo-500" />
+          </div>
+          <div className="sm:col-span-2 flex justify-end mt-2">
+            <button type="submit" className="bg-fuchsia-600 text-white font-bold text-xs px-5 py-2.5 rounded-xl hover:bg-fuchsia-700 transition-all duration-150 flex items-center gap-1.5 shadow-sm">
+              <Save className="w-4 h-4" />
+              Simpan Pengaturan Kartu
+            </button>
+          </div>
+        </form>
       </div>
 
       {/* HOLIDAYS MANAGER */}
