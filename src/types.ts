@@ -42,6 +42,7 @@ export interface Guru {
   jabatan_tugas: string;
   no_hp: string;
   qr_content: string;
+  password?: string;
 }
 
 export interface LiveAbsen {
