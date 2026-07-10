@@ -1,6 +1,6 @@
 import React from 'react';
 import { Siswa, Guru } from '../types';
-import { GraduationCap, BookOpen } from 'lucide-react';
+import { GraduationCap, BookOpen, Briefcase } from 'lucide-react';
 
 interface IdCardProps {
   item: Siswa | Guru;
@@ -9,6 +9,7 @@ interface IdCardProps {
 
 export const IdCard: React.FC<IdCardProps> = ({ item, kategori }) => {
   const isSiswa = kategori === "Siswa";
+  
   const name = isSiswa ? (item as Siswa).nama_siswa : (item as Guru).nama_guru;
   const id = isSiswa ? (item as Siswa).id_siswa : (item as Guru).id_guru;
   const qrContent = item.qr_content;
@@ -18,6 +19,7 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori }) => {
   const identifierValue = isSiswa ? (item as Siswa).nisn : (item as Guru).nip_nuptk;
   const jabatanLabel = isSiswa ? "Jurusan" : "Jabatan";
   const jabatanValue = isSiswa ? (item as Siswa).jurusan : (item as Guru).jabatan_tugas;
+
   const schoolName = localStorage.getItem('cardSchoolName') || 'SMK AL-HIKAM KREJENGAN';
   const schoolAddress = localStorage.getItem('cardSchoolAddress') || 'Krejengan Kec. Krejengan Kab. Probolinggo';
   const principalName = localStorage.getItem('cardPrincipalName') || 'Fulan, S.Pd';
@@ -31,10 +33,125 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori }) => {
     year: 'numeric'
   });
 
+  if (!isSiswa) {
+    return (
+      <div className="flex flex-col sm:flex-row gap-4 shrink-0" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+        {/* FRONT CARD GURU */}
+        <div className="w-[325px] h-[204px] bg-slate-900 rounded-xl overflow-hidden relative flex flex-col shadow-md border border-slate-700 shrink-0">
+          
+          {/* Header */}
+          <div className="absolute top-0 left-0 w-full h-[55px] bg-slate-800 z-10 flex items-center px-3 border-b border-amber-500/30">
+            <div className="absolute top-0 right-0 w-[40%] h-full bg-slate-700 rounded-bl-[100px] opacity-40 z-0"></div>
+            
+            <div className="relative z-10 w-full flex justify-between items-center">
+              {logoLeftUrl ? (
+                <img src={logoLeftUrl} alt="Logo" className="w-10 h-10 rounded-full object-cover border border-amber-500 bg-white p-0.5 shadow-sm" referrerPolicy="no-referrer" />
+              ) : (
+                <div className="w-10 h-10 rounded-full border border-amber-500 bg-slate-700 flex items-center justify-center p-1 shadow-sm">
+                  <Briefcase className="w-5 h-5 text-amber-500" />
+                </div>
+              )}
+              <div className="text-center flex-grow px-2">
+                <h2 className="text-amber-500 font-black text-[13px] leading-none tracking-widest uppercase">ID Card Pegawai</h2>
+                <h3 className="text-white font-bold text-[10px] uppercase leading-tight tracking-wider mt-1">{schoolName}</h3>
+              </div>
+            </div>
+          </div>
+
+          {/* Left accent bar */}
+          <div className="absolute left-0 top-[55px] bottom-0 w-[4px] bg-amber-500 z-10"></div>
+
+          {/* Content Area */}
+          <div className="absolute top-[65px] left-0 w-full px-4 flex gap-3 z-20">
+            
+            {/* QR Code */}
+            <div className="w-[80px] shrink-0 flex flex-col items-center">
+              <div className="w-[80px] h-[80px] bg-white rounded-lg p-1 shadow-inner flex items-center justify-center">
+                <img 
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrContent)}`} 
+                  alt="QR Code" 
+                  className="w-full h-full object-contain"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+              <span className="text-[8px] font-bold text-amber-500 mt-1.5 uppercase tracking-wider bg-slate-800 px-2 py-0.5 rounded-full border border-amber-500/30">
+                Scan Absen
+              </span>
+            </div>
+
+            {/* Biodata */}
+            <div className="flex-grow flex flex-col justify-between h-[125px]">
+              <div className="space-y-1.5">
+                <div>
+                  <h4 className="text-[8px] text-slate-400 uppercase tracking-wider font-semibold">Nama Lengkap</h4>
+                  <p className="text-[11px] text-white font-bold leading-tight">{name}</p>
+                </div>
+                
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <h4 className="text-[8px] text-slate-400 uppercase tracking-wider font-semibold">{jabatanLabel}</h4>
+                    <p className="text-[9px] text-amber-400 font-semibold leading-tight line-clamp-2">{jabatanValue || "-"}</p>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-[8px] text-slate-400 uppercase tracking-wider font-semibold">{identifierLabel}</h4>
+                    <p className="text-[9px] text-white font-medium leading-tight">{identifierValue || "-"}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-[8px] text-slate-400 uppercase tracking-wider font-semibold">ID / PIN</h4>
+                  <p className="text-[10px] text-white font-mono">{id}</p>
+                </div>
+              </div>
+
+            </div>
+          </div>
+          
+          {/* Signature Absolute */}
+          <div className="absolute bottom-2 right-3 text-center text-[7px] text-slate-300 font-medium z-30">
+            <p>Probolinggo, {today}</p>
+            <div className="mt-0.5 flex justify-center items-center h-[20px]">
+              {signatureUrl ? (
+                <img src={signatureUrl} alt="Tanda Tangan" className="h-[20px] object-contain invert brightness-0 opacity-80" referrerPolicy="no-referrer" />
+              ) : null}
+            </div>
+            <div className="border-t border-slate-500 pt-[2px] w-[80px] mx-auto text-[7px] font-bold mt-1 text-slate-200">
+              {principalName}
+            </div>
+          </div>
+        </div>
+
+        {/* BACK CARD GURU */}
+        <div className="w-[325px] h-[204px] bg-slate-900 rounded-xl overflow-hidden relative flex flex-col shadow-md border border-slate-700 shrink-0">
+          <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none z-0">
+            <Briefcase className="w-40 h-40 text-white" />
+          </div>
+          
+          <div className="absolute top-0 left-0 w-full h-[6px] bg-amber-500 z-10"></div>
+          <div className="absolute bottom-0 left-0 w-full h-[6px] bg-slate-700 z-10"></div>
+
+          <div className="relative z-10 flex flex-col items-center justify-center w-full h-full px-6 py-4">
+            <h2 className="text-[14px] font-black text-amber-500 tracking-widest mb-4 uppercase border-b border-slate-700 pb-2">Ketentuan Pegawai</h2>
+            
+            <div className="text-[10px] text-slate-300 leading-relaxed font-medium w-full">
+              <ol className="list-decimal pl-4 space-y-2">
+                <li>Kartu ini adalah identitas resmi pegawai {schoolName}.</li>
+                <li>Wajib dikenakan selama berada di lingkungan sekolah dan saat jam dinas.</li>
+                <li>Gunakan QR Code pada bagian depan untuk melakukan absensi kehadiran.</li>
+                <li>Kartu ini tidak dapat dipindahtangankan.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // DEFAULT FRONT CARD SISWA
   return (
     <div className="flex flex-col sm:flex-row gap-4 shrink-0" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
       
-      {/* FRONT CARD */}
+      {/* FRONT CARD SISWA */}
       <div className="w-[325px] h-[204px] bg-[#e6e6e6] rounded-xl overflow-hidden relative flex flex-col shadow-md border border-gray-300 shrink-0">
         
         {/* Background Decorative Elements */}
@@ -74,10 +191,11 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori }) => {
         <div className="absolute bottom-0 left-0 w-full h-[12px] bg-[#d97706] z-10"></div>
         <div className="absolute bottom-[8px] left-0 w-full h-[18px] bg-[#3b82f6] rounded-t-[100%] z-20"></div>
         <div className="absolute bottom-0 left-0 w-full h-[12px] bg-[#1e3a8a] rounded-t-[100%] z-30"></div>
+
         {/* Content Area */}
         <div className="absolute top-[72px] left-0 w-full px-3 flex gap-3 z-20">
           
-                    {/* QR Code Box */}
+          {/* QR Code Box */}
           <div className="w-[85px] h-[100px] shrink-0 flex flex-col justify-center items-center mt-1 z-20">
                <img 
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrContent)}&bgcolor=e6e6e6`} 
@@ -97,20 +215,16 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori }) => {
                   <td className="px-1 align-top">:</td>
                   <td className="font-bold text-[10px] leading-tight align-top">{name}</td>
                 </tr>
-                {isSiswa && (
-                  <tr>
-                    <td className="align-top">Kelas</td>
-                    <td className="px-1 align-top">:</td>
-                    <td className="align-top">{kelas}</td>
-                  </tr>
-                )}
-                {!isSiswa && (
-                  <tr>
-                    <td className="align-top">{jabatanLabel}</td>
-                    <td className="px-1 align-top">:</td>
-                    <td className="align-top leading-tight">{jabatanValue || "-"}</td>
-                  </tr>
-                )}
+                <tr>
+                  <td className="align-top">Kelas</td>
+                  <td className="px-1 align-top">:</td>
+                  <td className="align-top">{kelas}</td>
+                </tr>
+                <tr>
+                  <td className="align-top">{jabatanLabel}</td>
+                  <td className="px-1 align-top">:</td>
+                  <td className="align-top leading-tight">{jabatanValue || "-"}</td>
+                </tr>
                 <tr>
                   <td className="align-top">{identifierLabel}</td>
                   <td className="px-1 align-top">:</td>
@@ -139,10 +253,9 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori }) => {
             </div>
           </div>
         </div>
-
       </div>
 
-      {/* BACK CARD */}
+      {/* BACK CARD SISWA */}
       <div className="w-[325px] h-[204px] bg-[#e6e6e6] rounded-xl overflow-hidden relative flex flex-col shadow-md border border-gray-300 shrink-0">
         
         {/* Header Decor */}
@@ -166,15 +279,13 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori }) => {
           
           <div className="text-[10px] text-gray-800 leading-relaxed font-semibold w-full">
             <ol className="list-decimal pl-4 space-y-1">
-              <li>Kartu ini berlaku selama pemilik masih menjadi {isSiswa ? 'siswa' : 'guru'} {schoolName}.</li>
+              <li>Kartu ini berlaku selama pemilik masih menjadi siswa {schoolName}.</li>
               <li>Kartu ini tidak dapat dipindahtangankan atau digunakan oleh orang lain.</li>
               <li>Apabila Anda kehilangan atau menemukan kartu ini, harap segera menghubungi pihak Tata Usaha Sekolah.</li>
             </ol>
           </div>
         </div>
-
       </div>
-
     </div>
   );
 };
