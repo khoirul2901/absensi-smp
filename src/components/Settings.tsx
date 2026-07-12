@@ -100,9 +100,9 @@ export default function Settings() {
 
   // Card Settings
   const [cardConfig, setCardConfig] = useState({
-    schoolName: localStorage.getItem('cardSchoolName') || 'SMK AL-HIKAM KREJENGAN',
-    schoolAddress: localStorage.getItem('cardSchoolAddress') || 'Krejengan Kec. Krejengan Kab. Probolinggo',
-    principalName: localStorage.getItem('cardPrincipalName') || 'Fulan, S.Pd',
+    schoolName: localStorage.getItem('cardSchoolName') || 'SMP AL-HIKAM',
+    schoolAddress: localStorage.getItem('cardSchoolAddress') || 'Sendang Mulyo, Kec. Sendang Agung, Kab. Lampung Tengah, Lampung',
+    principalName: localStorage.getItem('cardPrincipalName') || 'Khoirul Malik, S.Kom.',
     signatureUrl: localStorage.getItem('cardSignatureUrl') || '',
     logoLeftUrl: localStorage.getItem('cardLogoLeftUrl') || '',
     logoRightUrl: localStorage.getItem('cardLogoRightUrl') || ''
