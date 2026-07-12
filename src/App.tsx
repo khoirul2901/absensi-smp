@@ -162,7 +162,7 @@ export default function App() {
             <div className="w-14 h-14 bg-blue-600/10 border border-blue-500/20 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-3">
               <GraduationCap className="w-7 h-7" />
             </div>
-            <h1 className="text-xl font-extrabold text-white tracking-tight">SIAS SMK AL-HIKAM</h1>
+            <h1 className="text-xl font-extrabold text-white tracking-tight">SIAS SMP AL-HIKAM</h1>
             <p className="text-xs text-slate-400">Sistem Informasi Absensi Sekolah Modern</p>
           </div>
 
@@ -263,7 +263,7 @@ export default function App() {
               <GraduationCap className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-extrabold text-white tracking-tight uppercase leading-none">SMK Al-Hikam</h2>
+              <h2 className="text-sm font-extrabold text-white tracking-tight uppercase leading-none">SMP Al-Hikam</h2>
               <span className="text-[10px] text-slate-500 font-semibold tracking-wider uppercase">SIAS PANEL v2.0</span>
             </div>
           </div>
@@ -319,7 +319,7 @@ export default function App() {
         <header className="bg-slate-950 text-slate-400 p-4 border-b border-slate-800 flex justify-between items-center relative z-20">
           <div className="flex items-center gap-2.5">
             <GraduationCap className="w-6 h-6 text-blue-500" />
-            <h2 className="text-xs font-black text-white uppercase tracking-wider">SMK AL-HIKAM SIAS</h2>
+            <h2 className="text-xs font-black text-white uppercase tracking-wider">SIAS SMP AL-HIKAM </h2>
           </div>
           <button 
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -339,7 +339,7 @@ export default function App() {
                     <GraduationCap className="w-4.5 h-4.5" />
                   </div>
                   <div>
-                    <h2 className="text-xs font-extrabold text-white uppercase tracking-tight">SMK AL-HIKAM</h2>
+                    <h2 className="text-xs font-extrabold text-white uppercase tracking-tight">SMP AL-HIKAM</h2>
                   </div>
                 </div>
 
@@ -411,7 +411,7 @@ export default function App() {
           <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold">
             <span>Sistem Informasi Absensi Sekolah</span>
             <span>&bull;</span>
-            <span className="text-slate-600">SMK AL-HIKAM KREJENGAN PROBOLINGGO</span>
+            <span className="text-slate-600">SMP AL-HIKAM Sendang Mulyo</span>
           </div>
 
           <div className="flex items-center gap-4">
@@ -422,15 +422,6 @@ export default function App() {
               <span className={`w-1.5 h-1.5 rounded-full ${usingMock ? "bg-amber-500" : "bg-emerald-500 animate-pulse"}`}></span>
               {usingMock ? "Database Simulasi" : "GAS Web App Terkoneksi"}
             </span>
-            
-            <a 
-              href="https://script.google.com" 
-              target="_blank" 
-              className="text-slate-400 hover:text-slate-600 text-xs font-medium flex items-center gap-1 transition-all duration-150"
-            >
-              Apps Script Editor
-              <ExternalLink className="w-3 h-3" />
-            </a>
           </div>
         </header>
 
