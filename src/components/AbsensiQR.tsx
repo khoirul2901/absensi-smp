@@ -103,7 +103,8 @@ export default function AbsensiQR() {
   const loadLiveLogs = async () => {
     try {
       const today = new Date().toISOString().split("T")[0];
-      const res = await callGas("getLiveAbsenHariIni", [kategori, today, filterKelasRef.current]);
+      // Always fetch all classes ("Semua") from backend, we will filter locally on the client
+      const res = await callGas("getLiveAbsenHariIni", [kategori, today, "Semua"]);
       if (res && res.success) {
         setRecentLogs(res.data);
       }
@@ -114,7 +115,7 @@ export default function AbsensiQR() {
 
   useEffect(() => {
     loadLiveLogs();
-  }, [kategori, filterKelas]);
+  }, [kategori]);
 
   // Handle Scan Outcome
   const handleScanSuccess = async (decodedText: string) => {
@@ -250,11 +251,18 @@ export default function AbsensiQR() {
     setTimeout(() => setScanStatus({ type: null, msg: null }), 3000);
   };
 
-  // Filter logs by search query
-  const filteredLogs = recentLogs.filter(log => 
-    log.nama_target.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    log.id_target.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filter logs by search query and class
+  const filteredLogs = recentLogs.filter(log => {
+    const matchesSearch = log.nama_target.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          log.id_target.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    let matchesKelas = true;
+    if (kategori === "Siswa" && filterKelas !== "Semua") {
+      matchesKelas = log.kelas_jurusan ? log.kelas_jurusan.includes(filterKelas) : false;
+    }
+    
+    return matchesSearch && matchesKelas;
+  });
 
   const toggleSelectId = (id: string) => {
     if (selectedIds.includes(id)) {
