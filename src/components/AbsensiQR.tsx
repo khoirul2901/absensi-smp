@@ -36,9 +36,7 @@ export default function AbsensiQR() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterKelas, setFilterKelas] = useState("Semua");
   const filterKelasRef = useRef(filterKelas);
-  useEffect(() => {
-    filterKelasRef.current = filterKelas;
-  }, [filterKelas]);
+  filterKelasRef.current = filterKelas;
   const [classList, setClassList] = useState<string[]>([]);
   
   const [currentUser, setCurrentUser] = useState<any>(null);
