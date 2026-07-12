@@ -28,7 +28,7 @@ body {
 #qr-scanner-frame video {
   max-height: 40vh !important;
   object-fit: cover !important;
-  width: 100% !important;
+  width: 80% !important;
 }
 
 @media print {
