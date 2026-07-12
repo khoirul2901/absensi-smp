@@ -59,7 +59,7 @@ export default function AbsensiQR() {
   // States for Manual Dialog
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualTarget, setManualTarget] = useState<string>(""); // id_siswa or id_guru
-  const [manualStatus, setManualStatus] = useState<string>("Hadir");
+  const [manualStatus, setManualStatus] = useState<string>("Hadir (Auto)");
   const [manualKet, setManualKet] = useState<string>("");
   const [entitiesList, setEntitiesList] = useState<any[]>([]); // To search for manual attendance
   const [searchManualQuery, setSearchManualQuery] = useState("");
@@ -472,12 +472,24 @@ export default function AbsensiQR() {
               <span className="text-xs font-bold text-blue-800">
                 {selectedIds.length} entitas terpilih untuk koreksi manual bulk:
               </span>
-              <div className="flex gap-1.5">
+              <div className="flex gap-1.5 flex-wrap">
                 <button 
-                  onClick={() => handleBulkSubmit("Tepat Waktu")}
+                  onClick={() => handleBulkSubmit("Hadir (Auto)")}
                   className="bg-emerald-600 text-white font-semibold text-xs px-3 py-1.5 rounded-lg hover:bg-emerald-700"
                 >
-                  Hadir Tepat
+                  Hadir (Auto)
+                </button>
+                <button 
+                  onClick={() => handleBulkSubmit("Tepat Waktu")}
+                  className="bg-emerald-100 text-emerald-800 font-semibold text-xs px-3 py-1.5 rounded-lg hover:bg-emerald-200"
+                >
+                  Paksa Tepat
+                </button>
+                <button 
+                  onClick={() => handleBulkSubmit("Terlambat")}
+                  className="bg-orange-100 text-orange-800 font-semibold text-xs px-3 py-1.5 rounded-lg hover:bg-orange-200"
+                >
+                  Paksa Telat
                 </button>
                 <button 
                   onClick={() => handleBulkSubmit("Sakit")}
@@ -639,8 +651,9 @@ export default function AbsensiQR() {
                   onChange={(e) => setManualStatus(e.target.value)}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none"
                 >
-                  <option value="Tepat Waktu">Hadir Tepat Waktu</option>
-                  <option value="Terlambat">Hadir Terlambat</option>
+                  <option value="Hadir (Auto)">Hadir (Otomatis Sesuai Jadwal)</option>
+                  <option value="Tepat Waktu">Hadir Tepat Waktu (Paksa)</option>
+                  <option value="Terlambat">Hadir Terlambat (Paksa)</option>
                   <option value="Sakit">Sakit</option>
                   <option value="Izin">Izin</option>
                   <option value="Alfa">Alfa (Tanpa Keterangan)</option>
