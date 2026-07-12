@@ -17,7 +17,8 @@ import {
   X,
   Lock,
   User,
-  ExternalLink
+  ExternalLink,
+  Calendar
 } from "lucide-react";
 import { callGas, isUsingMock, getGasUrl } from "./lib/gasApi";
 import { User as UserType } from "./types";
@@ -28,8 +29,9 @@ import AbsensiQR from "./components/AbsensiQR";
 import DataMaster from "./components/DataMaster";
 import Laporan from "./components/Laporan";
 import Settings from "./components/Settings";
+import JadwalGuru from "./components/JadwalGuru";
 
-type TabType = "dashboard" | "absensi" | "data_master" | "laporan" | "settings";
+type TabType = "dashboard" | "absensi" | "data_master" | "jadwal_guru" | "laporan" | "settings";
 
 export default function App() {
   const [session, setSession] = useState<UserType | null>(null);
@@ -110,9 +112,13 @@ export default function App() {
       case "data_master":
         if (isGuru) return <Dashboard />;
         return <DataMaster />;
+      case "jadwal_guru":
+        if (isGuru) return <Dashboard />;
+        return <JadwalGuru />;
       case "laporan":
         return <Laporan />;
       case "settings":
+        if (session?.role === "TU") return <Dashboard />;
         return <Settings />;
       default:
         return <Dashboard />;
@@ -123,6 +129,7 @@ export default function App() {
     { id: "dashboard" as TabType, label: "Dashboard", icon: LayoutDashboard, color: "text-blue-500 hover:bg-blue-50/50" },
     { id: "absensi" as TabType, label: "Absensi QR", icon: ScanQrCode, color: "text-emerald-500 hover:bg-emerald-50/50" },
     { id: "data_master" as TabType, label: "Data Master", icon: Database, color: "text-indigo-500 hover:bg-indigo-50/50" },
+    { id: "jadwal_guru" as TabType, label: "Jadwal Guru", icon: Calendar, color: "text-amber-500 hover:bg-amber-50/50" },
     { id: "laporan" as TabType, label: "Laporan & Rekap", icon: FilePieChart, color: "text-purple-500 hover:bg-purple-50/50" },
     { id: "settings" as TabType, label: "Pengaturan", icon: SettingsIcon, color: "text-slate-500 hover:bg-slate-50/50" },
   ];
@@ -130,6 +137,9 @@ export default function App() {
   const navItems = allNavItems.filter((item) => {
     if (isGuru) {
       return item.id === "dashboard" || item.id === "absensi" || item.id === "laporan" || item.id === "settings";
+    }
+    if (session?.role === "TU") {
+      return item.id !== "settings";
     }
     return true;
   }).map((item) => {
@@ -157,7 +167,7 @@ export default function App() {
             <div className="w-14 h-14 bg-blue-600/10 border border-blue-500/20 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-3">
               <GraduationCap className="w-7 h-7" />
             </div>
-            <h1 className="text-xl font-extrabold text-white tracking-tight">SIAS SMP AL-HIKAM</h1>
+            <h1 className="text-xl font-extrabold text-white tracking-tight">SIAS SMK AL-HIKAM</h1>
             <p className="text-xs text-slate-400">Sistem Informasi Absensi Sekolah Modern</p>
           </div>
 
@@ -258,8 +268,8 @@ export default function App() {
               <GraduationCap className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-extrabold text-white tracking-tight uppercase leading-none">SMP Al-Hikam</h2>
-              <span className="text-[10px] text-slate-500 font-semibold tracking-wider uppercase">Portal Al-Hikam v2.0</span>
+              <h2 className="text-sm font-extrabold text-white tracking-tight uppercase leading-none">SMK Al-Hikam</h2>
+              <span className="text-[10px] text-slate-500 font-semibold tracking-wider uppercase">SIAS PANEL v2.0</span>
             </div>
           </div>
 
@@ -314,7 +324,7 @@ export default function App() {
         <header className="bg-slate-950 text-slate-400 p-4 border-b border-slate-800 flex justify-between items-center relative z-20">
           <div className="flex items-center gap-2.5">
             <GraduationCap className="w-6 h-6 text-blue-500" />
-            <h2 className="text-xs font-black text-white uppercase tracking-wider">SMP AL-HIKAM SIAS</h2>
+            <h2 className="text-xs font-black text-white uppercase tracking-wider">SMK AL-HIKAM SIAS</h2>
           </div>
           <button 
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -334,7 +344,7 @@ export default function App() {
                     <GraduationCap className="w-4.5 h-4.5" />
                   </div>
                   <div>
-                    <h2 className="text-xs font-extrabold text-white uppercase tracking-tight">SMP AL-HIKAM</h2>
+                    <h2 className="text-xs font-extrabold text-white uppercase tracking-tight">SMK AL-HIKAM</h2>
                   </div>
                 </div>
 
@@ -406,7 +416,7 @@ export default function App() {
           <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold">
             <span>Sistem Informasi Absensi Sekolah</span>
             <span>&bull;</span>
-            <span className="text-slate-600">SMP AL-HIKAM SENDANG MULYO</span>
+            <span className="text-slate-600">SMK AL-HIKAM KREJENGAN PROBOLINGGO</span>
           </div>
 
           <div className="flex items-center gap-4">
