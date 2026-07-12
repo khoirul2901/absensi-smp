@@ -35,6 +35,10 @@ export default function AbsensiQR() {
   const [recentLogs, setRecentLogs] = useState<LiveAbsen[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterKelas, setFilterKelas] = useState("Semua");
+  const filterKelasRef = useRef(filterKelas);
+  useEffect(() => {
+    filterKelasRef.current = filterKelas;
+  }, [filterKelas]);
   const [classList, setClassList] = useState<string[]>([]);
   
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -101,7 +105,7 @@ export default function AbsensiQR() {
   const loadLiveLogs = async () => {
     try {
       const today = new Date().toISOString().split("T")[0];
-      const res = await callGas("getLiveAbsenHariIni", [kategori, today, filterKelas]);
+      const res = await callGas("getLiveAbsenHariIni", [kategori, today, filterKelasRef.current]);
       if (res && res.success) {
         setRecentLogs(res.data);
       }
