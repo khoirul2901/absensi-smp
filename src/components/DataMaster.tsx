@@ -25,13 +25,14 @@ import { Siswa, Guru } from "../types";
 import { IdCard } from "./IdCard";
 
 export default function DataMaster() {
-  const [kategori, setKategori] = useState<"Siswa" | "Guru">("Siswa");
+  const [kategori, setKategori] = useState<"Siswa" | "Guru" | "User">("Siswa");
   const [dataList, setDataList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedKelas, setSelectedKelas] = useState("Semua");
   const [classList, setClassList] = useState<string[]>([]);
+  const [session, setSession] = useState<any>(null);
 
   // Modals state
   const [showFormModal, setShowFormModal] = useState(false);
@@ -45,6 +46,16 @@ export default function DataMaster() {
   // Excel paste import state
   const [pasteData, setPasteData] = useState("");
   const [importStatus, setImportStatus] = useState<string | null>(null);
+
+  // Load session info
+  useEffect(() => {
+    const saved = localStorage.getItem("SIAS_SESSION");
+    if (saved) {
+      try {
+        setSession(JSON.parse(saved));
+      } catch (e) {}
+    }
+  }, []);
 
   // Load Classes list
   useEffect(() => {
@@ -62,11 +73,20 @@ export default function DataMaster() {
     try {
       setLoading(true);
       setError(null);
-      const res = await callGas("getDataMaster", [kategori]);
-      if (res && res.success) {
-        setDataList(res.data);
+      if (kategori === "User") {
+        const res = await callGas("getUsersSemua");
+        if (res && res.success) {
+          setDataList(res.data);
+        } else {
+          setError(res?.message || "Gagal memuat data user");
+        }
       } else {
-        setError(res?.message || "Gagal memuat data master");
+        const res = await callGas("getDataMaster", [kategori]);
+        if (res && res.success) {
+          setDataList(res.data);
+        } else {
+          setError(res?.message || "Gagal memuat data master");
+        }
       }
     } catch (err: any) {
       setError(err.toString());
@@ -85,12 +105,20 @@ export default function DataMaster() {
     try {
       setLoading(true);
       let res;
-      if (editId) {
-        // Edit record
-        res = await callGas("editDataMaster", [kategori, editId, formData]);
+      if (kategori === "User") {
+        if (editId) {
+          res = await callGas("editUserData", [editId, formData]);
+        } else {
+          res = await callGas("tambahUserData", [formData]);
+        }
       } else {
-        // Add new record
-        res = await callGas("tambahDataMaster", [kategori, formData]);
+        if (editId) {
+          // Edit record
+          res = await callGas("editDataMaster", [kategori, editId, formData]);
+        } else {
+          // Add new record
+          res = await callGas("tambahDataMaster", [kategori, formData]);
+        }
       }
 
       if (res && res.success) {
@@ -99,7 +127,7 @@ export default function DataMaster() {
         setEditId(null);
         fetchData();
       } else {
-        alert(res?.message || "Gagal menyimpan data master");
+        alert(res?.message || "Gagal menyimpan data");
       }
     } catch (err: any) {
       alert("Error: " + err.toString());
@@ -113,7 +141,12 @@ export default function DataMaster() {
     if (!confirm(`Apakah Anda yakin ingin menghapus permanen data: ${name} (${id})?`)) return;
     try {
       setLoading(true);
-      const res = await callGas("hapusDataMaster", [kategori, id]);
+      let res;
+      if (kategori === "User") {
+        res = await callGas("hapusUserData", [id]);
+      } else {
+        res = await callGas("hapusDataMaster", [kategori, id]);
+      }
       if (res && res.success) {
         fetchData();
       } else {
@@ -128,7 +161,7 @@ export default function DataMaster() {
 
   // Open Form for editing
   const openEdit = (item: any) => {
-    setEditId(kategori === "Siswa" ? item.id_siswa : item.id_guru);
+    setEditId(kategori === "Siswa" ? item.id_siswa : (kategori === "Guru" ? item.id_guru : item.username));
     setFormData(item);
     setShowFormModal(true);
   };
@@ -136,21 +169,32 @@ export default function DataMaster() {
   // Open Form for creating
   const openAdd = () => {
     setEditId(null);
-    setFormData(kategori === "Siswa" ? {
-      nisn: "",
-      nama_siswa: "",
-      jenis_kelamin: "Laki-laki",
-      kelas: classList[0] || "XI",
-      jurusan: "RPL 1",
-      no_hp_ortu: ""
-    } : {
-      nip_nuptk: "",
-      nama_guru: "",
-      jenis_kelamin: "Laki-laki",
-      jabatan_tugas: "Guru Mapel",
-      no_hp: "",
-      password: "guru123"
-    });
+    if (kategori === "Siswa") {
+      setFormData({
+        nisn: "",
+        nama_siswa: "",
+        jenis_kelamin: "Laki-laki",
+        kelas: classList[0] || "XI",
+        jurusan: "RPL 1",
+        no_hp_ortu: ""
+      });
+    } else if (kategori === "Guru") {
+      setFormData({
+        nip_nuptk: "",
+        nama_guru: "",
+        jenis_kelamin: "Laki-laki",
+        jabatan_tugas: "Guru Mapel",
+        no_hp: "",
+        password: "guru123"
+      });
+    } else {
+      setFormData({
+        username: "",
+        password: "user123",
+        role: "TU",
+        target_id: "-"
+      });
+    }
     setShowFormModal(true);
   };
 
@@ -253,8 +297,8 @@ export default function DataMaster() {
 
   // Filter lists based on search & class
   const filteredData = dataList.filter(item => {
-    const name = (item.nama_siswa || item.nama_guru || "").toLowerCase();
-    const id = (item.id_siswa || item.id_guru || "").toLowerCase();
+    const name = (item.nama_siswa || item.nama_guru || item.username || "").toLowerCase();
+    const id = (item.id_siswa || item.id_guru || item.username || "").toLowerCase();
     const matchesSearch = name.includes(searchQuery.toLowerCase()) || id.includes(searchQuery.toLowerCase());
     
     if (kategori === "Siswa" && selectedKelas !== "Semua") {
@@ -288,6 +332,13 @@ export default function DataMaster() {
             >
               <Users className="w-4 h-4" />
               Guru
+            </button>
+            <button 
+              onClick={() => setKategori("User")}
+              className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all duration-150 ${kategori === "User" ? "bg-white text-amber-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+            >
+              <Users className="w-4 h-4 text-amber-500" />
+              Akun User
             </button>
           </div>
 
@@ -367,18 +418,66 @@ export default function DataMaster() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-gray-50/70 border-b border-gray-100 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="py-3.5 px-6">ID</th>
-                  <th className="py-3.5 px-6">{kategori === "Siswa" ? "NISN" : "NIP / NUPTK"}</th>
-                  <th className="py-3.5 px-6">Nama</th>
-                  <th className="py-3.5 px-6">JK</th>
-                  <th className="py-3.5 px-6">{kategori === "Siswa" ? "Kelas & Jurusan" : "Jabatan"}</th>
-                  <th className="py-3.5 px-6">{kategori === "Siswa" ? "HP Wali" : "No HP"}</th>
-                  {kategori === "Guru" && <th className="py-3.5 px-6">Password</th>}
+                  {kategori === "User" ? (
+                    <>
+                      <th className="py-3.5 px-6">Username</th>
+                      <th className="py-3.5 px-6">Password</th>
+                      <th className="py-3.5 px-6">Hak Akses (Role)</th>
+                      <th className="py-3.5 px-6">Target ID Guru</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="py-3.5 px-6">ID</th>
+                      <th className="py-3.5 px-6">{kategori === "Siswa" ? "NISN" : "NIP / NUPTK"}</th>
+                      <th className="py-3.5 px-6">Nama</th>
+                      <th className="py-3.5 px-6">JK</th>
+                      <th className="py-3.5 px-6">{kategori === "Siswa" ? "Kelas & Jurusan" : "Jabatan"}</th>
+                      <th className="py-3.5 px-6">{kategori === "Siswa" ? "HP Wali" : "No HP"}</th>
+                      {kategori === "Guru" && <th className="py-3.5 px-6">Password</th>}
+                    </>
+                  )}
                   <th className="py-3.5 px-6 text-center">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 text-xs text-gray-700">
                 {filteredData.map((item) => {
+                  if (kategori === "User") {
+                    return (
+                      <tr key={item.username} className="hover:bg-slate-50/80 transition-all duration-150">
+                        <td className="py-3.5 px-6 font-bold text-gray-900">{item.username}</td>
+                        <td className="py-3.5 px-6 font-mono text-gray-500">{item.password}</td>
+                        <td className="py-3.5 px-6">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            item.role === "Admin" ? "bg-red-50 text-red-800 border border-red-100" :
+                            item.role === "TU" ? "bg-amber-50 text-amber-800 border border-amber-100" :
+                            "bg-blue-50 text-blue-800 border border-blue-100"
+                          }`}>
+                            {item.role}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-6 font-mono font-bold text-gray-500">{item.target_id || "-"}</td>
+                        <td className="py-3.5 px-6 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button 
+                              onClick={() => openEdit(item)}
+                              className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-all duration-150"
+                              title="Edit User"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => handleDelete(item.username, item.username)}
+                              className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-all duration-150"
+                              title="Hapus User"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+
                   const id = kategori === "Siswa" ? item.id_siswa : item.id_guru;
                   const primaryId = kategori === "Siswa" ? item.nisn : item.nip_nuptk;
                   const name = kategori === "Siswa" ? item.nama_siswa : item.nama_guru;
@@ -516,7 +615,7 @@ export default function DataMaster() {
                     </div>
                   </div>
                 </>
-              ) : (
+              ) : kategori === "Guru" ? (
                 <>
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-gray-500">NIP / NUPTK</label>
@@ -586,6 +685,57 @@ export default function DataMaster() {
                       placeholder="Sandi login guru (default: guru123)"
                     />
                   </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-gray-500">Username</label>
+                    <input 
+                      type="text"
+                      required
+                      disabled={!!editId}
+                      value={formData.username || ""}
+                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold"
+                      placeholder="Masukkan username login"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-gray-500">Password</label>
+                    <input 
+                      type="text"
+                      required
+                      value={formData.password || ""}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-mono font-bold"
+                      placeholder="Masukkan password"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-gray-500">Hak Akses (Role)</label>
+                    <select 
+                      value={formData.role || "TU"}
+                      onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold"
+                    >
+                      <option value="Admin">Admin</option>
+                      <option value="TU">Akses TU (Tata Usaha)</option>
+                      <option value="Guru">Guru</option>
+                    </select>
+                  </div>
+                  {formData.role === "Guru" && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-gray-500">Hubungkan ID Guru (Target ID)</label>
+                      <input 
+                        type="text"
+                        required
+                        value={formData.target_id || ""}
+                        onChange={(e) => setFormData({ ...formData, target_id: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800"
+                        placeholder="Masukkan ID Guru (misal G-001)"
+                      />
+                    </div>
+                  )}
                 </>
               )}
 
