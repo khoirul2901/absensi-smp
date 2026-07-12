@@ -8,24 +8,21 @@ export const GAS_URL_STORAGE_KEY = "SIAS_GAS_URL";
 export const GAS_TOKEN_STORAGE_KEY = "SIAS_GAS_TOKEN";
 
 export function getGasUrl(): string {
-  const saved = localStorage.getItem(GAS_URL_STORAGE_KEY);
-  if (saved) return saved.trim();
-  return ((import.meta as any).env?.VITE_GAS_URL as string) || "";
+  // Ganti placeholder di bawah dengan Web App URL Google Apps Script Anda
+  return "https://script.google.com/macros/s/AKfycbxKcc68ujRI-Wi-DLH8Ni6yiCoDZMowf0WVG4U8O8Yn7nldUd40Uvz0DyXwvjRNWdlp/exec"; // CONTOH - Ganti dengan URL asli
 }
 
 export function setGasUrl(url: string): void {
-  localStorage.setItem(GAS_URL_STORAGE_KEY, url.trim());
+  // Nonaktif: pengaturan sekarang di-hardcode di getGasUrl()
 }
 
 export function getGasToken(): string {
-  const saved = localStorage.getItem(GAS_TOKEN_STORAGE_KEY);
-  if (saved) return saved.trim();
-  // Default fallback token to match the default spreadsheet setting
-  return ((import.meta as any).env?.VITE_GAS_TOKEN as string) || "sias_token_smkalhikam";
+  // Ganti nilai di bawah dengan Token Anda, default "sias_token_smkalhikam"
+  return "sias_token_smpalhikam";
 }
 
 export function setGasToken(token: string): void {
-  localStorage.setItem(GAS_TOKEN_STORAGE_KEY, token.trim());
+  // Nonaktif: pengaturan sekarang di-hardcode di getGasToken()
 }
 
 export function isUsingMock(): boolean {
