@@ -104,7 +104,7 @@ export default function Settings() {
     schoolAddress: localStorage.getItem('cardSchoolAddress') || 'Sendang Mulyo, Kec. Sendang Agung, Kab. Lampung Tengah, Lampung',
     principalName: localStorage.getItem('cardPrincipalName') || 'Khoirul Malik, S.Kom.',
     signatureUrl: localStorage.getItem('cardSignatureUrl') || '',
-    logoLeftUrl: localStorage.getItem('cardLogoLeftUrl') || 'https://khoirul2901.github.io/absensi-smp/src/LOGO SMP AL-HIKAM.png',
+    logoLeftUrl: localStorage.getItem('cardLogoLeftUrl') || '',
     logoRightUrl: localStorage.getItem('cardLogoRightUrl') || ''
   });
 
