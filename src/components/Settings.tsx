@@ -21,7 +21,7 @@ import {
   CreditCard,
   Image as ImageIcon
 } from "lucide-react";
-import { callGas, getGasUrl, setGasUrl, getGasToken, setGasToken, isUsingMock } from "../lib/gasApi";
+import { callGas, getGasUrl } from "../lib/gasApi";
 import { ConfigJam, HariLibur } from "../types";
 
 export default function Settings() {
@@ -78,11 +78,6 @@ export default function Settings() {
     }
   };
 
-  const [gasUrl, setGasUrlState] = useState("");
-  const [gasToken, setGasTokenState] = useState("");
-  const [connectionStatus, setConnectionStatus] = useState<"connected" | "disconnected" | "testing" | null>(null);
-  const [connectionMsg, setConnectionMsg] = useState<string | null>(null);
-
   // Operational Hours
   const [configJam, setConfigJam] = useState<ConfigJam>({
     jam_masuk_mulai: "06:00",
@@ -134,22 +129,13 @@ export default function Settings() {
     try {
       setLoading(true);
       const url = getGasUrl();
-      setGasUrlState(url);
-      const token = getGasToken();
-      setGasTokenState(token);
       
       if (url) {
-        setConnectionStatus("testing");
         const testRes = await callGas("getPengaturanSemua");
         if (testRes && testRes.success !== false) {
-          setConnectionStatus("connected");
           setConfigJam(testRes);
-        } else {
-          setConnectionStatus("disconnected");
-          setConnectionMsg(testRes?.message || "Gagal menghubungi API Google Apps Script");
         }
       } else {
-        setConnectionStatus(null);
         // Load mock configs
         const mockCfg = await callGas("getPengaturanSemua");
         setConfigJam(mockCfg);
@@ -168,8 +154,6 @@ export default function Settings() {
       }
     } catch (e: any) {
       console.error(e);
-      setConnectionStatus("disconnected");
-      setConnectionMsg(e.toString());
     } finally {
       setLoading(false);
     }
@@ -178,38 +162,6 @@ export default function Settings() {
   useEffect(() => {
     loadConfig();
   }, []);
-
-  // Save GAS URL setting
-  const handleSaveUrl = async () => {
-    try {
-      setConnectionStatus("testing");
-      setConnectionMsg(null);
-      setGasUrl(gasUrl);
-      setGasToken(gasToken);
-      
-      if (!gasUrl.trim()) {
-        setConnectionStatus(null);
-        loadConfig();
-        return;
-      }
-
-      // Test connection
-      const testRes = await callGas("getPengaturanSemua");
-      if (testRes && testRes.success !== false) {
-        setConnectionStatus("connected");
-        alert("Sukses! Koneksi ke Google Apps Script berhasil terjalin.");
-        loadConfig();
-      } else {
-        setConnectionStatus("disconnected");
-        setConnectionMsg(testRes?.message || "Koneksi gagal. Periksa kembali URL Web App GAS Anda.");
-        alert("Gagal mengkoneksikan URL Apps Script: " + (testRes?.message || "Silakan cek kembali URL atau izin akses Apps Script Anda."));
-      }
-    } catch (err: any) {
-      setConnectionStatus("disconnected");
-      setConnectionMsg(err.toString());
-      alert("Error: " + err.toString());
-    }
-  };
 
   // Save Hours Config
   const handleSaveHours = async (e: FormEvent) => {
@@ -443,101 +395,7 @@ export default function Settings() {
         <p className="text-xs text-gray-500">Kelola operasional sekolah, sinkronisasi Google Apps Script, hari libur, dan data kelas</p>
       </div>
 
-      {/* SINKRONISASI API GOOGLE APPS SCRIPT */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
-        <div className="flex items-center gap-2 border-b border-gray-50 pb-3">
-          <Link2 className="w-5 h-5 text-blue-600" />
-          <h3 className="font-bold text-gray-800 text-sm">Integrasi Google Apps Script (SaaS Gateway)</h3>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex justify-between items-center">
-            <label className="text-xs font-bold text-gray-600">Web App URL</label>
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-              connectionStatus === "connected" ? "bg-emerald-50 text-emerald-700 border border-emerald-200 animate-pulse" :
-              connectionStatus === "disconnected" ? "bg-rose-50 text-rose-700 border border-rose-200" :
-              connectionStatus === "testing" ? "bg-amber-50 text-amber-700 border border-amber-200" :
-              "bg-gray-50 text-gray-500 border border-gray-200"
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${
-                connectionStatus === "connected" ? "bg-emerald-500" :
-                connectionStatus === "disconnected" ? "bg-rose-500" :
-                connectionStatus === "testing" ? "bg-amber-500 animate-ping" :
-                "bg-gray-400"
-              }`}></span>
-              {connectionStatus === "connected" ? "ONLINE • REAL-TIME DB" :
-               connectionStatus === "disconnected" ? "KONEKSI ERROR" :
-               connectionStatus === "testing" ? "MENGETES KONEKSI..." :
-               "MODE SIMULASI OFFLINE"}
-            </span>
-          </div>
-
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <input 
-                type="text"
-                placeholder="https://script.google.com/macros/s/.../exec"
-                value={gasUrl}
-                onChange={(e) => setGasUrlState(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs text-gray-800 font-mono focus:outline-none focus:border-blue-500"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <label className="text-xs font-bold text-gray-600">Token Keamanan API (Security Token)</label>
-              </div>
-              <input 
-                type="text"
-                placeholder="Masukkan token keamanan (default: sias_token_smkalhikam)"
-                value={gasToken}
-                onChange={(e) => setGasTokenState(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs text-gray-800 font-mono focus:outline-none focus:border-blue-500"
-              />
-              <p className="text-[10px] text-gray-400 font-semibold leading-relaxed">
-                Token ini harus sesuai dengan baris/nilai <strong>api_token</strong> di spreadsheet atau Script Properties Anda agar data aman dari akses luar tak dikenal.
-              </p>
-            </div>
-
-            <button 
-              onClick={handleSaveUrl}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 rounded-xl transition-all duration-150 shadow-sm flex items-center justify-center gap-1.5"
-            >
-              <Save className="w-4 h-4" />
-              Simpan & Tes Koneksi
-            </button>
-          </div>
-
-          {connectionStatus === "disconnected" && connectionMsg && (
-            <div className="bg-rose-50 border border-rose-100 text-rose-800 p-3 rounded-xl text-[11px] leading-relaxed">
-              <strong>Error Log:</strong> {connectionMsg}
-            </div>
-          )}
-
-          {(isUsingMock() || connectionStatus === "disconnected") && (
-            <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl text-xs space-y-2">
-              <div className="flex gap-2 font-bold">
-                <HelpCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <span>Panduan Penting Penyelesaian Error Koneksi (Failed to fetch):</span>
-              </div>
-              <ol className="list-decimal pl-4 space-y-1.5 text-[11px] leading-relaxed opacity-90">
-                <li>
-                  <strong>Ubah Siapa yang Mengakses (Who has access):</strong> Di Google Apps Script Anda, klik tombol biru <strong>Terapkan (Deploy)</strong> &gt; <strong>Kelola penerapan (Manage deployments)</strong>. Klik ikon Edit (pensil) pada deployment aktif Anda. Ubah bagian <strong>Siapa yang memiliki akses (Who has access)</strong> dari "Hanya saya" menjadi <strong>"Siapa saja" (Anyone)</strong>. Ini adalah penyebab paling sering dari error <code>TypeError: Failed to fetch</code>!
-                </li>
-                <li>
-                  <strong>Gunakan URL yang benar:</strong> Pastikan URL yang dimasukkan berakhiran dengan <code>/exec</code>, bukan <code>/edit</code>. Contoh format: <code>https://script.google.com/macros/s/.../exec</code>
-                </li>
-                <li>
-                  <strong>Terapkan Ulang Aplikasi Web:</strong> Setiap kali Anda mengubah kode Google Apps Script di Google Sheets, Anda wajib melakukan <strong>Deploy Ulang (New deployment)</strong> dengan memilih opsi Versi Baru (New version) agar perubahan kodenya aktif di URL Web App Anda.
-                </li>
-                <li>
-                  <strong>Butuh Kembali ke Offline?</strong> Jika Anda ingin mencoba aplikasi dengan cepat tanpa database Google Sheets, cukup kosongkan kotak isian Web App URL di atas, lalu klik <strong>Simpan & Tes</strong> untuk kembali ke Mode Simulasi Offline.
-                </li>
-              </ol>
-            </div>
-          )}
-        </div>
-      </div>
+      {/* SINKRONISASI API GOOGLE APPS SCRIPT DIHAPUS (HARDCODED DI KODE) */}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         
