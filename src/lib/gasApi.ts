@@ -731,6 +731,112 @@ function callMock(action: string, args: any[]): any {
       };
     }
 
+    case "getUsersSemua": {
+      return { success: true, data: getStorage("users") };
+    }
+
+    case "tambahUserData": {
+      const [userObj] = args;
+      const users = getStorage("users");
+      if (users.some((u: any) => u.username.toLowerCase() === userObj.username.toLowerCase())) {
+        return { success: false, message: "Username sudah terdaftar!" };
+      }
+      users.push({
+        username: userObj.username,
+        password: userObj.password || "123456",
+        role: userObj.role || "TU",
+        target_id: userObj.target_id || "-"
+      });
+      setStorage("users", users);
+      return { success: true, message: "Berhasil menambahkan akun user baru (SIMULASI)." };
+    }
+
+    case "editUserData": {
+      const [oldUsername, userObj] = args;
+      const users = getStorage("users");
+      const idx = users.findIndex((u: any) => u.username.toLowerCase() === oldUsername.toLowerCase());
+      if (idx !== -1) {
+        users[idx] = {
+          username: userObj.username,
+          password: userObj.password,
+          role: userObj.role,
+          target_id: userObj.target_id || "-"
+        };
+        setStorage("users", users);
+        return { success: true, message: "Berhasil memperbarui data user (SIMULASI)." };
+      }
+      return { success: false, message: "User tidak ditemukan." };
+    }
+
+    case "hapusUserData": {
+      const [username] = args;
+      let users = getStorage("users");
+      if (username.toLowerCase() === "admin") {
+        return { success: false, message: "Akun admin utama tidak boleh dihapus!" };
+      }
+      users = users.filter((u: any) => u.username.toLowerCase() !== username.toLowerCase());
+      setStorage("users", users);
+      return { success: true, message: "User berhasil dihapus secara permanen (SIMULASI)." };
+    }
+
+    case "getJadwalGuruSemua": {
+      if (!localStorage.getItem("MOCK_jadwal_guru")) {
+        localStorage.setItem("MOCK_jadwal_guru", JSON.stringify([]));
+      }
+      return { success: true, data: getStorage("jadwal_guru") };
+    }
+
+    case "tambahJadwalGuru": {
+      const [jadwalObj] = args;
+      if (!localStorage.getItem("MOCK_jadwal_guru")) {
+        localStorage.setItem("MOCK_jadwal_guru", JSON.stringify([]));
+      }
+      const list = getStorage("jadwal_guru");
+      if (list.some((j: any) => j.id_guru === jadwalObj.id_guru && j.hari === jadwalObj.hari)) {
+        return { success: false, message: `Jadwal untuk guru tersebut di hari ${jadwalObj.hari} sudah ada!` };
+      }
+      const idJadwal = "J-" + Math.floor(Math.random() * 10000);
+      list.push({
+        id_jadwal: idJadwal,
+        id_guru: jadwalObj.id_guru,
+        nama_guru: jadwalObj.nama_guru,
+        hari: jadwalObj.hari,
+        jam_masuk_mulai: jadwalObj.jam_masuk_mulai,
+        jam_masuk_batas: jadwalObj.jam_masuk_batas,
+        jam_pulang_mulai: jadwalObj.jam_pulang_mulai
+      });
+      setStorage("jadwal_guru", list);
+      return { success: true, message: "Jadwal guru berhasil disimpan (SIMULASI)." };
+    }
+
+    case "editJadwalGuru": {
+      const [idJadwal, jadwalObj] = args;
+      const list = getStorage("jadwal_guru");
+      const idx = list.findIndex((j: any) => j.id_jadwal === idJadwal);
+      if (idx !== -1) {
+        list[idx] = {
+          id_jadwal: idJadwal,
+          id_guru: jadwalObj.id_guru,
+          nama_guru: jadwalObj.nama_guru,
+          hari: jadwalObj.hari,
+          jam_masuk_mulai: jadwalObj.jam_masuk_mulai,
+          jam_masuk_batas: jadwalObj.jam_masuk_batas,
+          jam_pulang_mulai: jadwalObj.jam_pulang_mulai
+        };
+        setStorage("jadwal_guru", list);
+        return { success: true, message: "Jadwal guru berhasil diperbarui (SIMULASI)." };
+      }
+      return { success: false, message: "Jadwal tidak ditemukan." };
+    }
+
+    case "hapusJadwalGuru": {
+      const [idJadwal] = args;
+      let list = getStorage("jadwal_guru");
+      list = list.filter((j: any) => j.id_jadwal !== idJadwal);
+      setStorage("jadwal_guru", list);
+      return { success: true, message: "Jadwal guru berhasil dihapus (SIMULASI)." };
+    }
+
     default:
       return { success: false, message: "Action not simulated: " + action };
   }
