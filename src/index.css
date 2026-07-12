@@ -25,6 +25,12 @@ body {
   font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
 }
 
+#qr-scanner-frame video {
+  max-height: 40vh !important;
+  object-fit: cover !important;
+  width: 100% !important;
+}
+
 @media print {
   @page {
     margin: 1cm;
