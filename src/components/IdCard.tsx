@@ -20,9 +20,9 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori }) => {
   const jabatanLabel = isSiswa ? "Jurusan" : "Jabatan";
   const jabatanValue = isSiswa ? (item as Siswa).jurusan : (item as Guru).jabatan_tugas;
 
-  const schoolName = localStorage.getItem('cardSchoolName') || 'SMK AL-HIKAM KREJENGAN';
-  const schoolAddress = localStorage.getItem('cardSchoolAddress') || 'Krejengan Kec. Krejengan Kab. Probolinggo';
-  const principalName = localStorage.getItem('cardPrincipalName') || 'Fulan, S.Pd';
+  const schoolName = localStorage.getItem('cardSchoolName') || 'SMP AL-HIKAM SENDANG MULYO';
+  const schoolAddress = localStorage.getItem('cardSchoolAddress') || 'Sendang Mulyo, Kec. Sendang Agung, Kab. Lampung Tengah';
+  const principalName = localStorage.getItem('cardPrincipalName') || 'Khoirul Malik, S.Kom';
   const signatureUrl = localStorage.getItem('cardSignatureUrl') || '';
   const logoLeftUrl = localStorage.getItem('cardLogoLeftUrl') || '';
   const logoRightUrl = localStorage.getItem('cardLogoRightUrl') || '';
@@ -109,7 +109,7 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori }) => {
           
           {/* Signature Absolute */}
           <div className="absolute bottom-2 right-3 text-center text-[7px] text-slate-300 font-medium z-30">
-            <p>Probolinggo, {today}</p>
+            <p>Sendang Mulyo, {today}</p>
             <div className="mt-0.5 flex justify-center items-center h-[20px]">
               {signatureUrl ? (
                 <img src={signatureUrl} alt="Tanda Tangan" className="h-[20px] object-contain invert brightness-0 opacity-80" referrerPolicy="no-referrer" />
@@ -240,7 +240,7 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori }) => {
 
             {/* Signature Area */}
             <div className="self-end text-center text-[7px] text-gray-800 font-medium mr-2">
-              <p>Probolinggo, {today}</p>
+              <p>Sendang Mulyo, {today}</p>
               <p>Kepala Sekolah</p>
               <div className="mt-1 flex justify-center items-center h-[24px]">
                 {signatureUrl ? (
