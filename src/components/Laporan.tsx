@@ -373,7 +373,7 @@ export default function Laporan() {
 
       {/* PRINT-ONLY HEADERS */}
       <div className="hidden print:block space-y-4 mb-6 border-b-[3px] border-slate-900 pb-4 text-center">
-        <h2 className="text-2xl font-black text-slate-950 uppercase tracking-wide">SMK AL-HIKAM KREJENGAN</h2>
+        <h2 className="text-2xl font-black text-slate-950 uppercase tracking-wide">SMP AL-HIKAM SENDANG MULYO</h2>
         <h3 className="text-lg font-bold text-slate-800 uppercase tracking-normal">LAPORAN REKAP ABSENSI {kategori.toUpperCase()}</h3>
         <p className="text-xs text-slate-500 font-semibold">
           {jenisFilter === "bulan" ? `Periode Bulan: ${bulanMinta}` : `Periode Tanggal: ${tanggalMulai} s.d ${tanggalSelesai}`}
