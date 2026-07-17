@@ -16,7 +16,9 @@ import {
   CheckCircle, 
   AlertTriangle,
   UserCheck,
-  TrendingUp
+  TrendingUp,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { callGas } from "../lib/gasApi";
 import { LaporanRow, RekapPersentase } from "../types";
@@ -58,6 +60,16 @@ export default function Laporan() {
   const [rekapRows, setRekapRows] = useState<RekapPersentase[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Pagination States
+  const [currentPageDetail, setCurrentPageDetail] = useState(1);
+  const [currentPageRekap, setCurrentPageRekap] = useState(1);
+  const itemsPerPage = 10;
+
+  useEffect(() => {
+    setCurrentPageDetail(1);
+    setCurrentPageRekap(1);
+  }, [kategori, viewMode, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta, selectedKelas, searchQuery]);
 
   // Set default current month & dates
   useEffect(() => {
@@ -200,6 +212,15 @@ export default function Laporan() {
     const id = row.id.toLowerCase();
     return name.includes(searchQuery.toLowerCase()) || id.includes(searchQuery.toLowerCase());
   });
+
+  // Paginated data calculations
+  const startIndexDetail = (currentPageDetail - 1) * itemsPerPage;
+  const paginatedDetailLogs = filteredDetailLogs.slice(startIndexDetail, startIndexDetail + itemsPerPage);
+  const totalPagesDetail = Math.ceil(filteredDetailLogs.length / itemsPerPage);
+
+  const startIndexRekap = (currentPageRekap - 1) * itemsPerPage;
+  const paginatedRekapRows = filteredRekapRows.slice(startIndexRekap, startIndexRekap + itemsPerPage);
+  const totalPagesRekap = Math.ceil(filteredRekapRows.length / itemsPerPage);
 
   return (
     <div className="space-y-6 animate-fade-in print:bg-white print:p-0">
@@ -373,7 +394,7 @@ export default function Laporan() {
 
       {/* PRINT-ONLY HEADERS */}
       <div className="hidden print:block space-y-4 mb-6 border-b-[3px] border-slate-900 pb-4 text-center">
-        <h2 className="text-2xl font-black text-slate-950 uppercase tracking-wide">SMP AL-HIKAM SENDANG MULYO</h2>
+        <h2 className="text-2xl font-black text-slate-950 uppercase tracking-wide">SMK AL-HIKAM KREJENGAN</h2>
         <h3 className="text-lg font-bold text-slate-800 uppercase tracking-normal">LAPORAN REKAP ABSENSI {kategori.toUpperCase()}</h3>
         <p className="text-xs text-slate-500 font-semibold">
           {jenisFilter === "bulan" ? `Periode Bulan: ${bulanMinta}` : `Periode Tanggal: ${tanggalMulai} s.d ${tanggalSelesai}`}
@@ -390,128 +411,308 @@ export default function Laporan() {
         ) : (
           viewMode === "detail" ? (
             /* DETAIL LOG VIEW MODE */
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-gray-50/70 border-b border-gray-100 text-[11px] font-semibold text-gray-500 uppercase tracking-wider print:bg-slate-100 print:text-black">
-                    <th className="py-3.5 px-6">Tanggal</th>
-                    <th className="py-3.5 px-6">ID</th>
-                    <th className="py-3.5 px-6">Nama</th>
-                    {kategori === "Siswa" && <th className="py-3.5 px-6">Kelas</th>}
-                    <th className="py-3.5 px-6">Jam Masuk</th>
-                    <th className="py-3.5 px-6">Status Masuk</th>
-                    <th className="py-3.5 px-6">Jam Pulang</th>
-                    <th className="py-3.5 px-6">Status Pulang</th>
-                    <th className="py-3.5 px-6">Keterangan</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50 text-xs text-gray-700 print:divide-slate-300">
-                  {filteredDetailLogs.length === 0 ? (
-                    <tr>
-                      <td colSpan={kategori === "Siswa" ? 9 : 8} className="py-8 text-center text-gray-400 font-medium">
-                        Tidak ada log presensi terekam
-                      </td>
+            <div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50/70 border-b border-gray-100 text-[11px] font-semibold text-gray-500 uppercase tracking-wider print:bg-slate-100 print:text-black">
+                      <th className="py-3.5 px-6">Tanggal</th>
+                      <th className="py-3.5 px-6">ID</th>
+                      <th className="py-3.5 px-6">Nama</th>
+                      {kategori === "Siswa" && <th className="py-3.5 px-6">Kelas</th>}
+                      <th className="py-3.5 px-6">Jam Masuk</th>
+                      <th className="py-3.5 px-6">Status Masuk</th>
+                      <th className="py-3.5 px-6">Jam Pulang</th>
+                      <th className="py-3.5 px-6">Status Pulang</th>
+                      <th className="py-3.5 px-6">Keterangan</th>
                     </tr>
-                  ) : (
-                    filteredDetailLogs.map((row, idx) => {
-                      const id = row.id_siswa || row.id_guru || "-";
-                      const name = row.nama_siswa || row.nama_guru || "-";
-                      const classFull = row.kelas_jurusan || "-";
-                      
-                      return (
-                        <tr key={idx} className="hover:bg-slate-50/50 transition-all duration-150">
-                          <td className="py-3.5 px-6 font-semibold text-gray-500">{row.tanggal}</td>
-                          <td className="py-3.5 px-6 font-mono text-gray-400">{id}</td>
-                          <td className="py-3.5 px-6 font-bold text-gray-900">{name}</td>
-                          {kategori === "Siswa" && <td className="py-3.5 px-6 text-gray-600 font-medium">{classFull}</td>}
-                          <td className="py-3.5 px-6 font-bold">{row.jam_masuk}</td>
-                          <td className="py-3.5 px-6">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              row.status_masuk.includes("Tepat") ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
-                              row.status_masuk.includes("Terlambat") ? "bg-amber-50 text-amber-700 border border-amber-100" :
-                              row.status_masuk.includes("Lupa") ? "bg-indigo-50 text-indigo-700 border border-indigo-100" :
-                              row.status_masuk === "-" ? "text-gray-400" : "bg-rose-50 text-rose-700 border border-rose-100"
-                            }`}>
-                              {row.status_masuk}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-6 font-bold">{row.jam_pulang}</td>
-                          <td className="py-3.5 px-6">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              row.status_pulang.includes("Tepat") ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
-                              row.status_pulang === "-" ? "text-gray-400" : "bg-blue-50 text-blue-700 border border-blue-100"
-                            }`}>
-                              {row.status_pulang}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-6 text-gray-500 font-medium">{row.ket || "-"}</td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 text-xs text-gray-700 print:divide-slate-300">
+                    {filteredDetailLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={kategori === "Siswa" ? 9 : 8} className="py-8 text-center text-gray-400 font-medium">
+                          Tidak ada log presensi terekam
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedDetailLogs.map((row, idx) => {
+                        const id = row.id_siswa || row.id_guru || "-";
+                        const name = row.nama_siswa || row.nama_guru || "-";
+                        const classFull = row.kelas_jurusan || "-";
+                        
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50/50 transition-all duration-150">
+                            <td className="py-3.5 px-6 font-semibold text-gray-500">{row.tanggal}</td>
+                            <td className="py-3.5 px-6 font-mono text-gray-400">{id}</td>
+                            <td className="py-3.5 px-6 font-bold text-gray-900">{name}</td>
+                            {kategori === "Siswa" && <td className="py-3.5 px-6 text-gray-600 font-medium">{classFull}</td>}
+                            <td className="py-3.5 px-6 font-bold">{row.jam_masuk}</td>
+                            <td className="py-3.5 px-6">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                row.status_masuk.includes("Tepat") ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
+                                row.status_masuk.includes("Terlambat") ? "bg-amber-50 text-amber-700 border border-amber-100" :
+                                row.status_masuk.includes("Lupa") ? "bg-indigo-50 text-indigo-700 border border-indigo-100" :
+                                row.status_masuk === "-" ? "text-gray-400" : "bg-rose-50 text-rose-700 border border-rose-100"
+                              }`}>
+                                {row.status_masuk}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-6 font-bold">{row.jam_pulang}</td>
+                            <td className="py-3.5 px-6">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                row.status_pulang.includes("Tepat") ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
+                                row.status_pulang === "-" ? "text-gray-400" : "bg-blue-50 text-blue-700 border border-blue-100"
+                              }`}>
+                                {row.status_pulang}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-6 text-gray-500 font-medium">{row.ket || "-"}</td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Detail Logs Pagination Controls (Hidden on Print) */}
+              {totalPagesDetail > 1 && (
+                <div className="flex items-center justify-between border-t border-gray-100 bg-white px-6 py-4 print:hidden">
+                  <div className="flex flex-1 justify-between sm:hidden">
+                    <button
+                      disabled={currentPageDetail === 1}
+                      onClick={() => setCurrentPageDetail(p => Math.max(p - 1, 1))}
+                      className={`relative inline-flex items-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-700 ${
+                        currentPageDetail === 1 ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      Sebelumnya
+                    </button>
+                    <button
+                      disabled={currentPageDetail === totalPagesDetail}
+                      onClick={() => setCurrentPageDetail(p => Math.min(p + 1, totalPagesDetail))}
+                      className={`relative ml-3 inline-flex items-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-700 ${
+                        currentPageDetail === totalPagesDetail ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      Selanjutnya
+                    </button>
+                  </div>
+                  <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs text-gray-500 font-semibold">
+                        Menampilkan <span className="font-bold text-gray-950">{startIndexDetail + 1}</span> sampai{" "}
+                        <span className="font-bold text-gray-950">
+                          {Math.min(startIndexDetail + itemsPerPage, filteredDetailLogs.length)}
+                        </span>{" "}
+                        dari <span className="font-bold text-gray-950">{filteredDetailLogs.length}</span> data
+                      </p>
+                    </div>
+                    <div>
+                      <nav className="isolate inline-flex -space-x-px rounded-xl gap-1" aria-label="Pagination">
+                        <button
+                          onClick={() => setCurrentPageDetail(p => Math.max(p - 1, 1))}
+                          disabled={currentPageDetail === 1}
+                          className={`relative inline-flex items-center rounded-lg px-2.5 py-1.5 text-gray-400 hover:bg-gray-50 ${
+                            currentPageDetail === 1 ? "opacity-40 cursor-not-allowed" : ""
+                          }`}
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        
+                        {Array.from({ length: totalPagesDetail }, (_, i) => i + 1).map((page) => {
+                          if (
+                            totalPagesDetail > 7 &&
+                            page !== 1 &&
+                            page !== totalPagesDetail &&
+                            Math.abs(page - currentPageDetail) > 1
+                          ) {
+                            if (page === 2 || page === totalPagesDetail - 1) {
+                              return <span key={page} className="relative inline-flex items-center px-2 py-1 text-xs font-semibold text-gray-400">...</span>;
+                            }
+                            return null;
+                          }
+
+                          return (
+                            <button
+                              key={page}
+                              onClick={() => setCurrentPageDetail(page)}
+                              className={`relative inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-bold transition-all duration-150 ${
+                                currentPageDetail === page
+                                  ? "bg-blue-600 text-white shadow-sm shadow-blue-600/10"
+                                  : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          );
+                        })}
+
+                        <button
+                          onClick={() => setCurrentPageDetail(p => Math.min(p + 1, totalPagesDetail))}
+                          disabled={currentPageDetail === totalPagesDetail}
+                          className={`relative inline-flex items-center rounded-lg px-2.5 py-1.5 text-gray-400 hover:bg-gray-50 ${
+                            currentPageDetail === totalPagesDetail ? "opacity-40 cursor-not-allowed" : ""
+                          }`}
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </nav>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             /* REKAP PERCENTAGE VIEW MODE */
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-gray-50/70 border-b border-gray-100 text-[11px] font-semibold text-gray-500 uppercase tracking-wider print:bg-slate-100 print:text-black">
-                    <th className="py-3.5 px-6">ID</th>
-                    <th className="py-3.5 px-6">Nama</th>
-                    <th className="py-3.5 px-6 text-center">Hadir</th>
-                    <th className="py-3.5 px-6 text-center">Sakit</th>
-                    <th className="py-3.5 px-6 text-center">Izin</th>
-                    <th className="py-3.5 px-6 text-center">Alfa</th>
-                    <th className="py-3.5 px-6 text-center">Sandi Masuk</th>
-                    <th className="py-3.5 px-6 text-center">Sandi Pulang</th>
-                    <th className="py-3.5 px-6 text-right">Rasio Hadir</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50 text-xs text-gray-700 print:divide-slate-300">
-                  {filteredRekapRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="py-8 text-center text-gray-400 font-medium">
-                        Tidak ada data rekap persentase terekam
-                      </td>
+            <div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50/70 border-b border-gray-100 text-[11px] font-semibold text-gray-500 uppercase tracking-wider print:bg-slate-100 print:text-black">
+                      <th className="py-3.5 px-6">ID</th>
+                      <th className="py-3.5 px-6">Nama</th>
+                      <th className="py-3.5 px-6 text-center">Hadir</th>
+                      <th className="py-3.5 px-6 text-center">Sakit</th>
+                      <th className="py-3.5 px-6 text-center">Izin</th>
+                      <th className="py-3.5 px-6 text-center">Alfa</th>
+                      <th className="py-3.5 px-6 text-center">Sandi Masuk</th>
+                      <th className="py-3.5 px-6 text-center">Sandi Pulang</th>
+                      <th className="py-3.5 px-6 text-right">Rasio Hadir</th>
                     </tr>
-                  ) : (
-                    filteredRekapRows.map((row) => {
-                      const isHighRisk = parseFloat(row.persentase) < 75;
-                      
-                      return (
-                        <tr key={row.id} className="hover:bg-slate-50/50 transition-all duration-150">
-                          <td className="py-3.5 px-6 font-mono font-bold text-gray-500">{row.id}</td>
-                          <td className="py-3.5 px-6 font-bold text-gray-900">{row.nama}</td>
-                          <td className="py-3.5 px-6 text-center">
-                            <span className="bg-emerald-50 text-emerald-800 font-bold px-2 py-1 rounded-lg border border-emerald-100">{row.hadir}</span>
-                          </td>
-                          <td className="py-3.5 px-6 text-center">
-                            <span className="bg-amber-50 text-amber-800 font-bold px-2 py-1 rounded-lg border border-amber-100">{row.sakit}</span>
-                          </td>
-                          <td className="py-3.5 px-6 text-center">
-                            <span className="bg-indigo-50 text-indigo-800 font-bold px-2 py-1 rounded-lg border border-indigo-100">{row.izin}</span>
-                          </td>
-                          <td className="py-3.5 px-6 text-center">
-                            <span className={`px-2 py-1 rounded-lg font-bold ${row.alfa > 0 ? "bg-rose-50 text-rose-800 border border-rose-100" : "bg-gray-50 text-gray-400"}`}>{row.alfa}</span>
-                          </td>
-                          <td className="py-3.5 px-6 text-center font-mono text-[10px] text-gray-400 max-w-[120px] truncate" title={row.jam_masuk}>{row.jam_masuk}</td>
-                          <td className="py-3.5 px-6 text-center font-mono text-[10px] text-gray-400 max-w-[120px] truncate" title={row.jam_pulang}>{row.jam_pulang}</td>
-                          <td className="py-3.5 px-6 text-right font-extrabold text-sm">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {isHighRisk && <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" title="Kehadiran di bawah 75%!" />}
-                              <span className={isHighRisk ? "text-rose-600" : "text-emerald-600"}>
-                                {row.persentase}
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 text-xs text-gray-700 print:divide-slate-300">
+                    {filteredRekapRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-8 text-center text-gray-400 font-medium">
+                          Tidak ada data rekap persentase terekam
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedRekapRows.map((row) => {
+                        const isHighRisk = parseFloat(row.persentase) < 75;
+                        
+                        return (
+                          <tr key={row.id} className="hover:bg-slate-50/50 transition-all duration-150">
+                            <td className="py-3.5 px-6 font-mono font-bold text-gray-500">{row.id}</td>
+                            <td className="py-3.5 px-6 font-bold text-gray-900">{row.nama}</td>
+                            <td className="py-3.5 px-6 text-center">
+                              <span className="bg-emerald-50 text-emerald-800 font-bold px-2 py-1 rounded-lg border border-emerald-100">{row.hadir}</span>
+                            </td>
+                            <td className="py-3.5 px-6 text-center">
+                              <span className="bg-amber-50 text-amber-800 font-bold px-2 py-1 rounded-lg border border-amber-100">{row.sakit}</span>
+                            </td>
+                            <td className="py-3.5 px-6 text-center">
+                              <span className="bg-indigo-50 text-indigo-800 font-bold px-2 py-1 rounded-lg border border-indigo-100">{row.izin}</span>
+                            </td>
+                            <td className="py-3.5 px-6 text-center">
+                              <span className={`px-2 py-1 rounded-lg font-bold ${row.alfa > 0 ? "bg-rose-50 text-rose-800 border border-rose-100" : "bg-gray-50 text-gray-400"}`}>{row.alfa}</span>
+                            </td>
+                            <td className="py-3.5 px-6 text-center font-mono text-[10px] text-gray-400 max-w-[120px] truncate" title={row.jam_masuk}>{row.jam_masuk}</td>
+                            <td className="py-3.5 px-6 text-center font-mono text-[10px] text-gray-400 max-w-[120px] truncate" title={row.jam_pulang}>{row.jam_pulang}</td>
+                            <td className="py-3.5 px-6 text-right font-extrabold text-sm">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {isHighRisk && <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" title="Kehadiran di bawah 75%!" />}
+                                <span className={isHighRisk ? "text-rose-600" : "text-emerald-600"}>
+                                  {row.persentase}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Rekap Pagination Controls (Hidden on Print) */}
+              {totalPagesRekap > 1 && (
+                <div className="flex items-center justify-between border-t border-gray-100 bg-white px-6 py-4 print:hidden">
+                  <div className="flex flex-1 justify-between sm:hidden">
+                    <button
+                      disabled={currentPageRekap === 1}
+                      onClick={() => setCurrentPageRekap(p => Math.max(p - 1, 1))}
+                      className={`relative inline-flex items-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-700 ${
+                        currentPageRekap === 1 ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      Sebelumnya
+                    </button>
+                    <button
+                      disabled={currentPageRekap === totalPagesRekap}
+                      onClick={() => setCurrentPageRekap(p => Math.min(p + 1, totalPagesRekap))}
+                      className={`relative ml-3 inline-flex items-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-700 ${
+                        currentPageRekap === totalPagesRekap ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      Selanjutnya
+                    </button>
+                  </div>
+                  <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs text-gray-500 font-semibold">
+                        Menampilkan <span className="font-bold text-gray-950">{startIndexRekap + 1}</span> sampai{" "}
+                        <span className="font-bold text-gray-950">
+                          {Math.min(startIndexRekap + itemsPerPage, filteredRekapRows.length)}
+                        </span>{" "}
+                        dari <span className="font-bold text-gray-950">{filteredRekapRows.length}</span> data
+                      </p>
+                    </div>
+                    <div>
+                      <nav className="isolate inline-flex -space-x-px rounded-xl gap-1" aria-label="Pagination">
+                        <button
+                          onClick={() => setCurrentPageRekap(p => Math.max(p - 1, 1))}
+                          disabled={currentPageRekap === 1}
+                          className={`relative inline-flex items-center rounded-lg px-2.5 py-1.5 text-gray-400 hover:bg-gray-50 ${
+                            currentPageRekap === 1 ? "opacity-40 cursor-not-allowed" : ""
+                          }`}
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        
+                        {Array.from({ length: totalPagesRekap }, (_, i) => i + 1).map((page) => {
+                          if (
+                            totalPagesRekap > 7 &&
+                            page !== 1 &&
+                            page !== totalPagesRekap &&
+                            Math.abs(page - currentPageRekap) > 1
+                          ) {
+                            if (page === 2 || page === totalPagesRekap - 1) {
+                              return <span key={page} className="relative inline-flex items-center px-2 py-1 text-xs font-semibold text-gray-400">...</span>;
+                            }
+                            return null;
+                          }
+
+                          return (
+                            <button
+                              key={page}
+                              onClick={() => setCurrentPageRekap(page)}
+                              className={`relative inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-bold transition-all duration-150 ${
+                                currentPageRekap === page
+                                  ? "bg-blue-600 text-white shadow-sm shadow-blue-600/10"
+                                  : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          );
+                        })}
+
+                        <button
+                          onClick={() => setCurrentPageRekap(p => Math.min(p + 1, totalPagesRekap))}
+                          disabled={currentPageRekap === totalPagesRekap}
+                          className={`relative inline-flex items-center rounded-lg px-2.5 py-1.5 text-gray-400 hover:bg-gray-50 ${
+                            currentPageRekap === totalPagesRekap ? "opacity-40 cursor-not-allowed" : ""
+                          }`}
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </nav>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )
         )}
