@@ -242,9 +242,9 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori }) => {
             <div className="self-end text-center text-[7px] text-gray-800 font-medium mr-2">
               <p>Sendang Mulyo, {today}</p>
               <p>Kepala Sekolah</p>
-              <div className="mt-1 flex justify-center items-center h-[30px]">
+              <div className="mt-1 flex justify-center items-center h-[24px]">
                 {signatureUrl ? (
-                  <img src={signatureUrl} alt="Tanda Tangan" className="h-[30px] object-contain" referrerPolicy="no-referrer" />
+                  <img src={signatureUrl} alt="Tanda Tangan" className="h-[40px] object-contain" referrerPolicy="no-referrer" />
                 ) : null}
               </div>
               <div className="border-t border-gray-800 pt-[2px] w-[80px] mx-auto text-[7px] font-bold">
