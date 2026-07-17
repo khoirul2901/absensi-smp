@@ -9,7 +9,7 @@ export const GAS_TOKEN_STORAGE_KEY = "SIAS_GAS_TOKEN";
 
 export function getGasUrl(): string {
   // Ganti placeholder di bawah dengan Web App URL Google Apps Script Anda
-  return "https://script.google.com/macros/s/AKfycbxKcc68ujRI-Wi-DLH8Ni6yiCoDZMowf0WVG4U8O8Yn7nldUd40Uvz0DyXwvjRNWdlp/exec"; // CONTOH - Ganti dengan URL asli
+  return "https://script.google.com/macros/s/AKfycbzQ4b8j2R3mXz0YV4X_O/exec"; // CONTOH - Ganti dengan URL asli
 }
 
 export function setGasUrl(url: string): void {
@@ -18,7 +18,7 @@ export function setGasUrl(url: string): void {
 
 export function getGasToken(): string {
   // Ganti nilai di bawah dengan Token Anda, default "sias_token_smkalhikam"
-  return "sias_token_smpalhikam";
+  return "sias_token_smkalhikam";
 }
 
 export function setGasToken(token: string): void {
@@ -832,6 +832,21 @@ function callMock(action: string, args: any[]): any {
       list = list.filter((j: any) => j.id_jadwal !== idJadwal);
       setStorage("jadwal_guru", list);
       return { success: true, message: "Jadwal guru berhasil dihapus (SIMULASI)." };
+    }
+
+    case "buatStrukturDatabaseOtomatis": {
+      localStorage.removeItem("MOCK_users");
+      localStorage.removeItem("MOCK_data_siswa");
+      localStorage.removeItem("MOCK_data_guru");
+      localStorage.removeItem("MOCK_laporan_siswa");
+      localStorage.removeItem("MOCK_laporan_guru");
+      localStorage.removeItem("MOCK_pengaturan_jam");
+      localStorage.removeItem("MOCK_hari_libur");
+      localStorage.removeItem("MOCK_data_kelas");
+      localStorage.removeItem("MOCK_jadwal_guru");
+      initMockDb();
+      localStorage.setItem("MOCK_jadwal_guru", JSON.stringify([]));
+      return { success: true, message: "Struktur database berhasil dibuat ulang (SIMULASI)!" };
     }
 
     default:
