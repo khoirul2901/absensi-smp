@@ -8,7 +8,9 @@ import {
   Clock, 
   AlertTriangle, 
   Users,
-  ChevronDown
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { callGas } from "../lib/gasApi";
 
@@ -44,6 +46,14 @@ export default function JadwalGuru() {
   // Filter/Search states
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedHariFilter, setSelectedHariFilter] = useState("Semua");
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedHariFilter]);
 
   // Modal states
   const [showFormModal, setShowFormModal] = useState(false);
@@ -184,6 +194,10 @@ export default function JadwalGuru() {
     return matchSearch && matchHari;
   });
 
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedSchedules = filteredSchedules.slice(startIndex, startIndex + itemsPerPage);
+  const totalPages = Math.ceil(filteredSchedules.length / itemsPerPage);
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -243,7 +257,8 @@ export default function JadwalGuru() {
             <p className="text-[11px] text-gray-400">Guru yang tidak terdaftar di sini akan otomatis mengikuti jam operasional default sekolah.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-gray-50/70 border-b border-gray-100 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
@@ -257,7 +272,7 @@ export default function JadwalGuru() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 text-xs text-gray-700">
-                {filteredSchedules.map((item) => (
+                {paginatedSchedules.map((item) => (
                   <tr key={item.id_jadwal} className="hover:bg-amber-50/20 transition-all duration-150">
                     <td className="py-3.5 px-6 font-mono font-bold text-gray-400">{item.id_jadwal}</td>
                     <td className="py-3.5 px-6 font-bold text-gray-900">{item.nama_guru}</td>
@@ -295,6 +310,95 @@ export default function JadwalGuru() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-gray-100 bg-white px-6 py-4">
+              <div className="flex flex-1 justify-between sm:hidden">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                  className={`relative inline-flex items-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-700 ${
+                    currentPage === 1 ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"
+                  }`}
+                >
+                  Sebelumnya
+                </button>
+                <button
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                  className={`relative ml-3 inline-flex items-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-700 ${
+                    currentPage === totalPages ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"
+                  }`}
+                >
+                  Selanjutnya
+                </button>
+              </div>
+              <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs text-gray-500 font-semibold">
+                    Menampilkan <span className="font-bold text-gray-950">{startIndex + 1}</span> sampai{" "}
+                    <span className="font-bold text-gray-950">
+                      {Math.min(startIndex + itemsPerPage, filteredSchedules.length)}
+                    </span>{" "}
+                    dari <span className="font-bold text-gray-950">{filteredSchedules.length}</span> data
+                  </p>
+                </div>
+                <div>
+                  <nav className="isolate inline-flex -space-x-px rounded-xl gap-1" aria-label="Pagination">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                      disabled={currentPage === 1}
+                      className={`relative inline-flex items-center rounded-lg px-2.5 py-1.5 text-gray-400 hover:bg-gray-50 ${
+                        currentPage === 1 ? "opacity-40 cursor-not-allowed" : ""
+                      }`}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                      if (
+                        totalPages > 7 &&
+                        page !== 1 &&
+                        page !== totalPages &&
+                        Math.abs(page - currentPage) > 1
+                      ) {
+                        if (page === 2 || page === totalPages - 1) {
+                          return <span key={page} className="relative inline-flex items-center px-2 py-1 text-xs font-semibold text-gray-400">...</span>;
+                        }
+                        return null;
+                      }
+
+                      return (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          className={`relative inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-bold transition-all duration-150 ${
+                            currentPage === page
+                              ? "bg-amber-600 text-white shadow-sm shadow-amber-600/10"
+                              : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      );
+                    })}
+
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                      disabled={currentPage === totalPages}
+                      className={`relative inline-flex items-center rounded-lg px-2.5 py-1.5 text-gray-400 hover:bg-gray-50 ${
+                        currentPage === totalPages ? "opacity-40 cursor-not-allowed" : ""
+                      }`}
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </nav>
+                </div>
+              </div>
+            </div>
+          )}
+          </>
         )}
       </div>
 
