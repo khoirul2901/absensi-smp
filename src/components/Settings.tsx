@@ -100,9 +100,9 @@ export default function Settings() {
 
   // Card Settings
   const [cardConfig, setCardConfig] = useState({
-    schoolName: localStorage.getItem('cardSchoolName') || 'SMP AL-HIKAM',
-    schoolAddress: localStorage.getItem('cardSchoolAddress') || 'Sendang Mulyo, Kec. Sendang Agung, Kab. Lampung Tengah, Lampung',
-    principalName: localStorage.getItem('cardPrincipalName') || 'Khoirul Malik, S.Kom.',
+    schoolName: localStorage.getItem('cardSchoolName') || 'SMK AL-HIKAM KREJENGAN',
+    schoolAddress: localStorage.getItem('cardSchoolAddress') || 'Krejengan Kec. Krejengan Kab. Probolinggo',
+    principalName: localStorage.getItem('cardPrincipalName') || 'Fulan, S.Pd',
     signatureUrl: localStorage.getItem('cardSignatureUrl') || '',
     logoLeftUrl: localStorage.getItem('cardLogoLeftUrl') || '',
     logoRightUrl: localStorage.getItem('cardLogoRightUrl') || ''
@@ -113,15 +113,38 @@ export default function Settings() {
     setCardConfig(prev => ({ ...prev, [name]: value }));
   };
 
+  const getRawGithubUrl = (url: string): string => {
+    if (!url) return "";
+    let cleanUrl = url.trim();
+    if (cleanUrl.includes("github.com") && !cleanUrl.includes("raw.githubusercontent.com")) {
+      cleanUrl = cleanUrl
+        .replace("github.com", "raw.githubusercontent.com")
+        .replace("/blob/", "/")
+        .replace("/raw/", "/");
+    }
+    return cleanUrl;
+  };
+
   const handleSaveCardConfig = (e: any) => {
     e.preventDefault();
+    const cleanSignature = getRawGithubUrl(cardConfig.signatureUrl);
+    const cleanLogoLeft = getRawGithubUrl(cardConfig.logoLeftUrl);
+    const cleanLogoRight = getRawGithubUrl(cardConfig.logoRightUrl);
+
+    setCardConfig(prev => ({
+      ...prev,
+      signatureUrl: cleanSignature,
+      logoLeftUrl: cleanLogoLeft,
+      logoRightUrl: cleanLogoRight
+    }));
+
     localStorage.setItem('cardSchoolName', cardConfig.schoolName);
     localStorage.setItem('cardSchoolAddress', cardConfig.schoolAddress);
     localStorage.setItem('cardPrincipalName', cardConfig.principalName);
-    localStorage.setItem('cardSignatureUrl', cardConfig.signatureUrl);
-    localStorage.setItem('cardLogoLeftUrl', cardConfig.logoLeftUrl);
-    localStorage.setItem('cardLogoRightUrl', cardConfig.logoRightUrl);
-    alert('Pengaturan kartu berhasil disimpan!');
+    localStorage.setItem('cardSignatureUrl', cleanSignature);
+    localStorage.setItem('cardLogoLeftUrl', cleanLogoLeft);
+    localStorage.setItem('cardLogoRightUrl', cleanLogoRight);
+    alert('Pengaturan kartu berhasil disimpan! Jika Anda memasukkan link GitHub, sistem telah mengonversinya secara otomatis ke direct link (raw.githubusercontent.com) agar gambar muncul.');
   };
 
   // Load config & data
@@ -541,6 +564,19 @@ export default function Settings() {
           <CreditCard className="w-5 h-5 text-fuchsia-500" />
           <h3 className="font-bold text-gray-800 text-sm">Pengaturan Desain Kartu</h3>
         </div>
+
+        {/* Info Tip GitHub URL */}
+        <div className="p-3.5 bg-blue-50/60 border border-blue-100 rounded-xl text-xs text-blue-800 space-y-1">
+          <p className="font-bold flex items-center gap-1.5">
+            <Link2 className="w-4 h-4 shrink-0" />
+            Tips Memasukkan Logo dari GitHub:
+          </p>
+          <p className="font-medium text-[11px] leading-relaxed">
+            Link GitHub standar (seperti <code className="bg-blue-100/80 px-1 py-0.5 rounded text-blue-900 font-mono">github.com/.../blob/main/logo.png</code>) adalah halaman viewer web dan <strong>tidak bisa langsung dibaca</strong> sebagai elemen gambar oleh browser. 
+            <strong>Kabar baik:</strong> Masukkan saja link GitHub tersebut seperti biasa, sistem kami akan <strong>secara otomatis mendeteksi dan mengonversinya</strong> ke direct link (raw) saat disimpan agar logo langsung muncul sempurna!
+          </p>
+        </div>
+
         <form onSubmit={handleSaveCardConfig} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1">
             <label className="text-xs font-bold text-gray-500">Nama Sekolah</label>
