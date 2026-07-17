@@ -35,6 +35,11 @@ export default function JadwalGuru() {
   const [teachers, setTeachers] = useState<TeacherItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [globalSettings, setGlobalSettings] = useState({
+    jam_masuk_mulai: "06:00",
+    jam_masuk_batas: "07:15",
+    jam_pulang_mulai: "15:30"
+  });
 
   // Filter/Search states
   const [searchQuery, setSearchQuery] = useState("");
@@ -68,6 +73,16 @@ export default function JadwalGuru() {
       if (resTeachers && resTeachers.success) {
         setTeachers(resTeachers.data || []);
       }
+
+      // 3. Fetch global operating hour settings
+      const resConfig = await callGas("getPengaturanSemua");
+      if (resConfig && resConfig.success !== false) {
+        setGlobalSettings({
+          jam_masuk_mulai: resConfig.jam_masuk_mulai || "06:00",
+          jam_masuk_batas: resConfig.jam_masuk_batas || "07:15",
+          jam_pulang_mulai: resConfig.jam_pulang_mulai || "15:30"
+        });
+      }
     } catch (err: any) {
       setError("Kesalahan koneksi: " + err.toString());
     } finally {
@@ -84,9 +99,9 @@ export default function JadwalGuru() {
     setFormData({
       id_guru: teachers[0]?.id_guru || "",
       hari: "Senin",
-      jam_masuk_mulai: "06:00",
-      jam_masuk_batas: "07:15",
-      jam_pulang_mulai: "15:30"
+      jam_masuk_mulai: globalSettings.jam_masuk_mulai,
+      jam_masuk_batas: globalSettings.jam_masuk_batas,
+      jam_pulang_mulai: globalSettings.jam_pulang_mulai
     });
     setShowFormModal(true);
   };
@@ -337,6 +352,28 @@ export default function JadwalGuru() {
                   </select>
                   <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-3.5 pointer-events-none" />
                 </div>
+              </div>
+
+              {/* Reset to global settings button */}
+              <div className="flex justify-between items-center bg-amber-50/50 border border-amber-100 rounded-xl px-3.5 py-2 animate-fade-in">
+                <span className="text-[10px] text-amber-800 font-bold flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-amber-500" />
+                  Gunakan jam operasional default sekolah?
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormData({
+                      ...formData,
+                      jam_masuk_mulai: globalSettings.jam_masuk_mulai,
+                      jam_masuk_batas: globalSettings.jam_masuk_batas,
+                      jam_pulang_mulai: globalSettings.jam_pulang_mulai
+                    });
+                  }}
+                  className="text-amber-700 hover:text-amber-800 font-extrabold text-[10px] bg-white border border-amber-200 px-2.5 py-1 rounded-lg hover:bg-amber-50 transition-all duration-150 shadow-sm"
+                >
+                  Set Otomatis
+                </button>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
