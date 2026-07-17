@@ -18,7 +18,7 @@ export function setGasUrl(url: string): void {
 
 export function getGasToken(): string {
   // Ganti nilai di bawah dengan Token Anda, default "sias_token_smkalhikam"
-  return "sias_token_smkalhikam";
+  return "sias_token_smpalhikam";
 }
 
 export function setGasToken(token: string): void {
