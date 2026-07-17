@@ -247,7 +247,7 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori }) => {
                   <img src={signatureUrl} alt="Tanda Tangan" className="h-[24px] object-contain" referrerPolicy="no-referrer" />
                 ) : null}
               </div>
-              <div className="border-t border-gray-800 pt-[2px] w-[80px] mx-auto text-[7px] font-bold">
+              <div className="border-t border-gray-800 pt-[9px] w-[80px] mx-auto text-[7px] font-bold">
                 {principalName}
               </div>
             </div>
