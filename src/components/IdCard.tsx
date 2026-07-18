@@ -1,6 +1,7 @@
 import React from 'react';
 import { Siswa, Guru } from '../types';
 import { GraduationCap, BookOpen, Briefcase } from 'lucide-react';
+import { getStorageKey } from '../lib/gasApi';
 
 interface IdCardProps {
   item: Siswa | Guru;
@@ -20,12 +21,12 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori }) => {
   const jabatanLabel = isSiswa ? "Jurusan" : "Jabatan";
   const jabatanValue = isSiswa ? (item as Siswa).jurusan : (item as Guru).jabatan_tugas;
 
-  const schoolName = localStorage.getItem('cardSchoolName') || 'SMP AL-HIKAM SENDANG MULYO';
-  const schoolAddress = localStorage.getItem('cardSchoolAddress') || 'Sendang Mulyo, Kec. Sendang Agung, Kab. Lampung Tengah';
-  const principalName = localStorage.getItem('cardPrincipalName') || 'Khoirul Malik, S.Kom';
-  const signatureUrl = localStorage.getItem('cardSignatureUrl') || '';
-  const logoLeftUrl = localStorage.getItem('cardLogoLeftUrl') || '';
-  const logoRightUrl = localStorage.getItem('cardLogoRightUrl') || '';
+  const schoolName = localStorage.getItem(getStorageKey('cardSchoolName')) || 'SMP AL-HIKAM';
+  const schoolAddress = localStorage.getItem(getStorageKey('cardSchoolAddress')) || 'Sendang Mulyo, Sendang Agung, Lampung Tengah';
+  const principalName = localStorage.getItem(getStorageKey('cardPrincipalName')) || 'Khoirul Malik, S.Kom';
+  const signatureUrl = localStorage.getItem(getStorageKey('cardSignatureUrl')) || '';
+  const logoLeftUrl = localStorage.getItem(getStorageKey('cardLogoLeftUrl')) || '';
+  const logoRightUrl = localStorage.getItem(getStorageKey('cardLogoRightUrl')) || '';
 
   const today = new Date().toLocaleDateString('id-ID', {
     day: 'numeric',
@@ -109,10 +110,10 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori }) => {
           
           {/* Signature Absolute */}
           <div className="absolute bottom-2 right-3 text-center text-[7px] text-slate-300 font-medium z-30">
-            <p>Sendang Mulyo, {today}</p>
-            <div className="mt-0.5 flex justify-center items-center h-[24px]">
+            <p>Probolinggo, {today}</p>
+            <div className="mt-0.5 flex justify-center items-center h-[20px]">
               {signatureUrl ? (
-                <img src={signatureUrl} alt="Tanda Tangan" className="h-[50px] object-contain invert brightness-0 opacity-80" referrerPolicy="no-referrer" />
+                <img src={signatureUrl} alt="Tanda Tangan" className="h-[20px] object-contain invert brightness-0 opacity-80" referrerPolicy="no-referrer" />
               ) : null}
             </div>
             <div className="border-t border-slate-500 pt-[2px] w-[80px] mx-auto text-[7px] font-bold mt-1 text-slate-200">
@@ -240,11 +241,11 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori }) => {
 
             {/* Signature Area */}
             <div className="self-end text-center text-[7px] text-gray-800 font-medium mr-2">
-              <p>Sendang Mulyo, {today}</p>
+              <p>Probolinggo, {today}</p>
               <p>Kepala Sekolah</p>
               <div className="mt-1 flex justify-center items-center h-[24px]">
                 {signatureUrl ? (
-                  <img src={signatureUrl} alt="Tanda Tangan" className="h-[50px] object-contain" referrerPolicy="no-referrer" />
+                  <img src={signatureUrl} alt="Tanda Tangan" className="h-[24px] object-contain" referrerPolicy="no-referrer" />
                 ) : null}
               </div>
               <div className="border-t border-gray-800 pt-[2px] w-[80px] mx-auto text-[7px] font-bold">
