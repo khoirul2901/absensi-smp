@@ -102,7 +102,7 @@ export default function Settings() {
   const [cardConfig, setCardConfig] = useState(() => ({
     schoolName: localStorage.getItem(getStorageKey('cardSchoolName')) || 'SMP AL-HIKAM',
     schoolAddress: localStorage.getItem(getStorageKey('cardSchoolAddress')) || 'Sendang Mulyo, Sendang Agung, Lampung Tengah',
-    principalName: localStorage.getItem(getStorageKey('cardPrincipalName')) || 'Khoirul Malik, S.Kom.',
+    principalName: localStorage.getItem(getStorageKey('cardPrincipalName')) || 'Khoirul Malik, S.Kom',
     signatureUrl: localStorage.getItem(getStorageKey('cardSignatureUrl')) || '',
     logoLeftUrl: localStorage.getItem(getStorageKey('cardLogoLeftUrl')) || '',
     logoRightUrl: localStorage.getItem(getStorageKey('cardLogoRightUrl')) || ''
@@ -125,11 +125,20 @@ export default function Settings() {
     return cleanUrl;
   };
 
-  const handleSaveCardConfig = (e: any) => {
+  const handleSaveCardConfig = async (e: any) => {
     e.preventDefault();
     const cleanSignature = getRawGithubUrl(cardConfig.signatureUrl);
     const cleanLogoLeft = getRawGithubUrl(cardConfig.logoLeftUrl);
     const cleanLogoRight = getRawGithubUrl(cardConfig.logoRightUrl);
+
+    const updatedConfig = {
+      cardSchoolName: cardConfig.schoolName,
+      cardSchoolAddress: cardConfig.schoolAddress,
+      cardPrincipalName: cardConfig.principalName,
+      cardSignatureUrl: cleanSignature,
+      cardLogoLeftUrl: cleanLogoLeft,
+      cardLogoRightUrl: cleanLogoRight
+    };
 
     setCardConfig(prev => ({
       ...prev,
@@ -138,13 +147,28 @@ export default function Settings() {
       logoRightUrl: cleanLogoRight
     }));
 
+    // Save locally
     localStorage.setItem(getStorageKey('cardSchoolName'), cardConfig.schoolName);
     localStorage.setItem(getStorageKey('cardSchoolAddress'), cardConfig.schoolAddress);
     localStorage.setItem(getStorageKey('cardPrincipalName'), cardConfig.principalName);
     localStorage.setItem(getStorageKey('cardSignatureUrl'), cleanSignature);
     localStorage.setItem(getStorageKey('cardLogoLeftUrl'), cleanLogoLeft);
     localStorage.setItem(getStorageKey('cardLogoRightUrl'), cleanLogoRight);
-    alert('Pengaturan kartu berhasil disimpan! Jika Anda memasukkan link GitHub, sistem telah mengonversinya secara otomatis ke direct link (raw.githubusercontent.com) agar gambar muncul.');
+
+    try {
+      setLoading(true);
+      const res = await callGas("simpanPengaturanCustom", [updatedConfig]);
+      if (res && res.success !== false) {
+        alert('Pengaturan kartu berhasil disimpan dan disinkronkan ke database cloud! Jika Anda memasukkan link GitHub, sistem telah mengonversinya secara otomatis ke direct link (raw.githubusercontent.com) agar gambar muncul.');
+      } else {
+        alert('Pengaturan kartu berhasil disimpan secara lokal, namun gagal disinkronkan ke cloud: ' + (res?.message || 'Error tidak diketahui'));
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('Pengaturan kartu berhasil disimpan secara lokal, namun gagal disinkronkan ke cloud karena masalah jaringan/koneksi.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Load config & data
@@ -153,15 +177,39 @@ export default function Settings() {
       setLoading(true);
       const url = getGasUrl();
       
+      let allConfig: any = null;
       if (url) {
         const testRes = await callGas("getPengaturanSemua");
         if (testRes && testRes.success !== false) {
           setConfigJam(testRes);
+          allConfig = testRes;
         }
       } else {
         // Load mock configs
         const mockCfg = await callGas("getPengaturanSemua");
         setConfigJam(mockCfg);
+        allConfig = mockCfg;
+      }
+
+      // Sync cloud config values to card settings state and localStorage if present
+      if (allConfig) {
+        const updatedCardConfig = {
+          schoolName: allConfig.cardSchoolName || cardConfig.schoolName,
+          schoolAddress: allConfig.cardSchoolAddress || cardConfig.schoolAddress,
+          principalName: allConfig.cardPrincipalName || cardConfig.principalName,
+          signatureUrl: allConfig.cardSignatureUrl || cardConfig.signatureUrl,
+          logoLeftUrl: allConfig.cardLogoLeftUrl || cardConfig.logoLeftUrl,
+          logoRightUrl: allConfig.cardLogoRightUrl || cardConfig.logoRightUrl
+        };
+        
+        setCardConfig(updatedCardConfig);
+
+        localStorage.setItem(getStorageKey('cardSchoolName'), updatedCardConfig.schoolName);
+        localStorage.setItem(getStorageKey('cardSchoolAddress'), updatedCardConfig.schoolAddress);
+        localStorage.setItem(getStorageKey('cardPrincipalName'), updatedCardConfig.principalName);
+        localStorage.setItem(getStorageKey('cardSignatureUrl'), updatedCardConfig.signatureUrl);
+        localStorage.setItem(getStorageKey('cardLogoLeftUrl'), updatedCardConfig.logoLeftUrl);
+        localStorage.setItem(getStorageKey('cardLogoRightUrl'), updatedCardConfig.logoRightUrl);
       }
 
       // Load holidays
