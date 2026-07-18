@@ -23,7 +23,7 @@ import {
   LogOut
 } from "lucide-react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
-import { callGas } from "../lib/gasApi";
+import { callGas, getStorageKey } from "../lib/gasApi";
 import { LiveAbsen, Siswa, Guru } from "../types";
 
 export default function AbsensiQR() {
@@ -42,7 +42,7 @@ export default function AbsensiQR() {
   const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem("SIAS_SESSION");
+    const saved = localStorage.getItem(getStorageKey("SIAS_SESSION"));
     if (saved) {
       try {
         setCurrentUser(JSON.parse(saved));
