@@ -21,6 +21,20 @@ export function getGasToken(): string {
   return "sias_token_smpalhikam";
 }
 
+export function getStorageKey(baseKey: string): string {
+  const url = getGasUrl() || "default_gas_url";
+  const token = getGasToken() || "default_gas_token";
+  const combined = url + "_" + token;
+  let hash = 0;
+  for (let i = 0; i < combined.length; i++) {
+    const char = combined.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  const cleanHash = Math.abs(hash).toString(36);
+  return `${baseKey}_${cleanHash}`;
+}
+
 export function setGasToken(token: string): void {
   // Nonaktif: pengaturan sekarang di-hardcode di getGasToken()
 }
