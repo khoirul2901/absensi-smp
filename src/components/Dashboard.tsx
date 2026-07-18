@@ -23,7 +23,7 @@ import {
   Tooltip, 
   ResponsiveContainer 
 } from "recharts";
-import { callGas } from "../lib/gasApi";
+import { callGas, getStorageKey } from "../lib/gasApi";
 import { DashboardMetrics } from "../types";
 
 export default function Dashboard() {
@@ -33,7 +33,7 @@ export default function Dashboard() {
   const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem("SIAS_SESSION");
+    const saved = localStorage.getItem(getStorageKey("SIAS_SESSION"));
     if (saved) {
       try {
         setCurrentUser(JSON.parse(saved));
