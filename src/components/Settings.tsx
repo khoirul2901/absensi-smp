@@ -21,14 +21,14 @@ import {
   CreditCard,
   Image as ImageIcon
 } from "lucide-react";
-import { callGas, getGasUrl } from "../lib/gasApi";
+import { callGas, getGasUrl, getStorageKey } from "../lib/gasApi";
 import { ConfigJam, HariLibur } from "../types";
 
 export default function Settings() {
   const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem("SIAS_SESSION");
+    const saved = localStorage.getItem(getStorageKey("SIAS_SESSION"));
     if (saved) {
       try {
         setCurrentUser(JSON.parse(saved));
@@ -99,14 +99,14 @@ export default function Settings() {
   const [loading, setLoading] = useState(false);
 
   // Card Settings
-  const [cardConfig, setCardConfig] = useState({
-    schoolName: localStorage.getItem('cardSchoolName') || 'SMK AL-HIKAM KREJENGAN',
-    schoolAddress: localStorage.getItem('cardSchoolAddress') || 'Krejengan Kec. Krejengan Kab. Probolinggo',
-    principalName: localStorage.getItem('cardPrincipalName') || 'Fulan, S.Pd',
-    signatureUrl: localStorage.getItem('cardSignatureUrl') || '',
-    logoLeftUrl: localStorage.getItem('cardLogoLeftUrl') || '',
-    logoRightUrl: localStorage.getItem('cardLogoRightUrl') || ''
-  });
+  const [cardConfig, setCardConfig] = useState(() => ({
+    schoolName: localStorage.getItem(getStorageKey('cardSchoolName')) || 'SMP AL-HIKAM',
+    schoolAddress: localStorage.getItem(getStorageKey('cardSchoolAddress')) || 'Sendang Mulyo, Sendang Agung, Lampung Tengah',
+    principalName: localStorage.getItem(getStorageKey('cardPrincipalName')) || 'Khoirul Malik, S.Kom.',
+    signatureUrl: localStorage.getItem(getStorageKey('cardSignatureUrl')) || '',
+    logoLeftUrl: localStorage.getItem(getStorageKey('cardLogoLeftUrl')) || '',
+    logoRightUrl: localStorage.getItem(getStorageKey('cardLogoRightUrl')) || ''
+  }));
 
   const handleCardConfigChange = (e: any) => {
     const { name, value } = e.target;
@@ -138,12 +138,12 @@ export default function Settings() {
       logoRightUrl: cleanLogoRight
     }));
 
-    localStorage.setItem('cardSchoolName', cardConfig.schoolName);
-    localStorage.setItem('cardSchoolAddress', cardConfig.schoolAddress);
-    localStorage.setItem('cardPrincipalName', cardConfig.principalName);
-    localStorage.setItem('cardSignatureUrl', cleanSignature);
-    localStorage.setItem('cardLogoLeftUrl', cleanLogoLeft);
-    localStorage.setItem('cardLogoRightUrl', cleanLogoRight);
+    localStorage.setItem(getStorageKey('cardSchoolName'), cardConfig.schoolName);
+    localStorage.setItem(getStorageKey('cardSchoolAddress'), cardConfig.schoolAddress);
+    localStorage.setItem(getStorageKey('cardPrincipalName'), cardConfig.principalName);
+    localStorage.setItem(getStorageKey('cardSignatureUrl'), cleanSignature);
+    localStorage.setItem(getStorageKey('cardLogoLeftUrl'), cleanLogoLeft);
+    localStorage.setItem(getStorageKey('cardLogoRightUrl'), cleanLogoRight);
     alert('Pengaturan kartu berhasil disimpan! Jika Anda memasukkan link GitHub, sistem telah mengonversinya secara otomatis ke direct link (raw.githubusercontent.com) agar gambar muncul.');
   };
 
