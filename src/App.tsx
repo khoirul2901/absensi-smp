@@ -416,7 +416,7 @@ export default function App() {
           <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold">
             <span>Sistem Informasi Absensi Sekolah</span>
             <span>&bull;</span>
-            <span className="text-slate-600">SMK AL-HIKAM SENDANG MULYO</span>
+            <span className="text-slate-600">SMP AL-HIKAM SENDANG MULYO</span>
           </div>
 
           <div className="flex items-center gap-4">
