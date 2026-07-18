@@ -20,7 +20,7 @@ import {
   ExternalLink,
   Calendar
 } from "lucide-react";
-import { callGas, isUsingMock, getGasUrl } from "./lib/gasApi";
+import { callGas, isUsingMock, getGasUrl, getStorageKey } from "./lib/gasApi";
 import { User as UserType } from "./types";
 
 // Component imports
@@ -57,12 +57,12 @@ export default function App() {
 
   // Check saved session
   useEffect(() => {
-    const saved = localStorage.getItem("SIAS_SESSION");
+    const saved = localStorage.getItem(getStorageKey("SIAS_SESSION"));
     if (saved) {
       try {
         setSession(JSON.parse(saved));
       } catch (e) {
-        localStorage.removeItem("SIAS_SESSION");
+        localStorage.removeItem(getStorageKey("SIAS_SESSION"));
       }
     }
   }, []);
@@ -81,7 +81,7 @@ export default function App() {
           target_id: res.target_id || "-"
         };
         setSession(userSession);
-        localStorage.setItem("SIAS_SESSION", JSON.stringify(userSession));
+        localStorage.setItem(getStorageKey("SIAS_SESSION"), JSON.stringify(userSession));
       } else {
         setLoginError(res?.message || "Username atau password salah!");
       }
@@ -95,7 +95,7 @@ export default function App() {
   const handleLogout = () => {
     if (confirm("Apakah Anda yakin ingin keluar dari sistem?")) {
       setSession(null);
-      localStorage.removeItem("SIAS_SESSION");
+      localStorage.removeItem(getStorageKey("SIAS_SESSION"));
       setActiveTab("dashboard");
     }
   };
@@ -324,7 +324,7 @@ export default function App() {
         <header className="bg-slate-950 text-slate-400 p-4 border-b border-slate-800 flex justify-between items-center relative z-20">
           <div className="flex items-center gap-2.5">
             <GraduationCap className="w-6 h-6 text-blue-500" />
-            <h2 className="text-xs font-black text-white uppercase tracking-wider">SMP AL-HIKAM</h2>
+            <h2 className="text-xs font-black text-white uppercase tracking-wider">SMP AL-HIKAM SIAS</h2>
           </div>
           <button 
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -416,7 +416,7 @@ export default function App() {
           <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold">
             <span>Sistem Informasi Absensi Sekolah</span>
             <span>&bull;</span>
-            <span className="text-slate-600">SMP AL-HIKAM SENDANG MULYO</span>
+            <span className="text-slate-600">SMP AL-HIKAM</span>
           </div>
 
           <div className="flex items-center gap-4">
