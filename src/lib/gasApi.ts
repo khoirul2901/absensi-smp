@@ -40,49 +40,52 @@ export function setGasToken(token: string): void {
 }
 
 export function isUsingMock(): boolean {
-  return !getGasUrl();
+  const url = getGasUrl();
+  return !url || url.includes("AKfycbzQ4b8j2R3mXz0YV4X_O");
 }
 
 // Ensure mock database exists in localStorage
 function initMockDb() {
-  if (!localStorage.getItem("MOCK_users")) {
-    localStorage.setItem("MOCK_users", JSON.stringify([
+  const getKey = (k: string) => getStorageKey("MOCK_" + k);
+
+  if (!localStorage.getItem(getKey("users"))) {
+    localStorage.setItem(getKey("users"), JSON.stringify([
       { username: "admin", password: "admin123", role: "Admin", target_id: "-" }
     ]));
   }
-  if (!localStorage.getItem("MOCK_data_siswa")) {
-    localStorage.setItem("MOCK_data_siswa", JSON.stringify([
+  if (!localStorage.getItem(getKey("data_siswa"))) {
+    localStorage.setItem(getKey("data_siswa"), JSON.stringify([
       { id_siswa: "S-001", nisn: "0081234567", nama_siswa: "Ahmad Dani", jenis_kelamin: "Laki-laki", kelas: "XI", jurusan: "RPL 1", no_hp_ortu: "08571234567", qr_content: "QR-S-001" },
       { id_siswa: "S-002", nisn: "0098765432", nama_siswa: "Siti Aminah", jenis_kelamin: "Perempuan", kelas: "XI", jurusan: "RPL 1", no_hp_ortu: "08129876543", qr_content: "QR-S-002" },
       { id_siswa: "S-003", nisn: "0076543210", nama_siswa: "Rizky Pratama", jenis_kelamin: "Laki-laki", kelas: "X", jurusan: "RPL 2", no_hp_ortu: "08132435465", qr_content: "QR-S-003" }
     ]));
   }
-  if (!localStorage.getItem("MOCK_data_guru")) {
-    localStorage.setItem("MOCK_data_guru", JSON.stringify([
+  if (!localStorage.getItem(getKey("data_guru"))) {
+    localStorage.setItem(getKey("data_guru"), JSON.stringify([
       { id_guru: "G-001", nip_nuptk: "198706122015031002", nama_guru: "Bahrul Ulum, S.Kom", jenis_kelamin: "Laki-laki", jabatan_tugas: "Ka. Komli RPL", no_hp: "08123456789", qr_content: "QR-G-001" },
       { id_guru: "G-002", nip_nuptk: "199201042019082001", nama_guru: "Eka Rahmawati, S.Pd", jenis_kelamin: "Perempuan", jabatan_tugas: "Waka Kurikulum", no_hp: "08198765432", qr_content: "QR-G-002" }
     ]));
   }
-  if (!localStorage.getItem("MOCK_laporan_siswa")) {
-    localStorage.setItem("MOCK_laporan_siswa", JSON.stringify([]));
+  if (!localStorage.getItem(getKey("laporan_siswa"))) {
+    localStorage.setItem(getKey("laporan_siswa"), JSON.stringify([]));
   }
-  if (!localStorage.getItem("MOCK_laporan_guru")) {
-    localStorage.setItem("MOCK_laporan_guru", JSON.stringify([]));
+  if (!localStorage.getItem(getKey("laporan_guru"))) {
+    localStorage.setItem(getKey("laporan_guru"), JSON.stringify([]));
   }
-  if (!localStorage.getItem("MOCK_pengaturan_jam")) {
-    localStorage.setItem("MOCK_pengaturan_jam", JSON.stringify({
+  if (!localStorage.getItem(getKey("pengaturan_jam"))) {
+    localStorage.setItem(getKey("pengaturan_jam"), JSON.stringify({
       jam_masuk_mulai: "06:00",
       jam_masuk_batas: "07:15",
       jam_pulang_mulai: "15:30"
     }));
   }
-  if (!localStorage.getItem("MOCK_hari_libur")) {
-    localStorage.setItem("MOCK_hari_libur", JSON.stringify([
+  if (!localStorage.getItem(getKey("hari_libur"))) {
+    localStorage.setItem(getKey("hari_libur"), JSON.stringify([
       { tanggal: "2026-08-17", keterangan: "Hari Kemerdekaan RI" }
     ]));
   }
-  if (!localStorage.getItem("MOCK_data_kelas")) {
-    localStorage.setItem("MOCK_data_kelas", JSON.stringify(["X RPL 1", "X RPL 2", "XI RPL 1", "XI RPL 2", "XII RPL 1"]));
+  if (!localStorage.getItem(getKey("data_kelas"))) {
+    localStorage.setItem(getKey("data_kelas"), JSON.stringify(["X RPL 1", "X RPL 2", "XI RPL 1", "XI RPL 2", "XII RPL 1"]));
   }
 }
 
@@ -90,8 +93,8 @@ function initMockDb() {
 function callMock(action: string, args: any[]): any {
   initMockDb();
   
-  const getStorage = (key: string) => JSON.parse(localStorage.getItem("MOCK_" + key) || "[]");
-  const setStorage = (key: string, val: any) => localStorage.setItem("MOCK_" + key, JSON.stringify(val));
+  const getStorage = (key: string) => JSON.parse(localStorage.getItem(getStorageKey("MOCK_" + key)) || "[]");
+  const setStorage = (key: string, val: any) => localStorage.setItem(getStorageKey("MOCK_" + key), JSON.stringify(val));
 
   switch (action) {
     case "verifikasiLogin": {
@@ -171,13 +174,13 @@ function callMock(action: string, args: any[]): any {
     }
 
     case "getPengaturanSemua": {
-      return JSON.parse(localStorage.getItem("MOCK_pengaturan_jam") || "{}");
+      return JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
     }
 
     case "simpanKonfigurasiJam": {
       const [jamMasukMulai, jamMasukBatas, jamPulangMulai] = args;
       const cfg = { jam_masuk_mulai: jamMasukMulai, jam_masuk_batas: jamMasukBatas, jam_pulang_mulai: jamPulangMulai };
-      localStorage.setItem("MOCK_pengaturan_jam", JSON.stringify(cfg));
+      localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify(cfg));
       return { success: true, message: "Pengaturan Jam Operasional disimpan (SIMULASI)." };
     }
 
@@ -380,7 +383,7 @@ function callMock(action: string, args: any[]): any {
       
       // Check for duplicate
       const index = reports.findIndex((r: any) => r.tanggal === tgl && (r.id_siswa === idTarget || r.id_guru === idTarget));
-      const cfg = JSON.parse(localStorage.getItem("MOCK_pengaturan_jam") || "{}");
+      const cfg = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
       
       if (mode === "Masuk") {
         if (index !== -1 && reports[index].jam_masuk !== "-") {
@@ -849,17 +852,17 @@ function callMock(action: string, args: any[]): any {
     }
 
     case "buatStrukturDatabaseOtomatis": {
-      localStorage.removeItem("MOCK_users");
-      localStorage.removeItem("MOCK_data_siswa");
-      localStorage.removeItem("MOCK_data_guru");
-      localStorage.removeItem("MOCK_laporan_siswa");
-      localStorage.removeItem("MOCK_laporan_guru");
-      localStorage.removeItem("MOCK_pengaturan_jam");
-      localStorage.removeItem("MOCK_hari_libur");
-      localStorage.removeItem("MOCK_data_kelas");
-      localStorage.removeItem("MOCK_jadwal_guru");
+      localStorage.removeItem(getStorageKey("MOCK_users"));
+      localStorage.removeItem(getStorageKey("MOCK_data_siswa"));
+      localStorage.removeItem(getStorageKey("MOCK_data_guru"));
+      localStorage.removeItem(getStorageKey("MOCK_laporan_siswa"));
+      localStorage.removeItem(getStorageKey("MOCK_laporan_guru"));
+      localStorage.removeItem(getStorageKey("MOCK_pengaturan_jam"));
+      localStorage.removeItem(getStorageKey("MOCK_hari_libur"));
+      localStorage.removeItem(getStorageKey("MOCK_data_kelas"));
+      localStorage.removeItem(getStorageKey("MOCK_jadwal_guru"));
       initMockDb();
-      localStorage.setItem("MOCK_jadwal_guru", JSON.stringify([]));
+      localStorage.setItem(getStorageKey("MOCK_jadwal_guru"), JSON.stringify([]));
       return { success: true, message: "Struktur database berhasil dibuat ulang (SIMULASI)!" };
     }
 
