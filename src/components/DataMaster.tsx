@@ -22,7 +22,7 @@ import {
   ChevronLeft,
   ChevronRight
 } from "lucide-react";
-import { callGas } from "../lib/gasApi";
+import { callGas, getStorageKey } from "../lib/gasApi";
 import { Siswa, Guru } from "../types";
 import { IdCard } from "./IdCard";
 
@@ -59,7 +59,7 @@ export default function DataMaster() {
 
   // Load session info
   useEffect(() => {
-    const saved = localStorage.getItem("SIAS_SESSION");
+    const saved = localStorage.getItem(getStorageKey("SIAS_SESSION"));
     if (saved) {
       try {
         setSession(JSON.parse(saved));
