@@ -111,9 +111,9 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori }) => {
           {/* Signature Absolute */}
           <div className="absolute bottom-2 right-3 text-center text-[7px] text-slate-300 font-medium z-30">
             <p>Probolinggo, {today}</p>
-            <div className="mt-0.5 flex justify-center items-center h-[20px]">
+            <div className="mt-0.5 flex justify-center items-center h-[24px]">
               {signatureUrl ? (
-                <img src={signatureUrl} alt="Tanda Tangan" className="h-[20px] object-contain invert brightness-0 opacity-80" referrerPolicy="no-referrer" />
+                <img src={signatureUrl} alt="Tanda Tangan" className="h-[50px] object-contain invert brightness-0 opacity-80" referrerPolicy="no-referrer" />
               ) : null}
             </div>
             <div className="border-t border-slate-500 pt-[2px] w-[80px] mx-auto text-[7px] font-bold mt-1 text-slate-200">
@@ -245,7 +245,7 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori }) => {
               <p>Kepala Sekolah</p>
               <div className="mt-1 flex justify-center items-center h-[24px]">
                 {signatureUrl ? (
-                  <img src={signatureUrl} alt="Tanda Tangan" className="h-[24px] object-contain" referrerPolicy="no-referrer" />
+                  <img src={signatureUrl} alt="Tanda Tangan" className="h-[50px] object-contain" referrerPolicy="no-referrer" />
                 ) : null}
               </div>
               <div className="border-t border-gray-800 pt-[2px] w-[80px] mx-auto text-[7px] font-bold">
