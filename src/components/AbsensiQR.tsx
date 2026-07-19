@@ -20,7 +20,9 @@ import {
   Check,
   CheckSquare,
   Square,
-  LogOut
+  LogOut,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { callGas, getStorageKey } from "../lib/gasApi";
@@ -38,6 +40,9 @@ export default function AbsensiQR() {
   const filterKelasRef = useRef(filterKelas);
   filterKelasRef.current = filterKelas;
   const [classList, setClassList] = useState<string[]>([]);
+  
+  const [itemsPerPage, setItemsPerPage] = useState<number>(10);
+  const [currentPage, setCurrentPage] = useState<number>(1);
   
   const [currentUser, setCurrentUser] = useState<any>(null);
 
@@ -251,6 +256,11 @@ export default function AbsensiQR() {
     setTimeout(() => setScanStatus({ type: null, msg: null }), 3000);
   };
 
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterKelas, kategori]);
+
   // Filter logs by search query and class
   const filteredLogs = recentLogs.filter(log => {
     const matchesSearch = log.nama_target.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -263,6 +273,12 @@ export default function AbsensiQR() {
     
     return matchesSearch && matchesKelas;
   });
+
+  const totalPages = itemsPerPage === Infinity ? 1 : Math.ceil(filteredLogs.length / itemsPerPage);
+  const safeCurrentPage = Math.min(currentPage, totalPages || 1);
+  const startIndex = itemsPerPage === Infinity ? 0 : (safeCurrentPage - 1) * itemsPerPage;
+  const endIndex = itemsPerPage === Infinity ? filteredLogs.length : startIndex + itemsPerPage;
+  const paginatedLogs = filteredLogs.slice(startIndex, endIndex);
 
   const toggleSelectId = (id: string) => {
     if (selectedIds.includes(id)) {
@@ -551,7 +567,7 @@ export default function AbsensiQR() {
                     </td>
                   </tr>
                 ) : (
-                  filteredLogs.map((log) => {
+                  paginatedLogs.map((log) => {
                     const isSelected = selectedIds.includes(log.id_target);
                     
                     return (
@@ -603,6 +619,89 @@ export default function AbsensiQR() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {filteredLogs.length > 0 && (
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-gray-100 text-xs text-gray-500 font-medium">
+              <div className="flex items-center gap-2">
+                <span>Tampilkan:</span>
+                <select
+                  value={itemsPerPage === Infinity ? "all" : itemsPerPage}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setItemsPerPage(val === "all" ? Infinity : Number(val));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-gray-50 border border-gray-200 rounded-lg py-1 px-2.5 text-xs font-bold text-gray-700 focus:outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value="all">Semua</option>
+                </select>
+                <span className="text-gray-400">|</span>
+                <span>
+                  Menampilkan <span className="font-semibold text-gray-700">{Math.min(startIndex + 1, filteredLogs.length)}</span> -{" "}
+                  <span className="font-semibold text-gray-700">{Math.min(endIndex, filteredLogs.length)}</span> dari{" "}
+                  <span className="font-semibold text-gray-700">{filteredLogs.length}</span> data
+                </span>
+              </div>
+
+              {itemsPerPage !== Infinity && totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={safeCurrentPage === 1}
+                    className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 disabled:opacity-40 disabled:hover:bg-white disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    title="Sebelumnya"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  
+                  {Array.from({ length: totalPages }).map((_, i) => {
+                    const pageNum = i + 1;
+                    // Only show first, last, current, and adjacent pages if there are too many pages
+                    if (
+                      totalPages > 6 &&
+                      pageNum !== 1 &&
+                      pageNum !== totalPages &&
+                      Math.abs(pageNum - safeCurrentPage) > 1
+                    ) {
+                      if (pageNum === 2 && safeCurrentPage > 3) {
+                        return <span key={pageNum} className="px-1 text-gray-400">...</span>;
+                      }
+                      if (pageNum === totalPages - 1 && safeCurrentPage < totalPages - 2) {
+                        return <span key={pageNum} className="px-1 text-gray-400">...</span>;
+                      }
+                      return null;
+                    }
+
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`w-7 h-7 rounded-lg font-bold flex items-center justify-center transition-all cursor-pointer ${
+                          safeCurrentPage === pageNum
+                            ? "bg-blue-600 text-white shadow-sm shadow-blue-200"
+                            : "hover:bg-gray-100 text-gray-600"
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={safeCurrentPage === totalPages}
+                    className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 disabled:opacity-40 disabled:hover:bg-white disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    title="Selanjutnya"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
