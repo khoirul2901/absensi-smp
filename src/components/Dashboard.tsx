@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { 
   Users, 
   GraduationCap, 
@@ -15,7 +15,8 @@ import {
   CalendarDays,
   Printer,
   Download,
-  CreditCard
+  CreditCard,
+  Loader2
 } from "lucide-react";
 import { 
   AreaChart, 
@@ -26,6 +27,7 @@ import {
   Tooltip, 
   ResponsiveContainer 
 } from "recharts";
+import { toPng } from "html-to-image";
 import { callGas, getStorageKey } from "../lib/gasApi";
 import { DashboardMetrics } from "../types";
 import { IdCard } from "./IdCard";
@@ -38,6 +40,44 @@ export default function Dashboard() {
 
   const [guruData, setGuruData] = useState<any>(null);
   const [loadingGuru, setLoadingGuru] = useState(false);
+
+  const frontCardRef = useRef<HTMLDivElement>(null);
+  const backCardRef = useRef<HTMLDivElement>(null);
+  const [downloadingFront, setDownloadingFront] = useState(false);
+  const [downloadingBack, setDownloadingBack] = useState(false);
+
+  const downloadCardPng = async (side: "front" | "back") => {
+    const ref = side === "front" ? frontCardRef : backCardRef;
+    if (!ref.current) return;
+    
+    try {
+      if (side === "front") setDownloadingFront(true);
+      else setDownloadingBack(true);
+      
+      // Give browser brief moment to render
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      
+      const dataUrl = await toPng(ref.current, {
+        cacheBust: true,
+        pixelRatio: 3, // Premium high-resolution export
+        style: {
+          transform: 'scale(1)',
+          transformOrigin: 'top left',
+        },
+      });
+      
+      const link = document.createElement("a");
+      link.download = `Kartu_Pegawai_${side === "front" ? "Depan" : "Belakang"}_${(guruData?.nama_guru || "Guru").replace(/\s+/g, "_")}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      console.error("Gagal mengekspor kartu ke PNG:", err);
+      alert("Gagal mengunduh kartu. Silakan coba lagi.");
+    } finally {
+      if (side === "front") setDownloadingFront(false);
+      else setDownloadingBack(false);
+    }
+  };
 
   useEffect(() => {
     const saved = localStorage.getItem(getStorageKey("SIAS_SESSION"));
@@ -344,13 +384,41 @@ export default function Dashboard() {
                   </div>
 
                   <div className="flex flex-col gap-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => downloadCardPng("front")}
+                        disabled={downloadingFront || downloadingBack}
+                        className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-400 text-white font-extrabold text-[11px] py-2.5 px-1 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                      >
+                        {downloadingFront ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Download className="w-3.5 h-3.5" />
+                        )}
+                        Unduh Depan
+                      </button>
+                      <button
+                        onClick={() => downloadCardPng("back")}
+                        disabled={downloadingFront || downloadingBack}
+                        className="bg-slate-800 hover:bg-slate-700 disabled:bg-slate-600 text-white font-extrabold text-[11px] py-2.5 px-1 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                      >
+                        {downloadingBack ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Download className="w-3.5 h-3.5" />
+                        )}
+                        Unduh Belakang
+                      </button>
+                    </div>
+
                     <button
                       onClick={() => window.print()}
-                      className="w-full bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-blue-500/10 flex items-center justify-center gap-2 cursor-pointer"
+                      className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-extrabold text-xs py-2.5 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer border border-gray-200/50"
                     >
-                      <Printer className="w-4 h-4" />
-                      Cetak Kartu Pegawai
+                      <Printer className="w-4 h-4 text-gray-500" />
+                      Cetak Kartu Pegawai (PDF/Print)
                     </button>
+                    
                     <button
                       onClick={() => {
                         const url = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(guruData.qr_content)}`;
@@ -360,9 +428,9 @@ export default function Dashboard() {
                         link.download = `QR_Guru_${guruData.id_guru}.png`;
                         link.click();
                       }}
-                      className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-extrabold text-xs py-2.5 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      className="w-full bg-gray-50 hover:bg-gray-100 text-gray-600 font-bold text-[11px] py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      <Download className="w-4 h-4 text-gray-500" />
+                      <Download className="w-3.5 h-3.5 text-gray-400" />
                       Unduh QR Code Saja
                     </button>
                   </div>
@@ -522,6 +590,18 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Off-screen elements for high-resolution PNG rendering */}
+      {isGuru && guruData && (
+        <div style={{ position: "absolute", left: "-9999px", top: "-9999px" }}>
+          <div ref={frontCardRef} style={{ width: "325px", height: "204px" }}>
+            <IdCard item={guruData} kategori="Guru" side="front" />
+          </div>
+          <div ref={backCardRef} style={{ width: "325px", height: "204px" }}>
+            <IdCard item={guruData} kategori="Guru" side="back" />
+          </div>
+        </div>
+      )}
 
       {/* Full scale render strictly for standard window.print() output when Guru prints card */}
       {isGuru && guruData && (
