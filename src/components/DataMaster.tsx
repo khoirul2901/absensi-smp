@@ -47,6 +47,8 @@ export default function DataMaster() {
   // Modals state
   const [showFormModal, setShowFormModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printSide, setPrintSide] = useState<"both" | "front" | "back">("both");
   const [showQrModal, setShowQrModal] = useState<{ open: boolean; item: any | null }>({ open: false, item: null });
   
   // Form fields
@@ -321,6 +323,13 @@ export default function DataMaster() {
   const paginatedData = filteredData.slice(startIndex, startIndex + itemsPerPage);
   const totalPages = Math.ceil(filteredData.length / itemsPerPage);
 
+  // Split filtered data into chunks of 5 items per A4 sheet container
+  const printChunkSize = 5;
+  const printChunks: any[][] = [];
+  for (let i = 0; i < filteredData.length; i += printChunkSize) {
+    printChunks.push(filteredData.slice(i, i + printChunkSize));
+  }
+
   return (
     <>
     <div className="space-y-6 animate-fade-in print:hidden">
@@ -357,12 +366,12 @@ export default function DataMaster() {
           </div>
 
           <button 
-            onClick={() => window.print()}
+            onClick={() => setShowPrintModal(true)}
             disabled={filteredData.length === 0}
-            className="bg-white border border-gray-200 text-gray-700 font-bold text-xs px-3.5 py-2.5 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-all duration-150 flex items-center gap-1.5 shadow-sm"
+            className="bg-white border border-gray-200 text-gray-700 font-bold text-xs px-3.5 py-2.5 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-all duration-150 flex items-center gap-1.5 shadow-sm cursor-pointer"
           >
-            <Printer className="w-4 h-4" />
-            Cetak Semua Kartu
+            <Printer className="w-4 h-4 text-blue-600" />
+            Cetak Kartu A4 (5/Lembar)
           </button>
 
           <button 
@@ -932,48 +941,165 @@ export default function DataMaster() {
         </div>
       )}
 
+      {/* PRINT SETTINGS MODAL */}
+      {showPrintModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl max-w-md w-full overflow-hidden">
+            <div className="p-5 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <Printer className="w-5 h-5 text-blue-600" />
+                <h3 className="font-extrabold text-gray-900 text-base">Cetak Kartu {kategori} (A4)</h3>
+              </div>
+              <button onClick={() => setShowPrintModal(false)} className="text-gray-400 hover:text-gray-600 text-lg cursor-pointer">×</button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-blue-50 border border-blue-100 p-3.5 rounded-xl space-y-1 text-xs text-blue-900">
+                <div className="font-bold flex items-center gap-1.5 text-blue-800">
+                  <CheckCircle className="w-4 h-4 text-blue-600 shrink-0" />
+                  Format Cetak Kertas A4 (Hemat Kertas)
+                </div>
+                <div className="text-[11px] leading-relaxed text-blue-700/90 pt-1 space-y-0.5">
+                  <p>• Ukuran per Kartu: <strong>85,6 mm x 53,98 mm</strong> (Standar KTP)</p>
+                  <p>• Dimaksimalkan <strong>5 Kartu per Lembar A4</strong> agar hemat kertas</p>
+                  <p>• Total Data: <strong>{filteredData.length} {kategori}</strong> ({printChunks.length} Lembar A4)</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-700">Pilih Sisi Kartu yang Dicetak:</label>
+                <div className="grid grid-cols-1 gap-2">
+                  <label className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition-all ${printSide === "both" ? "bg-blue-50/70 border-blue-500 text-blue-900 font-bold" : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"}`}>
+                    <input 
+                      type="radio" 
+                      name="printSide" 
+                      value="both" 
+                      checked={printSide === "both"} 
+                      onChange={() => setPrintSide("both")}
+                      className="accent-blue-600"
+                    />
+                    <div>
+                      <div className="text-xs font-bold">Depan & Belakang (Berpasangan)</div>
+                      <div className="text-[10px] text-gray-500 font-normal">Sisi depan dan belakang berdampingan (5 pasang per A4)</div>
+                    </div>
+                  </label>
+
+                  <label className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition-all ${printSide === "front" ? "bg-blue-50/70 border-blue-500 text-blue-900 font-bold" : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"}`}>
+                    <input 
+                      type="radio" 
+                      name="printSide" 
+                      value="front" 
+                      checked={printSide === "front"} 
+                      onChange={() => setPrintSide("front")}
+                      className="accent-blue-600"
+                    />
+                    <div>
+                      <div className="text-xs font-bold">Hanya Sisi Depan</div>
+                      <div className="text-[10px] text-gray-500 font-normal">5 kartu depan per lembar A4</div>
+                    </div>
+                  </label>
+
+                  <label className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition-all ${printSide === "back" ? "bg-blue-50/70 border-blue-500 text-blue-900 font-bold" : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"}`}>
+                    <input 
+                      type="radio" 
+                      name="printSide" 
+                      value="back" 
+                      checked={printSide === "back"} 
+                      onChange={() => setPrintSide("back")}
+                      className="accent-blue-600"
+                    />
+                    <div>
+                      <div className="text-xs font-bold">Hanya Sisi Belakang</div>
+                      <div className="text-[10px] text-gray-500 font-normal">5 kartu belakang per lembar A4</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+                <button 
+                  type="button"
+                  onClick={() => setShowPrintModal(false)}
+                  className="bg-gray-100 text-gray-600 font-semibold text-xs px-4 py-2.5 rounded-xl hover:bg-gray-200 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setShowPrintModal(false);
+                    setTimeout(() => window.print(), 250);
+                  }}
+                  className="bg-blue-600 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl hover:bg-blue-700 shadow-md flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  Cetak Sekarang ({printChunks.length} Halaman A4)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* QR MODAL */}
       {showQrModal.open && showQrModal.item && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl overflow-hidden p-6 space-y-6 flex flex-col items-center">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl overflow-hidden p-6 space-y-6 flex flex-col items-center max-w-md w-full">
             <div className="flex justify-between items-center w-full">
               <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                 Preview Kartu {kategori}
               </span>
               <button 
                 onClick={() => setShowQrModal({ open: false, item: null })}
-                className="text-gray-400 hover:text-gray-600 text-lg"
+                className="text-gray-400 hover:text-gray-600 text-lg cursor-pointer"
               >
                 ×
               </button>
             </div>
 
-            <div className="flex justify-center w-full scale-90 sm:scale-100">
+            <div className="flex justify-center w-full overflow-x-auto p-2">
               <IdCard item={showQrModal.item} kategori={kategori} />
             </div>
 
-            <button 
-              onClick={() => {
-                const url = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(showQrModal.item.qr_content)}`;
-                const link = document.createElement("a");
-                link.href = url;
-                link.target = "_blank";
-                link.download = `QR_${kategori}_${showQrModal.item.qr_content}.png`;
-                link.click();
-              }}
-              className="bg-slate-900 text-white font-bold text-xs w-full py-2.5 rounded-xl hover:bg-slate-800 transition-all duration-150 flex items-center justify-center gap-1.5"
-            >
-              <Download className="w-4 h-4" />
-              Download Kode QR Saja
-            </button>
+            <div className="grid grid-cols-2 gap-2 w-full">
+              <button 
+                onClick={() => {
+                  setTimeout(() => window.print(), 150);
+                }}
+                className="bg-blue-600 text-white font-bold text-xs py-2.5 px-3 rounded-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                Cetak A4 (KTP)
+              </button>
+
+              <button 
+                onClick={() => {
+                  const url = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(showQrModal.item.qr_content)}`;
+                  const link = document.createElement("a");
+                  link.href = url;
+                  link.target = "_blank";
+                  link.download = `QR_${kategori}_${showQrModal.item.qr_content}.png`;
+                  link.click();
+                }}
+                className="bg-slate-900 text-white font-bold text-xs py-2.5 px-3 rounded-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                Unduh QR Saja
+              </button>
+            </div>
           </div>
         </div>
       )}
     </div>
     
-    <div className="hidden print:flex flex-wrap justify-center gap-6 w-full p-4">
-      {filteredData.map((item, index) => (
-        <IdCard key={index} item={item} kategori={kategori} />
+    {/* PRINT CONTAINER FOR A4 PAGES (MAX 5 CARDS PER A4 SHEET) */}
+    <div className="hidden print:block w-full">
+      {printChunks.map((chunk, pageIndex) => (
+        <div key={pageIndex} className="print-a4-page">
+          {chunk.map((item, itemIndex) => (
+            <IdCard key={itemIndex} item={item} kategori={kategori} side={printSide} />
+          ))}
+        </div>
       ))}
     </div>
     </>
