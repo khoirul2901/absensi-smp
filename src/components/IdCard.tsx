@@ -37,7 +37,10 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori, side = "both" })
 
   if (!isSiswa) {
     const frontCard = (
-      <div className="w-[325px] h-[204px] bg-slate-900 rounded-xl overflow-hidden relative flex flex-col shadow-md border border-slate-700 shrink-0 select-none">
+      <div 
+        style={{ width: '85.6mm', height: '53.98mm' }} 
+        className="w-[85.6mm] h-[53.98mm] bg-slate-900 rounded-xl overflow-hidden relative flex flex-col shadow-md border border-slate-700 shrink-0 select-none print-card-item"
+      >
         {/* Header */}
         <div className="absolute top-0 left-0 w-full h-[55px] bg-slate-800 z-10 flex items-center px-3 border-b border-amber-500/30">
           <div className="absolute top-0 right-0 w-[40%] h-full bg-slate-700 rounded-bl-[100px] opacity-40 z-0"></div>
@@ -123,7 +126,10 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori, side = "both" })
     );
 
     const backCard = (
-      <div className="w-[325px] h-[204px] bg-slate-900 rounded-xl overflow-hidden relative flex flex-col shadow-md border border-slate-700 shrink-0 select-none">
+      <div 
+        style={{ width: '85.6mm', height: '53.98mm' }}
+        className="w-[85.6mm] h-[53.98mm] bg-slate-900 rounded-xl overflow-hidden relative flex flex-col shadow-md border border-slate-700 shrink-0 select-none print-card-item"
+      >
         <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none z-0">
           <Briefcase className="w-40 h-40 text-white" />
         </div>
@@ -159,7 +165,10 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori, side = "both" })
 
   // DEFAULT FRONT CARD SISWA
   const studentFrontCard = (
-    <div className="w-[325px] h-[204px] bg-[#e6e6e6] rounded-xl overflow-hidden relative flex flex-col shadow-md border border-gray-300 shrink-0 select-none">
+    <div 
+      style={{ width: '85.6mm', height: '53.98mm' }}
+      className="w-[85.6mm] h-[53.98mm] bg-[#e6e6e6] rounded-xl overflow-hidden relative flex flex-col shadow-md border border-gray-300 shrink-0 select-none print-card-item"
+    >
       {/* Background Decorative Elements */}
       {/* Top Header Section */}
       <div className="absolute top-0 left-0 w-full h-[50px] bg-[#1e3a8a] z-10 flex items-center px-2">
@@ -264,7 +273,10 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori, side = "both" })
   );
 
   const studentBackCard = (
-    <div className="w-[325px] h-[204px] bg-[#e6e6e6] rounded-xl overflow-hidden relative flex flex-col shadow-md border border-gray-300 shrink-0 select-none">
+    <div 
+      style={{ width: '85.6mm', height: '53.98mm' }}
+      className="w-[85.6mm] h-[53.98mm] bg-[#e6e6e6] rounded-xl overflow-hidden relative flex flex-col shadow-md border border-gray-300 shrink-0 select-none print-card-item"
+    >
       {/* Header Decor */}
       <div className="absolute top-0 left-0 w-full h-[12px] bg-[#d97706] z-10"></div>
       <div className="absolute top-[8px] left-0 w-full h-[18px] bg-[#3b82f6] rounded-b-[100%] z-20"></div>
