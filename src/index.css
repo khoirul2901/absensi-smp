@@ -28,12 +28,66 @@ body {
 #qr-scanner-frame video {
   max-height: 40vh !important;
   object-fit: cover !important;
-  width: 80% !important;
+  width: 100% !important;
 }
 
 @media print {
   @page {
-    margin: 1cm;
+    margin: 8mm 10mm;
     size: A4 portrait;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide screen-only controls during print */
+  .no-print, nav, header, button, .print\:hidden {
+    display: none !important;
+  }
+
+  /* Force background colors and images in print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Container for 1 sheet of A4 holding up to 5 cards / card pairs */
+  .print-a4-page {
+    width: 190mm !important;
+    min-height: 275mm !important;
+    margin: 0 auto !important;
+    padding: 2mm 0 !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    align-content: start !important;
+    gap: 4mm 8mm !important;
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  .print-a4-page:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
+  /* KTP standard dimensions: 85.6 mm x 53.98 mm */
+  .print-card-item {
+    width: 85.6mm !important;
+    height: 53.98mm !important;
+    min-width: 85.6mm !important;
+    min-height: 53.98mm !important;
+    max-width: 85.6mm !important;
+    max-height: 53.98mm !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    box-shadow: none !important;
   }
 }
