@@ -603,10 +603,12 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Full scale render strictly for standard window.print() output when Guru prints card */}
+      {/* Full scale render strictly for standard window.print() output when Guru prints card on A4 */}
       {isGuru && guruData && (
-        <div className="hidden print:flex flex-wrap justify-center gap-6 w-full p-4 h-screen items-center">
-          <IdCard item={guruData} kategori="Guru" />
+        <div className="hidden print:block w-full">
+          <div className="print-a4-page">
+            <IdCard item={guruData} kategori="Guru" />
+          </div>
         </div>
       )}
     </>
