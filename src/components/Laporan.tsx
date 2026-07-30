@@ -80,6 +80,7 @@ export default function Laporan() {
   const [editModeType, setEditModeType] = useState<"bulk" | "single">("bulk");
   const [editKategori, setEditKategori] = useState<"Siswa" | "Guru">("Siswa");
   const [editTanggal, setEditTanggal] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [originalTanggal, setOriginalTanggal] = useState<string>("");
   
   // Single edit states
   const [editTargetId, setEditTargetId] = useState<string>("");
@@ -254,8 +255,17 @@ export default function Laporan() {
     setEditKategori(currentCat);
     loadMasterForEdit(currentCat);
 
-    const initialDate = row ? (row.tanggal || new Date().toISOString().split("T")[0]) : (tanggalMulai || new Date().toISOString().split("T")[0]);
+    let defaultDate = new Date().toISOString().split("T")[0];
+    if (tanggalMulai) {
+      defaultDate = tanggalMulai;
+    } else if (jenisFilter === "bulan" && bulanMinta) {
+      const todayStr = new Date().toISOString().split("T")[0];
+      defaultDate = todayStr.startsWith(bulanMinta) ? todayStr : `${bulanMinta}-01`;
+    }
+
+    const initialDate = row ? (row.tanggal || defaultDate) : defaultDate;
     setEditTanggal(initialDate);
+    setOriginalTanggal(row?.tanggal || "");
 
     if (row) {
       setEditModeType("single");
@@ -280,6 +290,41 @@ export default function Laporan() {
     }
     setEditSearchQuery("");
     setShowEditModal(true);
+  };
+
+  const handleDeleteKehadiran = async (row?: LaporanRow) => {
+    const targetId = row ? (row.id_siswa || row.id_guru || "") : editTargetId;
+    const cat = row ? (isGuru ? "Siswa" : (row.id_siswa ? "Siswa" : "Guru")) : editKategori;
+    const tgl = row ? row.tanggal : editTanggal;
+    const name = row ? (row.nama_siswa || row.nama_guru || "pengguna ini") : "pengguna ini";
+
+    if (!targetId || !tgl) {
+      alert("Data presensi tidak valid untuk dihapus.");
+      return;
+    }
+
+    const confirm = window.confirm(`Apakah Anda yakin ingin menghapus data presensi ${name} pada tanggal ${tgl}?`);
+    if (!confirm) return;
+
+    try {
+      setLoading(true);
+      let res = await callGas("hapusLogKehadiran", [targetId, cat, tgl]);
+      if (res && !res.success && typeof res.message === "string" && res.message.toLowerCase().includes("tidak dikenal")) {
+        res = await callGas("hapusKehadiran", [targetId, cat, tgl]);
+      }
+
+      if (res && res.success) {
+        alert(res.message || `Data presensi ${name} tanggal ${tgl} berhasil dihapus.`);
+        setShowEditModal(false);
+        handleQuery();
+      } else {
+        alert(res?.message || "Gagal menghapus data presensi.");
+      }
+    } catch (err: any) {
+      alert("Error menghapus presensi: " + err.toString());
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleBulkParamChange = (cat: "Siswa" | "Guru", tgl: string, cls: string) => {
@@ -369,7 +414,7 @@ export default function Laporan() {
         let successCount = 0;
         for (const item of bulkTableData) {
           if (!item.id_target) continue;
-          let itemRes = await callGas("editKehadiran", [
+          let itemRes = await callGas("simpanKoreksiManual", [
             item.id_target,
             editKategori,
             editTanggal,
@@ -379,6 +424,19 @@ export default function Laporan() {
             item.status_pulang || "-",
             item.ket || "-"
           ]);
+
+          if (itemRes && !itemRes.success && typeof itemRes.message === "string" && itemRes.message.toLowerCase().includes("tidak dikenal")) {
+            itemRes = await callGas("editKehadiran", [
+              item.id_target,
+              editKategori,
+              editTanggal,
+              item.jam_masuk || "-",
+              item.status_masuk || "-",
+              item.jam_pulang || "-",
+              item.status_pulang || "-",
+              item.ket || "-"
+            ]);
+          }
 
           if (itemRes && !itemRes.success && typeof itemRes.message === "string" && itemRes.message.toLowerCase().includes("tidak dikenal")) {
             if (item.status_masuk && item.status_masuk !== "-") {
@@ -393,11 +451,18 @@ export default function Laporan() {
             successCount++;
           }
         }
-        res = { success: true, message: `Berhasil memperbarui ${successCount} data presensi!` };
+        res = { success: true, message: `Berhasil memperbarui ${successCount} data presensi tanggal ${editTanggal}!` };
       }
 
       if (res && res.success) {
-        alert(res.message || "Data kehadiran berhasil diperbarui!");
+        alert(res.message || `Data kehadiran tanggal ${editTanggal} berhasil diperbarui!`);
+        if (jenisFilter === "rentang") {
+          setTanggalMulai(editTanggal);
+          setTanggalSelesai(editTanggal);
+        } else if (jenisFilter === "bulan") {
+          const monthOfEdit = editTanggal.slice(0, 7);
+          setBulanMinta(monthOfEdit);
+        }
         setShowEditModal(false);
         handleQuery();
       } else {
@@ -455,17 +520,21 @@ export default function Laporan() {
 
     try {
       setSavingEdit(true);
-      let res = await callGas("editKehadiranFull", [
+
+      // If user changed the date from originalTanggal to editTanggal, delete the old log at originalTanggal first
+      if (originalTanggal && originalTanggal !== editTanggal) {
+        await callGas("hapusLogKehadiran", [editTargetId, editKategori, originalTanggal]);
+      }
+
+      let res = await callGas("simpanKoreksiManual", [
         editTargetId,
         editKategori,
         editTanggal,
-        {
-          jam_masuk: editJamMasuk || "-",
-          status_masuk: editStatusMasuk || "-",
-          jam_pulang: editJamPulang || "-",
-          status_pulang: editStatusPulang || "-",
-          ket: editKet || "-"
-        }
+        editJamMasuk || "-",
+        editStatusMasuk || "-",
+        editJamPulang || "-",
+        editStatusPulang || "-",
+        editKet || "-"
       ]);
 
       if (res && !res.success && typeof res.message === "string" && res.message.toLowerCase().includes("tidak dikenal")) {
@@ -478,6 +547,21 @@ export default function Laporan() {
           editJamPulang || "-",
           editStatusPulang || "-",
           editKet || "-"
+        ]);
+      }
+
+      if (res && !res.success && typeof res.message === "string" && res.message.toLowerCase().includes("tidak dikenal")) {
+        res = await callGas("editKehadiranFull", [
+          editTargetId,
+          editKategori,
+          editTanggal,
+          {
+            jam_masuk: editJamMasuk || "-",
+            status_masuk: editStatusMasuk || "-",
+            jam_pulang: editJamPulang || "-",
+            status_pulang: editStatusPulang || "-",
+            ket: editKet || "-"
+          }
         ]);
       }
 
@@ -505,37 +589,23 @@ export default function Laporan() {
           ]);
         }
         res = (resMasuk && resMasuk.success) || (resPulang && resPulang.success)
-          ? { success: true, message: "Kehadiran berhasil diperbarui!" }
+          ? { success: true, message: `Kehadiran tanggal ${editTanggal} berhasil diperbarui!` }
           : (resMasuk || resPulang);
       }
 
       if (res && res.success) {
-        alert(res.message || "Kehadiran berhasil diperbarui!");
+        alert(res.message || `Kehadiran tanggal ${editTanggal} berhasil diperbarui!`);
+        if (jenisFilter === "rentang") {
+          setTanggalMulai(editTanggal);
+          setTanggalSelesai(editTanggal);
+        } else if (jenisFilter === "bulan") {
+          const monthOfEdit = editTanggal.slice(0, 7);
+          setBulanMinta(monthOfEdit);
+        }
         setShowEditModal(false);
         handleQuery();
       } else {
         alert(res?.message || "Gagal memperbarui kehadiran.");
-      }
-    } catch (err: any) {
-      alert("Error: " + err.toString());
-    } finally {
-      setSavingEdit(false);
-    }
-  };
-
-  const handleDeleteKehadiran = async () => {
-    if (!editTargetId || !editTanggal) return;
-    if (!confirm(`Apakah Anda yakin ingin menghapus data presensi tanggal ${editTanggal} ini?`)) return;
-
-    try {
-      setSavingEdit(true);
-      const res = await callGas("hapusLogKehadiran", [editTargetId, editKategori, editTanggal]);
-      if (res && res.success) {
-        alert(res.message || "Data presensi berhasil dihapus!");
-        setShowEditModal(false);
-        handleQuery();
-      } else {
-        alert(res?.message || "Gagal menghapus data presensi.");
       }
     } catch (err: any) {
       alert("Error: " + err.toString());
@@ -879,14 +949,24 @@ export default function Laporan() {
                             </td>
                             <td className="py-3.5 px-6 text-gray-500 font-medium">{row.ket || "-"}</td>
                             <td className="py-3.5 px-6 text-center print:hidden">
-                              <button
-                                onClick={() => handleOpenEditModal(row)}
-                                className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 font-bold px-2.5 py-1 rounded-lg text-[11px] transition-colors cursor-pointer"
-                                title="Edit Kehadiran"
-                              >
-                                <Pencil className="w-3 h-3" />
-                                Edit
-                              </button>
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  onClick={() => handleOpenEditModal(row)}
+                                  className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 font-bold px-2.5 py-1 rounded-lg text-[11px] transition-colors cursor-pointer"
+                                  title="Edit Kehadiran"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteKehadiran(row)}
+                                  className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 font-bold px-2.5 py-1 rounded-lg text-[11px] transition-colors cursor-pointer"
+                                  title="Hapus Absensi"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  Hapus
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
