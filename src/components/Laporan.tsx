@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, FormEvent } from "react";
 import { 
   FileText, 
   Search, 
@@ -18,7 +18,16 @@ import {
   UserCheck,
   TrendingUp,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Pencil,
+  Trash2,
+  Clock,
+  Edit3,
+  Table,
+  Save,
+  RefreshCw,
+  Sparkles,
+  Users
 } from "lucide-react";
 import { callGas, getStorageKey } from "../lib/gasApi";
 import { LaporanRow, RekapPersentase } from "../types";
@@ -65,6 +74,29 @@ export default function Laporan() {
   const [currentPageDetail, setCurrentPageDetail] = useState(1);
   const [currentPageRekap, setCurrentPageRekap] = useState(1);
   const itemsPerPage = 10;
+
+  // EDIT KEHADIRAN MODAL STATES
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editModeType, setEditModeType] = useState<"bulk" | "single">("bulk");
+  const [editKategori, setEditKategori] = useState<"Siswa" | "Guru">("Siswa");
+  const [editTanggal, setEditTanggal] = useState<string>(new Date().toISOString().split("T")[0]);
+  
+  // Single edit states
+  const [editTargetId, setEditTargetId] = useState<string>("");
+  const [editJamMasuk, setEditJamMasuk] = useState<string>("07:00");
+  const [editStatusMasuk, setEditStatusMasuk] = useState<string>("Tepat Waktu");
+  const [editJamPulang, setEditJamPulang] = useState<string>("15:30");
+  const [editStatusPulang, setEditStatusPulang] = useState<string>("Tepat Waktu");
+  const [editKet, setEditKet] = useState<string>("");
+  const [editSearchQuery, setEditSearchQuery] = useState<string>("");
+  const [editEntitiesList, setEditEntitiesList] = useState<any[]>([]);
+
+  // Bulk edit states
+  const [bulkFilterKelas, setBulkFilterKelas] = useState<string>("Semua");
+  const [bulkSearchQuery, setBulkSearchQuery] = useState<string>("");
+  const [bulkTableData, setBulkTableData] = useState<any[]>([]);
+  const [loadingBulk, setLoadingBulk] = useState<boolean>(false);
+  const [savingEdit, setSavingEdit] = useState<boolean>(false);
 
   useEffect(() => {
     setCurrentPageDetail(1);
@@ -140,6 +172,256 @@ export default function Laporan() {
       handleQuery();
     }
   }, [kategori, viewMode, jenisFilter, selectedKelas, tanggalMulai, tanggalSelesai, bulanMinta]);
+
+  // Load master entities for edit dropdown
+  const loadMasterForEdit = async (cat: "Siswa" | "Guru") => {
+    try {
+      const res = await callGas("getDataMaster", [cat]);
+      if (res && res.success && Array.isArray(res.data)) {
+        setEditEntitiesList(res.data);
+      }
+    } catch (e) {
+      console.error("Gagal memuat master entitas:", e);
+    }
+  };
+
+  // Load live attendance for bulk edit
+  const loadBulkAttendanceData = async (cat: "Siswa" | "Guru", tgl: string, cls: string) => {
+    try {
+      setLoadingBulk(true);
+      const res = await callGas("getLiveAbsenHariIni", [cat, tgl, cls]);
+      if (res && res.success && Array.isArray(res.data)) {
+        const reportsRes = await callGas("getLaporanFilter", [cat, "Semua", "rentang", tgl, tgl, ""]);
+        const existingLogs = (reportsRes && reportsRes.success && Array.isArray(reportsRes.data)) ? reportsRes.data : [];
+
+        const mapped = res.data.map((item: any) => {
+          const log = existingLogs.find((r: any) => (r.id_siswa === item.id_target || r.id_guru === item.id_target));
+          return {
+            id_target: item.id_target,
+            nama_target: item.nama_target,
+            kelas_jurusan: item.kelas_jurusan || "-",
+            jam_masuk: item.jam_masuk || "-",
+            status_masuk: item.status_masuk || "-",
+            jam_pulang: item.jam_pulang || "-",
+            status_pulang: item.status_pulang || "-",
+            ket: log?.ket || "-"
+          };
+        });
+        setBulkTableData(mapped);
+      }
+    } catch (err) {
+      console.error("Gagal memuat data presensi massal:", err);
+    } finally {
+      setLoadingBulk(false);
+    }
+  };
+
+  const handleOpenEditModal = (row?: LaporanRow, defaultMode?: "bulk" | "single") => {
+    const currentCat = isGuru ? "Siswa" : (row ? (row.id_siswa ? "Siswa" : "Guru") : kategori);
+    setEditKategori(currentCat);
+    loadMasterForEdit(currentCat);
+
+    const initialDate = row ? (row.tanggal || new Date().toISOString().split("T")[0]) : (tanggalMulai || new Date().toISOString().split("T")[0]);
+    setEditTanggal(initialDate);
+
+    if (row) {
+      setEditModeType("single");
+      const targetId = row.id_siswa || row.id_guru || "";
+      setEditTargetId(targetId);
+      setEditJamMasuk(row.jam_masuk && row.jam_masuk !== "-" ? row.jam_masuk : "07:00");
+      setEditStatusMasuk(row.status_masuk && row.status_masuk !== "-" ? row.status_masuk : "Tepat Waktu");
+      setEditJamPulang(row.jam_pulang && row.jam_pulang !== "-" ? row.jam_pulang : "15:30");
+      setEditStatusPulang(row.status_pulang && row.status_pulang !== "-" ? row.status_pulang : "Tepat Waktu");
+      setEditKet(row.ket && row.ket !== "-" ? row.ket : "");
+    } else {
+      setEditModeType(defaultMode || "bulk");
+      setEditTargetId("");
+      setEditJamMasuk("07:00");
+      setEditStatusMasuk("Tepat Waktu");
+      setEditJamPulang("15:30");
+      setEditStatusPulang("Tepat Waktu");
+      setEditKet("");
+      setBulkFilterKelas(selectedKelas || "Semua");
+      setBulkSearchQuery("");
+      loadBulkAttendanceData(currentCat, initialDate, selectedKelas || "Semua");
+    }
+    setEditSearchQuery("");
+    setShowEditModal(true);
+  };
+
+  const handleBulkParamChange = (cat: "Siswa" | "Guru", tgl: string, cls: string) => {
+    setEditKategori(cat);
+    setEditTanggal(tgl);
+    setBulkFilterKelas(cls);
+    loadBulkAttendanceData(cat, tgl, cls);
+  };
+
+  const handleUpdateBulkCell = (idTarget: string, field: string, value: string) => {
+    setBulkTableData((prev) =>
+      prev.map((item) => {
+        if (item.id_target === idTarget) {
+          const updated = { ...item, [field]: value };
+          if (field === "status_masuk") {
+            if ((value === "Tepat Waktu" || value === "Terlambat") && (item.jam_masuk === "-" || !item.jam_masuk)) {
+              updated.jam_masuk = "07:00";
+            } else if (value === "Sakit" || value === "Izin" || value === "Alfa" || value === "-") {
+              updated.jam_masuk = "-";
+            }
+          }
+          if (field === "status_pulang") {
+            if (value === "Tepat Waktu" && (item.jam_pulang === "-" || !item.jam_pulang)) {
+              updated.jam_pulang = "15:30";
+            } else if (value === "-") {
+              updated.jam_pulang = "-";
+            }
+          }
+          return updated;
+        }
+        return item;
+      })
+    );
+  };
+
+  const handleBatchSetStatusMasuk = (val: string) => {
+    if (!val) return;
+    setBulkTableData((prev) =>
+      prev.map((item) => {
+        const matchesQuery = !bulkSearchQuery || 
+          item.nama_target.toLowerCase().includes(bulkSearchQuery.toLowerCase()) || 
+          item.id_target.toLowerCase().includes(bulkSearchQuery.toLowerCase());
+        
+        if (matchesQuery) {
+          let newJam = item.jam_masuk;
+          if ((val === "Tepat Waktu" || val === "Terlambat") && (item.jam_masuk === "-" || !item.jam_masuk)) {
+            newJam = "07:00";
+          } else if (val === "Sakit" || val === "Izin" || val === "Alfa" || val === "-") {
+            newJam = "-";
+          }
+          return { ...item, status_masuk: val, jam_masuk: newJam };
+        }
+        return item;
+      })
+    );
+  };
+
+  const handleBatchSetStatusPulang = (val: string) => {
+    if (!val) return;
+    setBulkTableData((prev) =>
+      prev.map((item) => {
+        const matchesQuery = !bulkSearchQuery || 
+          item.nama_target.toLowerCase().includes(bulkSearchQuery.toLowerCase()) || 
+          item.id_target.toLowerCase().includes(bulkSearchQuery.toLowerCase());
+        
+        if (matchesQuery) {
+          let newJam = item.jam_pulang;
+          if (val === "Tepat Waktu" && (item.jam_pulang === "-" || !item.jam_pulang)) {
+            newJam = "15:30";
+          } else if (val === "-") {
+            newJam = "-";
+          }
+          return { ...item, status_pulang: val, jam_pulang: newJam };
+        }
+        return item;
+      })
+    );
+  };
+
+  const handleSaveBulkKehadiran = async () => {
+    if (bulkTableData.length === 0) return;
+    try {
+      setSavingEdit(true);
+      const res = await callGas("editKehadiranBulk", [bulkTableData, editKategori, editTanggal]);
+      if (res && res.success) {
+        alert(res.message || "Data kehadiran berhasil diperbarui!");
+        setShowEditModal(false);
+        handleQuery();
+      } else {
+        alert(res?.message || "Gagal menyimpan perubahan massal.");
+      }
+    } catch (err: any) {
+      alert("Error: " + err.toString());
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleTargetOrDateChange = (targetId: string, tanggalStr: string, cat: "Siswa" | "Guru") => {
+    setEditTargetId(targetId);
+    setEditTanggal(tanggalStr);
+
+    if (targetId && tanggalStr) {
+      // Find existing log in current detailLogs
+      const existing = detailLogs.find(r => r.tanggal === tanggalStr && (r.id_siswa === targetId || r.id_guru === targetId));
+      if (existing) {
+        setEditJamMasuk(existing.jam_masuk && existing.jam_masuk !== "-" ? existing.jam_masuk : "07:00");
+        setEditStatusMasuk(existing.status_masuk && existing.status_masuk !== "-" ? existing.status_masuk : "Tepat Waktu");
+        setEditJamPulang(existing.jam_pulang && existing.jam_pulang !== "-" ? existing.jam_pulang : "15:30");
+        setEditStatusPulang(existing.status_pulang && existing.status_pulang !== "-" ? existing.status_pulang : "Tepat Waktu");
+        setEditKet(existing.ket && existing.ket !== "-" ? existing.ket : "");
+      }
+    }
+  };
+
+  const handleSaveEditKehadiran = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editTargetId) {
+      alert("Pilih nama / ID entitas terlebih dahulu!");
+      return;
+    }
+    if (!editTanggal) {
+      alert("Pilih tanggal absensi!");
+      return;
+    }
+
+    try {
+      setSavingEdit(true);
+      const res = await callGas("editKehadiranFull", [
+        editTargetId,
+        editKategori,
+        editTanggal,
+        {
+          jam_masuk: editJamMasuk || "-",
+          status_masuk: editStatusMasuk || "-",
+          jam_pulang: editJamPulang || "-",
+          status_pulang: editStatusPulang || "-",
+          ket: editKet || "-"
+        }
+      ]);
+
+      if (res && res.success) {
+        alert(res.message || "Kehadiran berhasil diperbarui!");
+        setShowEditModal(false);
+        handleQuery();
+      } else {
+        alert(res?.message || "Gagal memperbarui kehadiran.");
+      }
+    } catch (err: any) {
+      alert("Error: " + err.toString());
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeleteKehadiran = async () => {
+    if (!editTargetId || !editTanggal) return;
+    if (!confirm(`Apakah Anda yakin ingin menghapus data presensi tanggal ${editTanggal} ini?`)) return;
+
+    try {
+      setSavingEdit(true);
+      const res = await callGas("hapusLogKehadiran", [editTargetId, editKategori, editTanggal]);
+      if (res && res.success) {
+        alert(res.message || "Data presensi berhasil dihapus!");
+        setShowEditModal(false);
+        handleQuery();
+      } else {
+        alert(res?.message || "Gagal menghapus data presensi.");
+      }
+    } catch (err: any) {
+      alert("Error: " + err.toString());
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   // Export Filtered data to CSV
   const handleExportCSV = () => {
@@ -375,15 +657,22 @@ export default function Laporan() {
 
           <div className="flex gap-2 w-full sm:w-auto">
             <button 
+              onClick={() => handleOpenEditModal()}
+              className="bg-amber-500 text-white font-extrabold text-xs px-4 py-2 rounded-xl hover:bg-amber-600 transition-all duration-150 flex items-center gap-1.5 shadow-sm cursor-pointer"
+            >
+              <Pencil className="w-4 h-4" />
+              Edit Kehadiran
+            </button>
+            <button 
               onClick={() => window.print()}
-              className="bg-white border border-gray-200 text-gray-700 font-bold text-xs px-4 py-2 rounded-xl hover:bg-gray-50 transition-all duration-150 flex items-center gap-1.5 shadow-sm"
+              className="bg-white border border-gray-200 text-gray-700 font-bold text-xs px-4 py-2 rounded-xl hover:bg-gray-50 transition-all duration-150 flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
               <Printer className="w-4 h-4" />
               Cetak PDF
             </button>
             <button 
               onClick={handleExportCSV}
-              className="bg-blue-600 text-white font-extrabold text-xs px-4 py-2 rounded-xl hover:bg-blue-700 transition-all duration-150 flex items-center gap-1.5 shadow-sm"
+              className="bg-blue-600 text-white font-extrabold text-xs px-4 py-2 rounded-xl hover:bg-blue-700 transition-all duration-150 flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
               <Download className="w-4 h-4" />
               Unduh CSV
@@ -394,7 +683,7 @@ export default function Laporan() {
 
       {/* PRINT-ONLY HEADERS */}
       <div className="hidden print:block space-y-4 mb-6 border-b-[3px] border-slate-900 pb-4 text-center">
-        <h2 className="text-2xl font-black text-slate-950 uppercase tracking-wide">SMP AL-HIKAM SENDANG MULYO</h2>
+        <h2 className="text-2xl font-black text-slate-950 uppercase tracking-wide">SMP AL-HIKAM</h2>
         <h3 className="text-lg font-bold text-slate-800 uppercase tracking-normal">LAPORAN REKAP ABSENSI {kategori.toUpperCase()}</h3>
         <p className="text-xs text-slate-500 font-semibold">
           {jenisFilter === "bulan" ? `Periode Bulan: ${bulanMinta}` : `Periode Tanggal: ${tanggalMulai} s.d ${tanggalSelesai}`}
@@ -425,12 +714,13 @@ export default function Laporan() {
                       <th className="py-3.5 px-6">Jam Pulang</th>
                       <th className="py-3.5 px-6">Status Pulang</th>
                       <th className="py-3.5 px-6">Keterangan</th>
+                      <th className="py-3.5 px-6 text-center print:hidden">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 text-xs text-gray-700 print:divide-slate-300">
                     {filteredDetailLogs.length === 0 ? (
                       <tr>
-                        <td colSpan={kategori === "Siswa" ? 9 : 8} className="py-8 text-center text-gray-400 font-medium">
+                        <td colSpan={kategori === "Siswa" ? 10 : 9} className="py-8 text-center text-gray-400 font-medium">
                           Tidak ada log presensi terekam
                         </td>
                       </tr>
@@ -467,6 +757,16 @@ export default function Laporan() {
                               </span>
                             </td>
                             <td className="py-3.5 px-6 text-gray-500 font-medium">{row.ket || "-"}</td>
+                            <td className="py-3.5 px-6 text-center print:hidden">
+                              <button
+                                onClick={() => handleOpenEditModal(row)}
+                                className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 font-bold px-2.5 py-1 rounded-lg text-[11px] transition-colors cursor-pointer"
+                                title="Edit Kehadiran"
+                              >
+                                <Pencil className="w-3 h-3" />
+                                Edit
+                              </button>
+                            </td>
                           </tr>
                         );
                       })
@@ -717,6 +1017,515 @@ export default function Laporan() {
           )
         )}
       </div>
+
+      {/* EDIT KEHADIRAN MODAL */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50 animate-fade-in print:hidden">
+          <div className={`bg-white rounded-2xl border border-gray-100 shadow-2xl w-full overflow-hidden transition-all duration-200 ${editModeType === "bulk" ? "max-w-5xl" : "max-w-lg"}`}>
+            
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-amber-500 to-amber-600 text-white flex flex-wrap justify-between items-center gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-white/10 rounded-xl">
+                  <Pencil className="w-5 h-5 text-amber-100" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-white text-base">Edit / Koreksi Kehadiran</h3>
+                  <p className="text-[11px] text-amber-100 font-medium">Perbaiki log presensi langsung banyak atau per siswa</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* Mode Switcher Tabs */}
+                <div className="bg-amber-700/40 p-1 rounded-xl flex items-center gap-1 border border-amber-400/30">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditModeType("bulk");
+                      loadBulkAttendanceData(editKategori, editTanggal, bulkFilterKelas);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      editModeType === "bulk" ? "bg-white text-amber-800 shadow-sm" : "text-amber-100 hover:text-white"
+                    }`}
+                  >
+                    <Table className="w-3.5 h-3.5" />
+                    Edit Banyak (Tabel)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditModeType("single")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+                      editModeType === "single" ? "bg-white text-amber-800 shadow-sm" : "text-amber-100 hover:text-white"
+                    }`}
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    Edit 1 Orang
+                  </button>
+                </div>
+
+                <button 
+                  onClick={() => setShowEditModal(false)}
+                  className="text-amber-100 hover:text-white text-2xl font-bold leading-none cursor-pointer pl-2"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+
+            {/* MODAL BODY */}
+            {editModeType === "bulk" ? (
+              /* BULK EDIT TABLE MODE */
+              <div className="p-4 sm:p-6 space-y-4 max-h-[82vh] overflow-y-auto">
+                {/* Filters Bar */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-gray-50 p-3.5 rounded-2xl border border-gray-200/80">
+                  <div>
+                    <label className="text-[11px] font-bold text-gray-500 mb-1 block">Kategori</label>
+                    <select
+                      disabled={isGuru}
+                      value={editKategori}
+                      onChange={(e) => handleBulkParamChange(e.target.value as "Siswa" | "Guru", editTanggal, bulkFilterKelas)}
+                      className="w-full bg-white border border-gray-200 rounded-xl p-2 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500 cursor-pointer disabled:opacity-70"
+                    >
+                      <option value="Siswa">Siswa</option>
+                      <option value="Guru">Guru / Staf</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-gray-500 mb-1 block">Tanggal Absensi</label>
+                    <input
+                      type="date"
+                      value={editTanggal}
+                      onChange={(e) => handleBulkParamChange(editKategori, e.target.value, bulkFilterKelas)}
+                      className="w-full bg-white border border-gray-200 rounded-xl p-2 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500 cursor-pointer"
+                    />
+                  </div>
+
+                  {editKategori === "Siswa" ? (
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-500 mb-1 block">Filter Kelas</label>
+                      <select
+                        value={bulkFilterKelas}
+                        onChange={(e) => handleBulkParamChange(editKategori, editTanggal, e.target.value)}
+                        className="w-full bg-white border border-gray-200 rounded-xl p-2 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500 cursor-pointer"
+                      >
+                        <option value="Semua">Semua Kelas</option>
+                        {classList.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-500 mb-1 block">Filter Kelas</label>
+                      <div className="bg-gray-100 border border-gray-200 rounded-xl p-2 text-xs text-gray-400 font-medium text-center">
+                        Semua Staf / Guru
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-[11px] font-bold text-gray-500 mb-1 block">Cari Nama / ID</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Filter nama..."
+                        value={bulkSearchQuery}
+                        onChange={(e) => setBulkSearchQuery(e.target.value)}
+                        className="w-full bg-white border border-gray-200 rounded-xl p-2 pl-7 text-xs text-gray-800 focus:outline-none focus:border-amber-500"
+                      />
+                      <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-2.5" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Batch Tools / Quick Actions Bar */}
+                <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="font-extrabold text-amber-900 flex items-center gap-1.5 shrink-0">
+                    <Sparkles className="w-4 h-4 text-amber-600" />
+                    Atur Massal Semua yang Tampil:
+                  </div>
+                  
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      <span className="text-[11px] font-bold text-amber-800">Masuk:</span>
+                      <select
+                        onChange={(e) => {
+                          handleBatchSetStatusMasuk(e.target.value);
+                          e.target.value = "";
+                        }}
+                        defaultValue=""
+                        className="bg-white border border-amber-300 rounded-lg py-1 px-2 text-[11px] font-bold text-amber-900 cursor-pointer shadow-sm"
+                      >
+                        <option value="" disabled>-- Set Status Masuk --</option>
+                        <option value="Tepat Waktu">Tepat Waktu (07:00)</option>
+                        <option value="Terlambat">Terlambat (07:00)</option>
+                        <option value="Sakit">Sakit (-)</option>
+                        <option value="Izin">Izin (-)</option>
+                        <option value="Alfa">Alfa (-)</option>
+                        <option value="Lupa Scan Masuk">Lupa Scan Masuk</option>
+                        <option value="-">- (Kosongkan)</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <span className="text-[11px] font-bold text-amber-800">Pulang:</span>
+                      <select
+                        onChange={(e) => {
+                          handleBatchSetStatusPulang(e.target.value);
+                          e.target.value = "";
+                        }}
+                        defaultValue=""
+                        className="bg-white border border-amber-300 rounded-lg py-1 px-2 text-[11px] font-bold text-amber-900 cursor-pointer shadow-sm"
+                      >
+                        <option value="" disabled>-- Set Status Pulang --</option>
+                        <option value="Tepat Waktu">Tepat Waktu (15:30)</option>
+                        <option value="Terlambat">Terlambat</option>
+                        <option value="Lupa Scan Pulang">Lupa Scan Pulang</option>
+                        <option value="-">- (Kosongkan)</option>
+                      </select>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => loadBulkAttendanceData(editKategori, editTanggal, bulkFilterKelas)}
+                      className="bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 font-bold px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 transition-colors cursor-pointer shadow-sm"
+                      title="Reset dari server"
+                    >
+                      <RefreshCw className="w-3 h-3 text-amber-700" />
+                      Reset
+                    </button>
+                  </div>
+                </div>
+
+                {/* Editable Table */}
+                {loadingBulk ? (
+                  <div className="py-12 text-center text-gray-400 font-medium space-y-2">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto text-amber-500" />
+                    <p className="text-xs font-semibold text-gray-500">Memuat daftar {editKategori} & presensi...</p>
+                  </div>
+                ) : (
+                  <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm bg-white">
+                    <div className="max-h-[380px] overflow-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-slate-100 text-slate-700 uppercase font-extrabold sticky top-0 z-10 border-b border-gray-200 text-[10px]">
+                          <tr>
+                            <th className="py-2.5 px-3 w-10 text-center">#</th>
+                            <th className="py-2.5 px-3 min-w-[160px]">NIS / Nama {editKategori}</th>
+                            {editKategori === "Siswa" && <th className="py-2.5 px-3 min-w-[110px]">Kelas</th>}
+                            <th className="py-2.5 px-2 w-24 text-center">Jam Masuk</th>
+                            <th className="py-2.5 px-2 min-w-[140px]">Status Masuk</th>
+                            <th className="py-2.5 px-2 w-24 text-center">Jam Pulang</th>
+                            <th className="py-2.5 px-2 min-w-[140px]">Status Pulang</th>
+                            <th className="py-2.5 px-3 min-w-[140px]">Keterangan</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 text-xs text-gray-800">
+                          {bulkTableData
+                            .filter((item) => {
+                              if (!bulkSearchQuery) return true;
+                              return (
+                                item.nama_target.toLowerCase().includes(bulkSearchQuery.toLowerCase()) ||
+                                item.id_target.toLowerCase().includes(bulkSearchQuery.toLowerCase())
+                              );
+                            })
+                            .map((item, idx) => (
+                              <tr key={item.id_target} className="hover:bg-amber-50/40 transition-colors">
+                                <td className="py-2 px-3 text-center text-gray-400 font-mono text-[11px]">{idx + 1}</td>
+                                <td className="py-2 px-3">
+                                  <div className="font-bold text-gray-900 leading-tight">{item.nama_target}</div>
+                                  <div className="text-[10px] text-gray-400 font-mono">{item.id_target}</div>
+                                </td>
+                                {editKategori === "Siswa" && (
+                                  <td className="py-2 px-3 font-semibold text-gray-600 text-[11px]">
+                                    {item.kelas_jurusan}
+                                  </td>
+                                )}
+                                <td className="py-2 px-1">
+                                  <input
+                                    type="text"
+                                    value={item.jam_masuk}
+                                    onChange={(e) => handleUpdateBulkCell(item.id_target, "jam_masuk", e.target.value)}
+                                    className="w-full bg-gray-50 border border-gray-200 focus:border-amber-500 rounded-lg p-1.5 text-center text-xs font-mono font-bold focus:outline-none"
+                                  />
+                                </td>
+                                <td className="py-2 px-1">
+                                  <select
+                                    value={item.status_masuk}
+                                    onChange={(e) => handleUpdateBulkCell(item.id_target, "status_masuk", e.target.value)}
+                                    className="w-full bg-gray-50 border border-gray-200 focus:border-amber-500 rounded-lg p-1.5 text-xs font-bold text-gray-800 focus:outline-none cursor-pointer"
+                                  >
+                                    <option value="Tepat Waktu">Tepat Waktu</option>
+                                    <option value="Terlambat">Terlambat</option>
+                                    <option value="Sakit">Sakit</option>
+                                    <option value="Izin">Izin</option>
+                                    <option value="Alfa">Alfa</option>
+                                    <option value="Lupa Scan Masuk">Lupa Scan Masuk</option>
+                                    <option value="-">- (Belum Absen)</option>
+                                  </select>
+                                </td>
+                                <td className="py-2 px-1">
+                                  <input
+                                    type="text"
+                                    value={item.jam_pulang}
+                                    onChange={(e) => handleUpdateBulkCell(item.id_target, "jam_pulang", e.target.value)}
+                                    className="w-full bg-gray-50 border border-gray-200 focus:border-amber-500 rounded-lg p-1.5 text-center text-xs font-mono font-bold focus:outline-none"
+                                  />
+                                </td>
+                                <td className="py-2 px-1">
+                                  <select
+                                    value={item.status_pulang}
+                                    onChange={(e) => handleUpdateBulkCell(item.id_target, "status_pulang", e.target.value)}
+                                    className="w-full bg-gray-50 border border-gray-200 focus:border-amber-500 rounded-lg p-1.5 text-xs font-bold text-gray-800 focus:outline-none cursor-pointer"
+                                  >
+                                    <option value="Tepat Waktu">Tepat Waktu</option>
+                                    <option value="Terlambat">Terlambat</option>
+                                    <option value="Lupa Scan Pulang">Lupa Scan Pulang</option>
+                                    <option value="-">- (Belum Pulang)</option>
+                                  </select>
+                                </td>
+                                <td className="py-2 px-2">
+                                  <input
+                                    type="text"
+                                    placeholder="Opsional..."
+                                    value={item.ket}
+                                    onChange={(e) => handleUpdateBulkCell(item.id_target, "ket", e.target.value)}
+                                    className="w-full bg-gray-50 border border-gray-200 focus:border-amber-500 rounded-lg p-1.5 text-xs focus:outline-none"
+                                  />
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Footer */}
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-3 border-t border-gray-100">
+                  <div className="text-xs text-gray-500 font-medium">
+                    Total <strong>{bulkTableData.length}</strong> {editKategori} pada tanggal <strong>{editTanggal}</strong>
+                    {bulkFilterKelas !== "Semua" && ` (Kelas: ${bulkFilterKelas})`}
+                  </div>
+
+                  <div className="flex gap-2 w-full sm:w-auto justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowEditModal(false)}
+                      className="bg-gray-100 text-gray-600 font-bold text-xs px-4 py-2.5 rounded-xl hover:bg-gray-200 transition-colors cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      disabled={savingEdit || bulkTableData.length === 0}
+                      onClick={handleSaveBulkKehadiran}
+                      className="bg-amber-500 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl hover:bg-amber-600 transition-all shadow-md shadow-amber-500/10 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Save className="w-4 h-4" />
+                      {savingEdit ? "Menyimpan..." : "Simpan Semua Perubahan"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* SINGLE EDIT MODE (EXISTING FORM) */
+              <form onSubmit={handleSaveEditKehadiran} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+                {/* Category & Date Selector */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 mb-1 block">Kategori Entitas</label>
+                    <select
+                      disabled={isGuru}
+                      value={editKategori}
+                      onChange={(e) => {
+                        const cat = e.target.value as "Siswa" | "Guru";
+                        setEditKategori(cat);
+                        loadMasterForEdit(cat);
+                        setEditTargetId("");
+                      }}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500 cursor-pointer disabled:opacity-70"
+                    >
+                      <option value="Siswa">Siswa</option>
+                      <option value="Guru">Guru / Staf</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 mb-1 block">Tanggal Presensi</label>
+                    <input
+                      type="date"
+                      required
+                      value={editTanggal}
+                      onChange={(e) => handleTargetOrDateChange(editTargetId, e.target.value, editKategori)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500 cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                {/* Entity Search & Select */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-500 flex justify-between items-center">
+                    <span>Pilih {editKategori}</span>
+                    {editTargetId && (
+                      <span className="text-[10px] font-mono text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                        ID: {editTargetId}
+                      </span>
+                    )}
+                  </label>
+                  
+                  <div className="relative mb-1">
+                    <input 
+                      type="text"
+                      placeholder={`Cari nama / NIS ${editKategori}...`}
+                      value={editSearchQuery}
+                      onChange={(e) => setEditSearchQuery(e.target.value)}
+                      className="bg-gray-50 border border-gray-200 rounded-xl py-1.5 pl-8 pr-3 text-xs text-gray-700 w-full focus:outline-none focus:border-amber-500"
+                    />
+                    <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
+                  </div>
+
+                  <select 
+                    required
+                    value={editTargetId}
+                    onChange={(e) => handleTargetOrDateChange(e.target.value, editTanggal, editKategori)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="">-- Pilih {editKategori === "Siswa" ? "Siswa" : "Guru"} --</option>
+                    {editEntitiesList
+                      .filter(ent => {
+                        const name = ent.nama_siswa || ent.nama_guru || "";
+                        const id = ent.id_siswa || ent.id_guru || "";
+                        return (
+                          name.toLowerCase().includes(editSearchQuery.toLowerCase()) ||
+                          id.toLowerCase().includes(editSearchQuery.toLowerCase())
+                        );
+                      })
+                      .map((ent) => {
+                        const id = ent.id_siswa || ent.id_guru;
+                        const name = ent.nama_siswa || ent.nama_guru;
+                        const detail = editKategori === "Siswa" ? ` (${ent.kelas} ${ent.jurusan})` : "";
+                        return (
+                          <option key={id} value={id}>{id} - {name}{detail}</option>
+                        );
+                      })}
+                  </select>
+                </div>
+
+                {/* Attendance Details Grid */}
+                <div className="p-4 bg-slate-50 border border-slate-200/60 rounded-xl space-y-3">
+                  <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                    Rincian Kehadiran Masuk & Pulang
+                  </h4>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-600 mb-1 block">Jam Masuk</label>
+                      <input
+                        type="text"
+                        placeholder="07:00 atau -"
+                        value={editJamMasuk}
+                        onChange={(e) => setEditJamMasuk(e.target.value)}
+                        className="w-full bg-white border border-gray-200 rounded-xl py-1.5 px-2.5 text-xs text-gray-800 font-mono font-bold focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-600 mb-1 block">Status Masuk</label>
+                      <select
+                        value={editStatusMasuk}
+                        onChange={(e) => setEditStatusMasuk(e.target.value)}
+                        className="w-full bg-white border border-gray-200 rounded-xl py-1.5 px-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
+                      >
+                        <option value="Tepat Waktu">Tepat Waktu</option>
+                        <option value="Terlambat">Terlambat</option>
+                        <option value="Sakit">Sakit</option>
+                        <option value="Izin">Izin</option>
+                        <option value="Alfa">Alfa</option>
+                        <option value="Lupa Scan Masuk">Lupa Scan Masuk</option>
+                        <option value="-">- (Belum Absen)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-200/50">
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-600 mb-1 block">Jam Pulang</label>
+                      <input
+                        type="text"
+                        placeholder="15:30 atau -"
+                        value={editJamPulang}
+                        onChange={(e) => setEditJamPulang(e.target.value)}
+                        className="w-full bg-white border border-gray-200 rounded-xl py-1.5 px-2.5 text-xs text-gray-800 font-mono font-bold focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-600 mb-1 block">Status Pulang</label>
+                      <select
+                        value={editStatusPulang}
+                        onChange={(e) => setEditStatusPulang(e.target.value)}
+                        className="w-full bg-white border border-gray-200 rounded-xl py-1.5 px-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
+                      >
+                        <option value="Tepat Waktu">Tepat Waktu</option>
+                        <option value="Terlambat">Terlambat</option>
+                        <option value="Lupa Scan Pulang">Lupa Scan Pulang</option>
+                        <option value="-">- (Belum Pulang)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Keterangan */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-500">Catatan / Keterangan Koreksi</label>
+                  <textarea 
+                    value={editKet}
+                    onChange={(e) => setEditKet(e.target.value)}
+                    placeholder="Contoh: Koreksi jam masuk karena gangguan scanner, Izin lomba, dll."
+                    rows={2}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-between items-center pt-3 border-t border-gray-100 gap-2">
+                  <div>
+                    {editTargetId && (
+                      <button 
+                        type="button"
+                        disabled={savingEdit}
+                        onClick={handleDeleteKehadiran}
+                        className="bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 font-bold text-xs px-3 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                        title="Hapus record presensi tanggal ini"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Hapus Presensi
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button 
+                      type="button"
+                      onClick={() => setShowEditModal(false)}
+                      className="bg-gray-100 text-gray-600 font-bold text-xs px-4 py-2.5 rounded-xl hover:bg-gray-200 transition-colors cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button 
+                      type="submit"
+                      disabled={savingEdit || !editTargetId}
+                      className="bg-amber-500 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl hover:bg-amber-600 transition-all shadow-md shadow-amber-500/10 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      {savingEdit ? "Menyimpan..." : "Simpan Perubahan"}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
