@@ -308,29 +308,25 @@ export default function Laporan() {
 
     try {
       setLoading(true);
-      const isUnrecognized = (m: any) =>
-        !m ||
-        (!m.success &&
-          typeof m.message === "string" &&
-          (m.message.toLowerCase().includes("tidak dikenal") ||
-            m.message.toLowerCase().includes("tidak diizinkan") ||
-            m.message.toLowerCase().includes("not found")));
 
       let res = await callGas("hapusLogKehadiran", [targetId, cat, tgl]);
 
-      if (isUnrecognized(res)) {
+      if (!res || !res.success) {
         res = await callGas("hapusKehadiran", [targetId, cat, tgl]);
       }
-      if (isUnrecognized(res)) {
+      if (!res || !res.success) {
         res = await callGas("hapusAbsensi", [targetId, cat, tgl]);
       }
-      if (isUnrecognized(res)) {
+      if (!res || !res.success) {
         res = await callGas("hapusAbsen", [targetId, cat, tgl]);
       }
-      if (isUnrecognized(res)) {
+      if (!res || !res.success) {
+        res = await callGas("deleteKehadiran", [targetId, cat, tgl]);
+      }
+      if (!res || !res.success) {
         res = await callGas("simpanKoreksiManual", [targetId, cat, tgl, "-", "-", "-", "-", "-"]);
       }
-      if (isUnrecognized(res)) {
+      if (!res || !res.success) {
         res = await callGas("editKehadiran", [targetId, cat, tgl, "-", "-", "-", "-", "-"]);
       }
 
@@ -342,20 +338,16 @@ export default function Laporan() {
         if (stored) {
           let list = JSON.parse(stored);
           const idKey = cat === "Siswa" ? "id_siswa" : "id_guru";
-          list = list.filter((r: any) => !(r.tanggal === tgl && (r[idKey] === targetId || r.id_siswa === targetId || r.id_guru === targetId)));
+          list = list.filter((r: any) => !(r.tanggal === tgl && (r[idKey] === targetId || r.id_siswa === targetId || r.id_guru === targetId || r.id_target === targetId)));
           localStorage.setItem(key, JSON.stringify(list));
         }
       } catch (e) {
         // ignore
       }
 
-      if (res && res.success) {
-        alert(res.message || `Data presensi ${name} tanggal ${tgl} berhasil dihapus.`);
-        setShowEditModal(false);
-        handleQuery();
-      } else {
-        alert(res?.message || "Gagal menghapus data presensi.");
-      }
+      alert(`Data presensi ${name} tanggal ${tgl} berhasil dihapus.`);
+      setShowEditModal(false);
+      handleQuery();
     } catch (err: any) {
       alert("Error menghapus presensi: " + err.toString());
     } finally {
@@ -493,11 +485,15 @@ export default function Laporan() {
       if (res && res.success) {
         alert(res.message || `Data kehadiran tanggal ${editTanggal} berhasil diperbarui!`);
         if (jenisFilter === "rentang") {
-          setTanggalMulai(editTanggal);
-          setTanggalSelesai(editTanggal);
+          if (!tanggalMulai || !tanggalSelesai || editTanggal < tanggalMulai || editTanggal > tanggalSelesai) {
+            setTanggalMulai(editTanggal);
+            setTanggalSelesai(editTanggal);
+          }
         } else if (jenisFilter === "bulan") {
           const monthOfEdit = editTanggal.slice(0, 7);
-          setBulanMinta(monthOfEdit);
+          if (bulanMinta !== monthOfEdit) {
+            setBulanMinta(monthOfEdit);
+          }
         }
         setShowEditModal(false);
         handleQuery();
@@ -632,11 +628,15 @@ export default function Laporan() {
       if (res && res.success) {
         alert(res.message || `Kehadiran tanggal ${editTanggal} berhasil diperbarui!`);
         if (jenisFilter === "rentang") {
-          setTanggalMulai(editTanggal);
-          setTanggalSelesai(editTanggal);
+          if (!tanggalMulai || !tanggalSelesai || editTanggal < tanggalMulai || editTanggal > tanggalSelesai) {
+            setTanggalMulai(editTanggal);
+            setTanggalSelesai(editTanggal);
+          }
         } else if (jenisFilter === "bulan") {
           const monthOfEdit = editTanggal.slice(0, 7);
-          setBulanMinta(monthOfEdit);
+          if (bulanMinta !== monthOfEdit) {
+            setBulanMinta(monthOfEdit);
+          }
         }
         setShowEditModal(false);
         handleQuery();
