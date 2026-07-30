@@ -665,7 +665,10 @@ function callMock(action: string, args: any[]): any {
     }
 
     case "hapusKehadiran":
-    case "hapusLogKehadiran": {
+    case "hapusLogKehadiran":
+    case "hapusAbsensi":
+    case "hapusAbsen":
+    case "deleteKehadiran": {
       const [idTarget, kategori, tanggal] = args;
       const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
       let reports = getStorage(reportsKey);
