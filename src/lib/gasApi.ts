@@ -473,7 +473,7 @@ function callMock(action: string, args: any[]): any {
       const reports = getStorage(reportsKey);
       
       const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
-      const index = reports.findIndex((r: any) => r.tanggal === tgl && r[idKey] === idTarget);
+      const index = reports.findIndex((r: any) => r.tanggal === tgl && (r[idKey] === idTarget || r.id_siswa === idTarget || r.id_guru === idTarget || r.id_target === idTarget));
       
       if (index !== -1) {
         reports[index].tanggal = tgl;
@@ -488,7 +488,7 @@ function callMock(action: string, args: any[]): any {
       } else {
         const masterKey = kategori === "Siswa" ? "data_siswa" : "data_guru";
         const mList = getStorage(masterKey);
-        const user = mList.find((x: any) => x[idKey] === idTarget);
+        const user = mList.find((x: any) => x[idKey] === idTarget || x.id_siswa === idTarget || x.id_guru === idTarget);
         if (user) {
           const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
           const nama = user[nameKey];
@@ -542,19 +542,29 @@ function callMock(action: string, args: any[]): any {
         ket: arg7 || "-"
       };
       
-      const index = reports.findIndex((r: any) => r.tanggal === tgl && r[idKey] === idTarget);
+      const isAllEmpty = (dataObj.jam_masuk === "-" || !dataObj.jam_masuk) &&
+                         (dataObj.status_masuk === "-" || !dataObj.status_masuk) &&
+                         (dataObj.jam_pulang === "-" || !dataObj.jam_pulang) &&
+                         (dataObj.status_pulang === "-" || !dataObj.status_pulang) &&
+                         (dataObj.ket === "-" || !dataObj.ket || dataObj.ket === "");
+
+      const index = reports.findIndex((r: any) => r.tanggal === tgl && (r[idKey] === idTarget || r.id_siswa === idTarget || r.id_guru === idTarget || r.id_target === idTarget));
       
       if (index !== -1) {
-        reports[index].tanggal = tgl;
-        if (dataObj.jam_masuk !== undefined) reports[index].jam_masuk = dataObj.jam_masuk;
-        if (dataObj.status_masuk !== undefined) reports[index].status_masuk = dataObj.status_masuk;
-        if (dataObj.jam_pulang !== undefined) reports[index].jam_pulang = dataObj.jam_pulang;
-        if (dataObj.status_pulang !== undefined) reports[index].status_pulang = dataObj.status_pulang;
-        if (dataObj.ket !== undefined) reports[index].ket = dataObj.ket;
-      } else {
+        if (isAllEmpty) {
+          reports.splice(index, 1);
+        } else {
+          reports[index].tanggal = tgl;
+          if (dataObj.jam_masuk !== undefined) reports[index].jam_masuk = dataObj.jam_masuk;
+          if (dataObj.status_masuk !== undefined) reports[index].status_masuk = dataObj.status_masuk;
+          if (dataObj.jam_pulang !== undefined) reports[index].jam_pulang = dataObj.jam_pulang;
+          if (dataObj.status_pulang !== undefined) reports[index].status_pulang = dataObj.status_pulang;
+          if (dataObj.ket !== undefined) reports[index].ket = dataObj.ket;
+        }
+      } else if (!isAllEmpty) {
         const masterKey = kategori === "Siswa" ? "data_siswa" : "data_guru";
         const mList = getStorage(masterKey);
-        const user = mList.find((x: any) => x[idKey] === idTarget);
+        const user = mList.find((x: any) => x[idKey] === idTarget || x.id_siswa === idTarget || x.id_guru === idTarget);
         if (user) {
           const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
           const nama = user[nameKey];
@@ -604,7 +614,7 @@ function callMock(action: string, args: any[]): any {
         const idTarget = item.id_target;
         if (!idTarget) return;
 
-        const index = reports.findIndex((r: any) => r.tanggal === tgl && r[idKey] === idTarget);
+        const index = reports.findIndex((r: any) => r.tanggal === tgl && (r[idKey] === idTarget || r.id_siswa === idTarget || r.id_guru === idTarget || r.id_target === idTarget));
         
         const hasData = (item.jam_masuk && item.jam_masuk !== "-") || 
                         (item.status_masuk && item.status_masuk !== "-") ||
@@ -625,7 +635,7 @@ function callMock(action: string, args: any[]): any {
           }
         } else {
           if (hasData) {
-            const user = mList.find((x: any) => x[idKey] === idTarget);
+            const user = mList.find((x: any) => x[idKey] === idTarget || x.id_siswa === idTarget || x.id_guru === idTarget);
             if (user) {
               const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
               const nama = user[nameKey];
@@ -674,7 +684,7 @@ function callMock(action: string, args: any[]): any {
       let reports = getStorage(reportsKey);
       const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
       
-      reports = reports.filter((r: any) => !(r.tanggal === tanggal && r[idKey] === idTarget));
+      reports = reports.filter((r: any) => !(r.tanggal === tanggal && (r[idKey] === idTarget || r.id_siswa === idTarget || r.id_guru === idTarget || r.id_target === idTarget)));
       setStorage(reportsKey, reports);
       return { success: true, message: `Data presensi ${kategori} pada tanggal ${tanggal} berhasil dihapus.` };
     }
