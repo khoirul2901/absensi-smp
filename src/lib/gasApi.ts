@@ -492,7 +492,7 @@ function callMock(action: string, args: any[]): any {
         if (user) {
           const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
           const nama = user[nameKey];
-          const classKey = kategori === "Siswa" ? `${user.kelas} - ${user.jurusan}` : "-";
+          const classKey = kategori === "Siswa" ? `${user.kelas} ${user.jurusan}` : "-";
           const idLog = "LOG-" + new Date().getTime();
           
           const newRow = kategori === "Siswa" ? {
@@ -558,7 +558,7 @@ function callMock(action: string, args: any[]): any {
         if (user) {
           const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
           const nama = user[nameKey];
-          const classKey = kategori === "Siswa" ? `${user.kelas} - ${user.jurusan}` : "-";
+          const classKey = kategori === "Siswa" ? `${user.kelas} ${user.jurusan}` : "-";
           const idLog = "LOG-" + new Date().getTime();
           
           const newRow = kategori === "Siswa" ? {
@@ -664,6 +664,7 @@ function callMock(action: string, args: any[]): any {
       return { success: true, message: `Berhasil memperbarui ${rows.length} data kehadiran tanggal ${tgl}!` };
     }
 
+    case "hapusKehadiran":
     case "hapusLogKehadiran": {
       const [idTarget, kategori, tanggal] = args;
       const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
