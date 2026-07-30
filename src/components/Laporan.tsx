@@ -189,9 +189,72 @@ export default function Laporan() {
   const loadBulkAttendanceData = async (cat: "Siswa" | "Guru", tgl: string, cls: string) => {
     try {
       setLoadingBulk(true);
+      let liveList: any[] = [];
       const res = await callGas("getLiveAbsenHariIni", [cat, tgl, cls]);
       if (res && res.success && Array.isArray(res.data)) {
-        setBulkTableData(res.data);
+        liveList = res.data;
+      }
+
+      // Query existing report records for exact date from database
+      const reportsRes = await callGas("getLaporanFilter", [cat, cls, "rentang", tgl, tgl, ""]);
+      const existingLogs = (reportsRes && reportsRes.success && Array.isArray(reportsRes.data)) ? reportsRes.data : [];
+
+      if (liveList.length > 0) {
+        const mapped = liveList.map((item: any) => {
+          const log = existingLogs.find((r: any) => (r.id_siswa === item.id_target || r.id_guru === item.id_target));
+          return {
+            id_target: item.id_target,
+            nama_target: item.nama_target,
+            kelas_jurusan: item.kelas_jurusan || "-",
+            jam_masuk: log?.jam_masuk || item.jam_masuk || "-",
+            status_masuk: log?.status_masuk || item.status_masuk || "-",
+            jam_pulang: log?.jam_pulang || item.jam_pulang || "-",
+            status_pulang: log?.status_pulang || item.status_pulang || "-",
+            ket: log?.ket || item.ket || "-"
+          };
+        });
+        setBulkTableData(mapped);
+      } else if (existingLogs.length > 0) {
+        const idKey = cat === "Siswa" ? "id_siswa" : "id_guru";
+        const mapped = existingLogs.map((log: any) => ({
+          id_target: log[idKey] || log.id_siswa || log.id_guru,
+          nama_target: log.nama_siswa || log.nama_guru,
+          kelas_jurusan: log.kelas_jurusan || "-",
+          jam_masuk: log.jam_masuk || "-",
+          status_masuk: log.status_masuk || "-",
+          jam_pulang: log.jam_pulang || "-",
+          status_pulang: log.status_pulang || "-",
+          ket: log.ket || "-"
+        }));
+        setBulkTableData(mapped);
+      } else {
+        // Fallback to getDataMaster if live & reports empty
+        const masterRes = await callGas("getDataMaster", [cat]);
+        if (masterRes && masterRes.success && Array.isArray(masterRes.data)) {
+          const idKey = cat === "Siswa" ? "id_siswa" : "id_guru";
+          const nameKey = cat === "Siswa" ? "nama_siswa" : "nama_guru";
+          const mapped = masterRes.data
+            .filter((m: any) => {
+              if (cat === "Siswa" && cls && cls !== "Semua") {
+                const k = `${m.kelas} ${m.jurusan}`;
+                return k.toLowerCase().includes(cls.toLowerCase());
+              }
+              return true;
+            })
+            .map((m: any) => ({
+              id_target: m[idKey],
+              nama_target: m[nameKey],
+              kelas_jurusan: cat === "Siswa" ? `${m.kelas} ${m.jurusan}` : "-",
+              jam_masuk: "-",
+              status_masuk: "-",
+              jam_pulang: "-",
+              status_pulang: "-",
+              ket: "-"
+            }));
+          setBulkTableData(mapped);
+        } else {
+          setBulkTableData([]);
+        }
       }
     } catch (err) {
       console.error("Gagal memuat data presensi massal:", err);
@@ -314,7 +377,39 @@ export default function Laporan() {
     if (bulkTableData.length === 0) return;
     try {
       setSavingEdit(true);
-      const res = await callGas("editKehadiranBulk", [bulkTableData, editKategori, editTanggal]);
+      let res = await callGas("editKehadiranBulk", [bulkTableData, editKategori, editTanggal]);
+
+      if (res && !res.success && typeof res.message === "string" && res.message.toLowerCase().includes("tidak dikenal")) {
+        let successCount = 0;
+        for (const item of bulkTableData) {
+          if (!item.id_target) continue;
+          let itemRes = await callGas("editKehadiran", [
+            item.id_target,
+            editKategori,
+            editTanggal,
+            item.jam_masuk || "-",
+            item.status_masuk || "-",
+            item.jam_pulang || "-",
+            item.status_pulang || "-",
+            item.ket || "-"
+          ]);
+
+          if (itemRes && !itemRes.success && typeof itemRes.message === "string" && itemRes.message.toLowerCase().includes("tidak dikenal")) {
+            if (item.status_masuk && item.status_masuk !== "-") {
+              itemRes = await callGas("simpanAbsenManual", [item.id_target, editKategori, "Masuk", editTanggal, item.status_masuk, item.ket || "-"]);
+            }
+            if (item.status_pulang && item.status_pulang !== "-") {
+              itemRes = await callGas("simpanAbsenManual", [item.id_target, editKategori, "Pulang", editTanggal, item.status_pulang, item.ket || "-"]);
+            }
+          }
+
+          if (itemRes && itemRes.success) {
+            successCount++;
+          }
+        }
+        res = { success: true, message: `Berhasil memperbarui ${successCount} data presensi!` };
+      }
+
       if (res && res.success) {
         alert(res.message || "Data kehadiran berhasil diperbarui!");
         setShowEditModal(false);
@@ -359,7 +454,7 @@ export default function Laporan() {
 
     try {
       setSavingEdit(true);
-      const res = await callGas("editKehadiranFull", [
+      let res = await callGas("editKehadiranFull", [
         editTargetId,
         editKategori,
         editTanggal,
@@ -371,6 +466,47 @@ export default function Laporan() {
           ket: editKet || "-"
         }
       ]);
+
+      if (res && !res.success && typeof res.message === "string" && res.message.toLowerCase().includes("tidak dikenal")) {
+        res = await callGas("editKehadiran", [
+          editTargetId,
+          editKategori,
+          editTanggal,
+          editJamMasuk || "-",
+          editStatusMasuk || "-",
+          editJamPulang || "-",
+          editStatusPulang || "-",
+          editKet || "-"
+        ]);
+      }
+
+      if (res && !res.success && typeof res.message === "string" && res.message.toLowerCase().includes("tidak dikenal")) {
+        let resMasuk: any = { success: true };
+        if (editStatusMasuk && editStatusMasuk !== "-") {
+          resMasuk = await callGas("simpanAbsenManual", [
+            editTargetId,
+            editKategori,
+            "Masuk",
+            editTanggal,
+            editStatusMasuk,
+            editKet || "-"
+          ]);
+        }
+        let resPulang: any = { success: true };
+        if (editStatusPulang && editStatusPulang !== "-") {
+          resPulang = await callGas("simpanAbsenManual", [
+            editTargetId,
+            editKategori,
+            "Pulang",
+            editTanggal,
+            editStatusPulang,
+            editKet || "-"
+          ]);
+        }
+        res = (resMasuk && resMasuk.success) || (resPulang && resPulang.success)
+          ? { success: true, message: "Kehadiran berhasil diperbarui!" }
+          : (resMasuk || resPulang);
+      }
 
       if (res && res.success) {
         alert(res.message || "Kehadiran berhasil diperbarui!");
