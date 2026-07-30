@@ -308,9 +308,45 @@ export default function Laporan() {
 
     try {
       setLoading(true);
+      const isUnrecognized = (m: any) =>
+        !m ||
+        (!m.success &&
+          typeof m.message === "string" &&
+          (m.message.toLowerCase().includes("tidak dikenal") ||
+            m.message.toLowerCase().includes("tidak diizinkan") ||
+            m.message.toLowerCase().includes("not found")));
+
       let res = await callGas("hapusLogKehadiran", [targetId, cat, tgl]);
-      if (res && !res.success && typeof res.message === "string" && res.message.toLowerCase().includes("tidak dikenal")) {
+
+      if (isUnrecognized(res)) {
         res = await callGas("hapusKehadiran", [targetId, cat, tgl]);
+      }
+      if (isUnrecognized(res)) {
+        res = await callGas("hapusAbsensi", [targetId, cat, tgl]);
+      }
+      if (isUnrecognized(res)) {
+        res = await callGas("hapusAbsen", [targetId, cat, tgl]);
+      }
+      if (isUnrecognized(res)) {
+        res = await callGas("simpanKoreksiManual", [targetId, cat, tgl, "-", "-", "-", "-", "-"]);
+      }
+      if (isUnrecognized(res)) {
+        res = await callGas("editKehadiran", [targetId, cat, tgl, "-", "-", "-", "-", "-"]);
+      }
+
+      // Cleanup local mock if present
+      try {
+        const reportsKey = cat === "Siswa" ? "laporan_siswa" : "laporan_guru";
+        const key = getStorageKey("MOCK_" + reportsKey);
+        const stored = localStorage.getItem(key);
+        if (stored) {
+          let list = JSON.parse(stored);
+          const idKey = cat === "Siswa" ? "id_siswa" : "id_guru";
+          list = list.filter((r: any) => !(r.tanggal === tgl && (r[idKey] === targetId || r.id_siswa === targetId || r.id_guru === targetId)));
+          localStorage.setItem(key, JSON.stringify(list));
+        }
+      } catch (e) {
+        // ignore
       }
 
       if (res && res.success) {
