@@ -467,7 +467,8 @@ function callMock(action: string, args: any[]): any {
     case "simpanAbsenManual": {
       const [idTarget, kategori, mode, tanggal, status, keterangan] = args;
       const tgl = tanggal || new Date().toISOString().split("T")[0];
-      const jam = new Date().toTimeString().slice(0, 5);
+      const jamDefault = mode === "Masuk" ? "07:00" : "15:30";
+      const jam = (status === "Sakit" || status === "Izin" || status === "Alfa" || status === "-") ? "-" : jamDefault;
       const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
       const reports = getStorage(reportsKey);
       
@@ -475,6 +476,7 @@ function callMock(action: string, args: any[]): any {
       const index = reports.findIndex((r: any) => r.tanggal === tgl && r[idKey] === idTarget);
       
       if (index !== -1) {
+        reports[index].tanggal = tgl;
         if (mode === "Masuk") {
           reports[index].jam_masuk = jam;
           reports[index].status_masuk = status;
@@ -520,9 +522,10 @@ function callMock(action: string, args: any[]): any {
       }
       
       setStorage(reportsKey, reports);
-      return { success: true, message: "Koreksi manual disimpan (SIMULASI)!" };
+      return { success: true, message: `Koreksi manual tanggal ${tgl} disimpan!` };
     }
 
+    case "simpanKoreksiManual":
     case "editKehadiran":
     case "editKehadiranFull": {
       const [idTarget, kategori, tanggal, arg3, arg4, arg5, arg6, arg7] = args;
@@ -585,7 +588,7 @@ function callMock(action: string, args: any[]): any {
       }
       
       setStorage(reportsKey, reports);
-      return { success: true, message: `Kehadiran ${kategori} tanggal ${tgl} berhasil diperbarui (SIMULASI)!` };
+      return { success: true, message: `Kehadiran ${kategori} tanggal ${tgl} berhasil diperbarui!` };
     }
 
     case "editKehadiranBulk": {
