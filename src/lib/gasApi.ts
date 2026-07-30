@@ -523,12 +523,21 @@ function callMock(action: string, args: any[]): any {
       return { success: true, message: "Koreksi manual disimpan (SIMULASI)!" };
     }
 
+    case "editKehadiran":
     case "editKehadiranFull": {
-      const [idTarget, kategori, tanggal, dataObj] = args;
+      const [idTarget, kategori, tanggal, arg3, arg4, arg5, arg6, arg7] = args;
       const tgl = tanggal || new Date().toISOString().split("T")[0];
       const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
       const reports = getStorage(reportsKey);
       const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
+
+      const dataObj = typeof arg3 === "object" && arg3 !== null ? arg3 : {
+        jam_masuk: arg3 || "-",
+        status_masuk: arg4 || "-",
+        jam_pulang: arg5 || "-",
+        status_pulang: arg6 || "-",
+        ket: arg7 || "-"
+      };
       
       const index = reports.findIndex((r: any) => r.tanggal === tgl && r[idKey] === idTarget);
       
