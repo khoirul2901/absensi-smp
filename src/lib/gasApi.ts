@@ -523,6 +523,141 @@ function callMock(action: string, args: any[]): any {
       return { success: true, message: "Koreksi manual disimpan (SIMULASI)!" };
     }
 
+    case "editKehadiranFull": {
+      const [idTarget, kategori, tanggal, dataObj] = args;
+      const tgl = tanggal || new Date().toISOString().split("T")[0];
+      const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
+      const reports = getStorage(reportsKey);
+      const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
+      
+      const index = reports.findIndex((r: any) => r.tanggal === tgl && r[idKey] === idTarget);
+      
+      if (index !== -1) {
+        reports[index].tanggal = tgl;
+        if (dataObj.jam_masuk !== undefined) reports[index].jam_masuk = dataObj.jam_masuk;
+        if (dataObj.status_masuk !== undefined) reports[index].status_masuk = dataObj.status_masuk;
+        if (dataObj.jam_pulang !== undefined) reports[index].jam_pulang = dataObj.jam_pulang;
+        if (dataObj.status_pulang !== undefined) reports[index].status_pulang = dataObj.status_pulang;
+        if (dataObj.ket !== undefined) reports[index].ket = dataObj.ket;
+      } else {
+        const masterKey = kategori === "Siswa" ? "data_siswa" : "data_guru";
+        const mList = getStorage(masterKey);
+        const user = mList.find((x: any) => x[idKey] === idTarget);
+        if (user) {
+          const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
+          const nama = user[nameKey];
+          const classKey = kategori === "Siswa" ? `${user.kelas} - ${user.jurusan}` : "-";
+          const idLog = "LOG-" + new Date().getTime();
+          
+          const newRow = kategori === "Siswa" ? {
+            id_log_siswa: idLog,
+            tanggal: tgl,
+            id_siswa: idTarget,
+            nama_siswa: nama,
+            kelas_jurusan: classKey,
+            jam_masuk: dataObj.jam_masuk || "-",
+            status_masuk: dataObj.status_masuk || "-",
+            jam_pulang: dataObj.jam_pulang || "-",
+            status_pulang: dataObj.status_pulang || "-",
+            ket: dataObj.ket || "-"
+          } : {
+            id_log_guru: idLog,
+            tanggal: tgl,
+            id_guru: idTarget,
+            nama_guru: nama,
+            jam_masuk: dataObj.jam_masuk || "-",
+            status_masuk: dataObj.status_masuk || "-",
+            jam_pulang: dataObj.jam_pulang || "-",
+            status_pulang: dataObj.status_pulang || "-",
+            ket: dataObj.ket || "-"
+          };
+          reports.push(newRow);
+        }
+      }
+      
+      setStorage(reportsKey, reports);
+      return { success: true, message: `Kehadiran ${kategori} tanggal ${tgl} berhasil diperbarui (SIMULASI)!` };
+    }
+
+    case "editKehadiranBulk": {
+      const [rows, kategori, tanggal] = args;
+      const tgl = tanggal || new Date().toISOString().split("T")[0];
+      const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
+      const reports = getStorage(reportsKey);
+      const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
+      const masterKey = kategori === "Siswa" ? "data_siswa" : "data_guru";
+      const mList = getStorage(masterKey);
+
+      rows.forEach((item: any) => {
+        const idTarget = item.id_target;
+        if (!idTarget) return;
+
+        const index = reports.findIndex((r: any) => r.tanggal === tgl && r[idKey] === idTarget);
+        if (index !== -1) {
+          reports[index].jam_masuk = item.jam_masuk || "-";
+          reports[index].status_masuk = item.status_masuk || "-";
+          reports[index].jam_pulang = item.jam_pulang || "-";
+          reports[index].status_pulang = item.status_pulang || "-";
+          reports[index].ket = item.ket || "-";
+        } else {
+          // If not existing yet, create a new record if there is actual attendance or status entered
+          const hasData = (item.jam_masuk && item.jam_masuk !== "-") || 
+                          (item.status_masuk && item.status_masuk !== "-") ||
+                          (item.jam_pulang && item.jam_pulang !== "-") ||
+                          (item.status_pulang && item.status_pulang !== "-") ||
+                          (item.ket && item.ket !== "-");
+                          
+          if (hasData) {
+            const user = mList.find((x: any) => x[idKey] === idTarget);
+            if (user) {
+              const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
+              const nama = user[nameKey];
+              const classKey = kategori === "Siswa" ? `${user.kelas} ${user.jurusan}` : "-";
+              const idLog = "LOG-" + new Date().getTime() + "-" + Math.floor(Math.random() * 1000);
+
+              const newRow = kategori === "Siswa" ? {
+                id_log_siswa: idLog,
+                tanggal: tgl,
+                id_siswa: idTarget,
+                nama_siswa: nama,
+                kelas_jurusan: classKey,
+                jam_masuk: item.jam_masuk || "-",
+                status_masuk: item.status_masuk || "-",
+                jam_pulang: item.jam_pulang || "-",
+                status_pulang: item.status_pulang || "-",
+                ket: item.ket || "-"
+              } : {
+                id_log_guru: idLog,
+                tanggal: tgl,
+                id_guru: idTarget,
+                nama_guru: nama,
+                jam_masuk: item.jam_masuk || "-",
+                status_masuk: item.status_masuk || "-",
+                jam_pulang: item.jam_pulang || "-",
+                status_pulang: item.status_pulang || "-",
+                ket: item.ket || "-"
+              };
+              reports.push(newRow);
+            }
+          }
+        }
+      });
+
+      setStorage(reportsKey, reports);
+      return { success: true, message: `Berhasil memperbarui ${rows.length} data kehadiran tanggal ${tgl} (SIMULASI)!` };
+    }
+
+    case "hapusLogKehadiran": {
+      const [idTarget, kategori, tanggal] = args;
+      const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
+      let reports = getStorage(reportsKey);
+      const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
+      
+      reports = reports.filter((r: any) => !(r.tanggal === tanggal && r[idKey] === idTarget));
+      setStorage(reportsKey, reports);
+      return { success: true, message: `Data presensi ${kategori} pada tanggal ${tanggal} berhasil dihapus (SIMULASI).` };
+    }
+
     case "simpanBulkAbsenManual": {
       const [ids, kategori, mode, tanggal, status, keterangan] = args;
       ids.forEach((idTarget: string) => {
