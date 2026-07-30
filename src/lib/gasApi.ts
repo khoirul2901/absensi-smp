@@ -18,7 +18,7 @@ export function setGasUrl(url: string): void {
 
 export function getGasToken(): string {
   // Ganti nilai di bawah dengan Token Anda, default "sias_token_smkalhikam"
-  return "sias_token_smpalhikam";
+  return "sias_token_smPalhikam";
 }
 
 export function getStorageKey(baseKey: string): string {
@@ -583,7 +583,7 @@ function callMock(action: string, args: any[]): any {
       const [rows, kategori, tanggal] = args;
       const tgl = tanggal || new Date().toISOString().split("T")[0];
       const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
-      const reports = getStorage(reportsKey);
+      let reports = getStorage(reportsKey);
       const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
       const masterKey = kategori === "Siswa" ? "data_siswa" : "data_guru";
       const mList = getStorage(masterKey);
@@ -593,20 +593,25 @@ function callMock(action: string, args: any[]): any {
         if (!idTarget) return;
 
         const index = reports.findIndex((r: any) => r.tanggal === tgl && r[idKey] === idTarget);
+        
+        const hasData = (item.jam_masuk && item.jam_masuk !== "-") || 
+                        (item.status_masuk && item.status_masuk !== "-") ||
+                        (item.jam_pulang && item.jam_pulang !== "-") ||
+                        (item.status_pulang && item.status_pulang !== "-") ||
+                        (item.ket && item.ket !== "-");
+
         if (index !== -1) {
-          reports[index].jam_masuk = item.jam_masuk || "-";
-          reports[index].status_masuk = item.status_masuk || "-";
-          reports[index].jam_pulang = item.jam_pulang || "-";
-          reports[index].status_pulang = item.status_pulang || "-";
-          reports[index].ket = item.ket || "-";
+          if (hasData) {
+            reports[index].jam_masuk = item.jam_masuk || "-";
+            reports[index].status_masuk = item.status_masuk || "-";
+            reports[index].jam_pulang = item.jam_pulang || "-";
+            reports[index].status_pulang = item.status_pulang || "-";
+            reports[index].ket = item.ket || "-";
+          } else {
+            // Remove from reports if all fields set to empty (-)
+            reports = reports.filter((_: any, idx: number) => idx !== index);
+          }
         } else {
-          // If not existing yet, create a new record if there is actual attendance or status entered
-          const hasData = (item.jam_masuk && item.jam_masuk !== "-") || 
-                          (item.status_masuk && item.status_masuk !== "-") ||
-                          (item.jam_pulang && item.jam_pulang !== "-") ||
-                          (item.status_pulang && item.status_pulang !== "-") ||
-                          (item.ket && item.ket !== "-");
-                          
           if (hasData) {
             const user = mList.find((x: any) => x[idKey] === idTarget);
             if (user) {
@@ -644,7 +649,7 @@ function callMock(action: string, args: any[]): any {
       });
 
       setStorage(reportsKey, reports);
-      return { success: true, message: `Berhasil memperbarui ${rows.length} data kehadiran tanggal ${tgl} (SIMULASI)!` };
+      return { success: true, message: `Berhasil memperbarui ${rows.length} data kehadiran tanggal ${tgl}!` };
     }
 
     case "hapusLogKehadiran": {
@@ -655,7 +660,7 @@ function callMock(action: string, args: any[]): any {
       
       reports = reports.filter((r: any) => !(r.tanggal === tanggal && r[idKey] === idTarget));
       setStorage(reportsKey, reports);
-      return { success: true, message: `Data presensi ${kategori} pada tanggal ${tanggal} berhasil dihapus (SIMULASI).` };
+      return { success: true, message: `Data presensi ${kategori} pada tanggal ${tanggal} berhasil dihapus.` };
     }
 
     case "simpanBulkAbsenManual": {
@@ -663,7 +668,7 @@ function callMock(action: string, args: any[]): any {
       ids.forEach((idTarget: string) => {
         callMock("simpanAbsenManual", [idTarget, kategori, mode, tanggal, status, keterangan]);
       });
-      return { success: true, message: `Berhasil update ${ids.length} data absensi (SIMULASI).` };
+      return { success: true, message: `Berhasil update ${ids.length} data absensi.` };
     }
 
     case "getLiveAbsenHariIni": {
@@ -689,7 +694,8 @@ function callMock(action: string, args: any[]): any {
           jam_masuk: rep.jam_masuk || "-",
           status_masuk: rep.status_masuk || "-",
           jam_pulang: rep.jam_pulang || "-",
-          status_pulang: rep.status_pulang || "-"
+          status_pulang: rep.status_pulang || "-",
+          ket: rep.ket || "-"
         };
       });
       
