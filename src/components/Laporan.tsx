@@ -191,23 +191,7 @@ export default function Laporan() {
       setLoadingBulk(true);
       const res = await callGas("getLiveAbsenHariIni", [cat, tgl, cls]);
       if (res && res.success && Array.isArray(res.data)) {
-        const reportsRes = await callGas("getLaporanFilter", [cat, "Semua", "rentang", tgl, tgl, ""]);
-        const existingLogs = (reportsRes && reportsRes.success && Array.isArray(reportsRes.data)) ? reportsRes.data : [];
-
-        const mapped = res.data.map((item: any) => {
-          const log = existingLogs.find((r: any) => (r.id_siswa === item.id_target || r.id_guru === item.id_target));
-          return {
-            id_target: item.id_target,
-            nama_target: item.nama_target,
-            kelas_jurusan: item.kelas_jurusan || "-",
-            jam_masuk: item.jam_masuk || "-",
-            status_masuk: item.status_masuk || "-",
-            jam_pulang: item.jam_pulang || "-",
-            status_pulang: item.status_pulang || "-",
-            ket: log?.ket || "-"
-          };
-        });
-        setBulkTableData(mapped);
+        setBulkTableData(res.data);
       }
     } catch (err) {
       console.error("Gagal memuat data presensi massal:", err);
@@ -683,7 +667,7 @@ export default function Laporan() {
 
       {/* PRINT-ONLY HEADERS */}
       <div className="hidden print:block space-y-4 mb-6 border-b-[3px] border-slate-900 pb-4 text-center">
-        <h2 className="text-2xl font-black text-slate-950 uppercase tracking-wide">SMP AL-HIKAM</h2>
+        <h2 className="text-2xl font-black text-slate-950 uppercase tracking-wide">SMK AL-HIKAM KREJENGAN</h2>
         <h3 className="text-lg font-bold text-slate-800 uppercase tracking-normal">LAPORAN REKAP ABSENSI {kategori.toUpperCase()}</h3>
         <p className="text-xs text-slate-500 font-semibold">
           {jenisFilter === "bulan" ? `Periode Bulan: ${bulanMinta}` : `Periode Tanggal: ${tanggalMulai} s.d ${tanggalSelesai}`}
@@ -1081,10 +1065,9 @@ export default function Laporan() {
                   <div>
                     <label className="text-[11px] font-bold text-gray-500 mb-1 block">Kategori</label>
                     <select
-                      disabled={isGuru}
                       value={editKategori}
                       onChange={(e) => handleBulkParamChange(e.target.value as "Siswa" | "Guru", editTanggal, bulkFilterKelas)}
-                      className="w-full bg-white border border-gray-200 rounded-xl p-2 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500 cursor-pointer disabled:opacity-70"
+                      className="w-full bg-white border border-gray-200 rounded-xl p-2 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500 cursor-pointer"
                     >
                       <option value="Siswa">Siswa</option>
                       <option value="Guru">Guru / Staf</option>
@@ -1336,7 +1319,6 @@ export default function Laporan() {
                   <div>
                     <label className="text-xs font-bold text-gray-500 mb-1 block">Kategori Entitas</label>
                     <select
-                      disabled={isGuru}
                       value={editKategori}
                       onChange={(e) => {
                         const cat = e.target.value as "Siswa" | "Guru";
@@ -1344,7 +1326,7 @@ export default function Laporan() {
                         loadMasterForEdit(cat);
                         setEditTargetId("");
                       }}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500 cursor-pointer disabled:opacity-70"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500 cursor-pointer"
                     >
                       <option value="Siswa">Siswa</option>
                       <option value="Guru">Guru / Staf</option>
