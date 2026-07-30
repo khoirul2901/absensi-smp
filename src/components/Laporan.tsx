@@ -185,77 +185,63 @@ export default function Laporan() {
     }
   };
 
-  // Load live attendance for bulk edit
+  // Load attendance data for bulk edit modal based on selected date
   const loadBulkAttendanceData = async (cat: "Siswa" | "Guru", tgl: string, cls: string) => {
     try {
       setLoadingBulk(true);
-      let liveList: any[] = [];
-      const res = await callGas("getLiveAbsenHariIni", [cat, tgl, cls]);
-      if (res && res.success && Array.isArray(res.data)) {
-        liveList = res.data;
-      }
+      const todayStr = new Date().toISOString().split("T")[0];
+      const isToday = tgl === todayStr;
 
-      // Query existing report records for exact date from database
-      const reportsRes = await callGas("getLaporanFilter", [cat, cls, "rentang", tgl, tgl, ""]);
+      // 1. Query existing attendance records for exact date from database
+      const reportsRes = await callGas("getLaporanFilter", [cat, "Semua", "rentang", tgl, tgl, ""]);
       const existingLogs = (reportsRes && reportsRes.success && Array.isArray(reportsRes.data)) ? reportsRes.data : [];
 
-      if (liveList.length > 0) {
-        const mapped = liveList.map((item: any) => {
-          const log = existingLogs.find((r: any) => (r.id_siswa === item.id_target || r.id_guru === item.id_target));
-          return {
-            id_target: item.id_target,
-            nama_target: item.nama_target,
-            kelas_jurusan: item.kelas_jurusan || "-",
-            jam_masuk: log?.jam_masuk || item.jam_masuk || "-",
-            status_masuk: log?.status_masuk || item.status_masuk || "-",
-            jam_pulang: log?.jam_pulang || item.jam_pulang || "-",
-            status_pulang: log?.status_pulang || item.status_pulang || "-",
-            ket: log?.ket || item.ket || "-"
-          };
-        });
-        setBulkTableData(mapped);
-      } else if (existingLogs.length > 0) {
-        const idKey = cat === "Siswa" ? "id_siswa" : "id_guru";
-        const mapped = existingLogs.map((log: any) => ({
-          id_target: log[idKey] || log.id_siswa || log.id_guru,
-          nama_target: log.nama_siswa || log.nama_guru,
-          kelas_jurusan: log.kelas_jurusan || "-",
-          jam_masuk: log.jam_masuk || "-",
-          status_masuk: log.status_masuk || "-",
-          jam_pulang: log.jam_pulang || "-",
-          status_pulang: log.status_pulang || "-",
-          ket: log.ket || "-"
-        }));
-        setBulkTableData(mapped);
-      } else {
-        // Fallback to getDataMaster if live & reports empty
-        const masterRes = await callGas("getDataMaster", [cat]);
-        if (masterRes && masterRes.success && Array.isArray(masterRes.data)) {
-          const idKey = cat === "Siswa" ? "id_siswa" : "id_guru";
-          const nameKey = cat === "Siswa" ? "nama_siswa" : "nama_guru";
-          const mapped = masterRes.data
-            .filter((m: any) => {
-              if (cat === "Siswa" && cls && cls !== "Semua") {
-                const k = `${m.kelas} ${m.jurusan}`;
-                return k.toLowerCase().includes(cls.toLowerCase());
-              }
-              return true;
-            })
-            .map((m: any) => ({
-              id_target: m[idKey],
-              nama_target: m[nameKey],
-              kelas_jurusan: cat === "Siswa" ? `${m.kelas} ${m.jurusan}` : "-",
-              jam_masuk: "-",
-              status_masuk: "-",
-              jam_pulang: "-",
-              status_pulang: "-",
-              ket: "-"
-            }));
-          setBulkTableData(mapped);
-        } else {
-          setBulkTableData([]);
+      // 2. Fetch master entity list
+      const masterRes = await callGas("getDataMaster", [cat]);
+      const masterList = (masterRes && masterRes.success && Array.isArray(masterRes.data)) ? masterRes.data : [];
+
+      // 3. Fetch live today scans ONLY if selected date is today
+      let liveMap: Record<string, any> = {};
+      if (isToday) {
+        const liveRes = await callGas("getLiveAbsenHariIni", [cat, tgl, "Semua"]);
+        if (liveRes && liveRes.success && Array.isArray(liveRes.data)) {
+          liveRes.data.forEach((item: any) => {
+            if (item.id_target) {
+              liveMap[item.id_target] = item;
+            }
+          });
         }
       }
+
+      const idKey = cat === "Siswa" ? "id_siswa" : "id_guru";
+      const nameKey = cat === "Siswa" ? "nama_siswa" : "nama_guru";
+
+      const filteredMaster = masterList.filter((m: any) => {
+        if (cat === "Siswa" && cls && cls !== "Semua") {
+          const k = `${m.kelas} ${m.jurusan}`;
+          return k.toLowerCase().includes(cls.toLowerCase());
+        }
+        return true;
+      });
+
+      const mapped = filteredMaster.map((m: any) => {
+        const targetId = m[idKey];
+        const log = existingLogs.find((r: any) => (r[idKey] === targetId || r.id_siswa === targetId || r.id_guru === targetId));
+        const live = liveMap[targetId];
+
+        return {
+          id_target: targetId,
+          nama_target: m[nameKey],
+          kelas_jurusan: cat === "Siswa" ? `${m.kelas} ${m.jurusan}` : "-",
+          jam_masuk: log?.jam_masuk || (isToday && live?.jam_masuk ? live.jam_masuk : "-"),
+          status_masuk: log?.status_masuk || (isToday && live?.status_masuk ? live.status_masuk : "-"),
+          jam_pulang: log?.jam_pulang || (isToday && live?.jam_pulang ? live.jam_pulang : "-"),
+          status_pulang: log?.status_pulang || (isToday && live?.status_pulang ? live.status_pulang : "-"),
+          ket: log?.ket && log.ket !== "-" ? log.ket : (isToday && live?.ket && live.ket !== "-" ? live.ket : "-")
+        };
+      });
+
+      setBulkTableData(mapped);
     } catch (err) {
       console.error("Gagal memuat data presensi massal:", err);
     } finally {
@@ -424,19 +410,34 @@ export default function Laporan() {
     }
   };
 
-  const handleTargetOrDateChange = (targetId: string, tanggalStr: string, cat: "Siswa" | "Guru") => {
+  const handleTargetOrDateChange = async (targetId: string, tanggalStr: string, cat: "Siswa" | "Guru") => {
     setEditTargetId(targetId);
     setEditTanggal(tanggalStr);
 
     if (targetId && tanggalStr) {
-      // Find existing log in current detailLogs
-      const existing = detailLogs.find(r => r.tanggal === tanggalStr && (r.id_siswa === targetId || r.id_guru === targetId));
-      if (existing) {
-        setEditJamMasuk(existing.jam_masuk && existing.jam_masuk !== "-" ? existing.jam_masuk : "07:00");
-        setEditStatusMasuk(existing.status_masuk && existing.status_masuk !== "-" ? existing.status_masuk : "Tepat Waktu");
-        setEditJamPulang(existing.jam_pulang && existing.jam_pulang !== "-" ? existing.jam_pulang : "15:30");
-        setEditStatusPulang(existing.status_pulang && existing.status_pulang !== "-" ? existing.status_pulang : "Tepat Waktu");
-        setEditKet(existing.ket && existing.ket !== "-" ? existing.ket : "");
+      try {
+        const res = await callGas("getLaporanFilter", [cat, "Semua", "rentang", tanggalStr, tanggalStr, ""]);
+        const idKey = cat === "Siswa" ? "id_siswa" : "id_guru";
+        const existing = (res && res.success && Array.isArray(res.data))
+          ? res.data.find((r: any) => r.tanggal === tanggalStr && (r[idKey] === targetId || r.id_siswa === targetId || r.id_guru === targetId))
+          : null;
+
+        if (existing) {
+          setEditJamMasuk(existing.jam_masuk && existing.jam_masuk !== "-" ? existing.jam_masuk : "07:00");
+          setEditStatusMasuk(existing.status_masuk && existing.status_masuk !== "-" ? existing.status_masuk : "Tepat Waktu");
+          setEditJamPulang(existing.jam_pulang && existing.jam_pulang !== "-" ? existing.jam_pulang : "15:30");
+          setEditStatusPulang(existing.status_pulang && existing.status_pulang !== "-" ? existing.status_pulang : "Tepat Waktu");
+          setEditKet(existing.ket && existing.ket !== "-" ? existing.ket : "");
+        } else {
+          // If no log recorded on tanggalStr for targetId
+          setEditJamMasuk("07:00");
+          setEditStatusMasuk("-");
+          setEditJamPulang("15:30");
+          setEditStatusPulang("-");
+          setEditKet("");
+        }
+      } catch (e) {
+        console.error("Gagal memuat data presensi entitas:", e);
       }
     }
   };
