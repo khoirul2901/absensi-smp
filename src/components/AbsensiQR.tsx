@@ -33,6 +33,8 @@ export default function AbsensiQR() {
   const [mode, setMode] = useState<"Masuk" | "Pulang">("Masuk");
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [availableCameras, setAvailableCameras] = useState<{ id: string; label: string }[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string>("");
   const [audioMuted, setAudioMuted] = useState(false);
   const [recentLogs, setRecentLogs] = useState<LiveAbsen[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -154,6 +156,24 @@ export default function AbsensiQR() {
     }, 3500);
   };
 
+  // Detect Available Cameras
+  useEffect(() => {
+    async function detectCameras() {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices
+          .filter(d => d.kind === "videoinput")
+          .map((d, i) => ({ id: d.deviceId, label: d.label || `Kamera ${i + 1}` }));
+        setAvailableCameras(videoDevices);
+        if (videoDevices.length > 0 && !selectedCameraId) {
+          setSelectedCameraId(videoDevices[0].id);
+        }
+      } catch (e) {}
+    }
+    detectCameras();
+  }, []);
+
   // QR Scanning Lifecycles
   useEffect(() => {
     if (cameraActive) {
@@ -173,8 +193,12 @@ export default function AbsensiQR() {
       });
       qrReaderRef.current = html5Qrcode;
 
+      const cameraConfig = selectedCameraId 
+        ? { deviceId: { exact: selectedCameraId } } 
+        : { facingMode: "environment" };
+
       html5Qrcode.start(
-        { facingMode: "environment" },
+        cameraConfig,
         {
           fps: 10
         },
@@ -194,7 +218,7 @@ export default function AbsensiQR() {
         qrReaderRef.current.stop().catch(err => console.log("Stop scan failure", err));
       }
     };
-  }, [cameraActive, kategori, mode]);
+  }, [cameraActive, selectedCameraId, kategori, mode]);
 
   // Load Students or Teachers for Manual Modal
   useEffect(() => {
@@ -369,6 +393,28 @@ export default function AbsensiQR() {
                     Guru
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Camera device selection */}
+            {availableCameras.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-500">Pilih Kamera / Device</label>
+                <select
+                  value={selectedCameraId}
+                  onChange={(e) => {
+                    setSelectedCameraId(e.target.value);
+                    if (cameraActive) {
+                      setCameraActive(false);
+                      setTimeout(() => setCameraActive(true), 200);
+                    }
+                  }}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2 text-xs font-semibold text-gray-700 focus:outline-none focus:border-blue-500"
+                >
+                  {availableCameras.map(cam => (
+                    <option key={cam.id} value={cam.id}>{cam.label}</option>
+                  ))}
+                </select>
               </div>
             )}
 
