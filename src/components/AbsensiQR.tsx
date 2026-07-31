@@ -22,7 +22,12 @@ import {
   Square,
   LogOut,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Zap,
+  FastForward,
+  CheckCircle2,
+  XCircle,
+  RefreshCw
 } from "lucide-react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { callGas, getStorageKey } from "../lib/gasApi";
@@ -31,6 +36,12 @@ import { LiveAbsen, Siswa, Guru } from "../types";
 export default function AbsensiQR() {
   const [kategori, setKategori] = useState<"Siswa" | "Guru">("Siswa");
   const [mode, setMode] = useState<"Masuk" | "Pulang">("Masuk");
+  
+  // Fast Scan Express States
+  const [fastMode, setFastMode] = useState<"normal" | "express">("express");
+  const [autoTimeSwitch, setAutoTimeSwitch] = useState<boolean>(true);
+  const [screenFlash, setScreenFlash] = useState<"success" | "error" | null>(null);
+
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [availableCameras, setAvailableCameras] = useState<{ id: string; label: string }[]>([]);
@@ -124,11 +135,26 @@ export default function AbsensiQR() {
     loadLiveLogs();
   }, [kategori]);
 
+  const triggerFlash = (type: "success" | "error") => {
+    setScreenFlash(type);
+    setTimeout(() => {
+      setScreenFlash(null);
+    }, 500);
+  };
+
   // Handle Scan Outcome
   const handleScanSuccess = async (decodedText: string) => {
+    let activeMode = mode;
+    if (autoTimeSwitch) {
+      const hour = new Date().getHours();
+      activeMode = hour < 12 ? "Masuk" : "Pulang";
+      if (activeMode !== mode) setMode(activeMode);
+    }
+
     const now = new Date().getTime();
-    if (decodedText === lastScanTextRef.current && (now - lastScanTimeRef.current) < 3000) {
-      // De-bounce scanning same item within 3s
+    const debounceMs = fastMode === "express" ? 1000 : 3000;
+
+    if (decodedText === lastScanTextRef.current && (now - lastScanTimeRef.current) < debounceMs) {
       return;
     }
     
@@ -136,24 +162,27 @@ export default function AbsensiQR() {
     lastScanTimeRef.current = now;
 
     playBeep();
-    setScanStatus({ type: "info", msg: `Memproses: ${decodedText}...` });
+    triggerFlash("success");
+    setScanStatus({ type: "info", msg: `Memproses Scan QR: ${decodedText}...` });
 
     try {
-      const res = await callGas("prosesScanQR", [decodedText, kategori, mode]);
+      const res = await callGas("prosesScanQR", [decodedText, kategori, activeMode]);
       if (res && res.success) {
-        setScanStatus({ type: "success", msg: res.message });
+        setScanStatus({ type: "success", msg: res.message || `Absen ${activeMode} Berhasil!` });
         loadLiveLogs();
       } else {
+        triggerFlash("error");
         setScanStatus({ type: "error", msg: res?.message || "QR Code tidak terdaftar" });
       }
     } catch (err: any) {
+      triggerFlash("error");
       setScanStatus({ type: "error", msg: "Error Sistem: " + err.toString() });
     }
 
-    // Clear alert after 3.5s
+    // Clear alert after 3s
     setTimeout(() => {
       setScanStatus({ type: null, msg: null });
-    }, 3500);
+    }, 3000);
   };
 
   // Detect Available Cameras
@@ -370,7 +399,60 @@ export default function AbsensiQR() {
         
         {/* LEFT COLUMN: Controls & Live Scanner */}
         <div className="lg:col-span-5 space-y-6">
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm space-y-5">
+          <div className={`bg-white rounded-2xl border p-6 shadow-sm space-y-5 transition-all duration-300 ${
+            screenFlash === "success" 
+              ? "border-emerald-500 ring-4 ring-emerald-500/30 shadow-lg shadow-emerald-500/10" 
+              : screenFlash === "error" 
+              ? "border-rose-500 ring-4 ring-rose-500/30 shadow-lg shadow-rose-500/10" 
+              : "border-gray-100"
+          }`}>
+            
+            {/* FAST SCAN EXPRESS CONTROL BAR */}
+            <div className="bg-gradient-to-r from-slate-900 to-indigo-950 p-3 rounded-xl border border-slate-800 text-white space-y-2.5">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-black text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" /> Mode Scan Cepat Express
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAutoTimeSwitch(!autoTimeSwitch)}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border transition-all ${
+                    autoTimeSwitch 
+                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" 
+                      : "bg-slate-800 text-slate-400 border-slate-700"
+                  }`}
+                >
+                  {autoTimeSwitch ? "✓ Auto Jam" : "Manual Jam"}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5 bg-slate-900/90 p-1 rounded-lg border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setFastMode("normal")}
+                  className={`py-1.5 text-[10px] font-extrabold rounded-md transition-all flex items-center justify-center gap-1 ${
+                    fastMode === "normal"
+                      ? "bg-slate-800 text-white border border-slate-700"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <span>🐢 Standar (3s)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFastMode("express")}
+                  className={`py-1.5 text-[10px] font-extrabold rounded-md transition-all flex items-center justify-center gap-1 ${
+                    fastMode === "express"
+                      ? "bg-amber-500 text-slate-950 font-black"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <Zap className="w-3 h-3" />
+                  <span>⚡ Express (1s)</span>
+                </button>
+              </div>
+            </div>
+
             <h3 className="font-bold text-gray-800 text-sm tracking-wide uppercase">Konfigurasi Kamera</h3>
             
             {/* Category selection */}
