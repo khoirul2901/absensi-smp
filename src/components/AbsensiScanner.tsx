@@ -34,7 +34,8 @@ import {
   Info,
   Gauge,
   Timer,
-  FastForward
+  FastForward,
+  Loader2
 } from "lucide-react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { callGas, getStorageKey } from "../lib/gasApi";
@@ -43,6 +44,11 @@ import { LiveAbsen } from "../types";
 export default function AbsensiScanner() {
   const [kategori, setKategori] = useState<"Siswa" | "Guru">("Siswa");
   const [mode, setMode] = useState<"Masuk" | "Pulang">("Masuk");
+  
+  // Loading & Processing Indicators
+  const [isSubmittingManual, setIsSubmittingManual] = useState(false);
+  const [isSubmittingBulk, setIsSubmittingBulk] = useState(false);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   
   // Fast Scan Express / Speed Mode States
   const [fastMode, setFastMode] = useState<"normal" | "express" | "turbo">("express");
@@ -184,6 +190,7 @@ export default function AbsensiScanner() {
 
   // Load live logs of today
   const loadLiveLogs = async () => {
+    setIsLoadingLogs(true);
     try {
       const today = new Date().toISOString().split("T")[0];
       const res = await callGas("getLiveAbsenHariIni", [kategori, today, "Semua"]);
@@ -192,6 +199,8 @@ export default function AbsensiScanner() {
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsLoadingLogs(false);
     }
   };
 
@@ -464,7 +473,8 @@ export default function AbsensiScanner() {
 
   // Bulk Submit
   const handleBulkSubmit = async (status: string) => {
-    if (selectedIds.length === 0) return;
+    if (selectedIds.length === 0 || isSubmittingBulk) return;
+    setIsSubmittingBulk(true);
     try {
       setScanStatus({ type: "info", msg: `Memproses ${selectedIds.length} data absensi...` });
       const today = new Date().toISOString().split("T")[0];
@@ -479,6 +489,8 @@ export default function AbsensiScanner() {
       }
     } catch (e: any) {
       setScanStatus({ type: "error", msg: e.toString() });
+    } finally {
+      setIsSubmittingBulk(false);
     }
     setTimeout(() => setScanStatus({ type: null, msg: null }), 3000);
   };
@@ -486,7 +498,8 @@ export default function AbsensiScanner() {
   // Single Manual Submit
   const handleManualSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!manualTarget) return;
+    if (!manualTarget || isSubmittingManual) return;
+    setIsSubmittingManual(true);
 
     try {
       setScanStatus({ type: "info", msg: "Menyimpan data absensi manual..." });
@@ -504,6 +517,8 @@ export default function AbsensiScanner() {
       }
     } catch (err: any) {
       setScanStatus({ type: "error", msg: err.toString() });
+    } finally {
+      setIsSubmittingManual(false);
     }
     setTimeout(() => setScanStatus({ type: null, msg: null }), 3000);
   };
@@ -871,9 +886,16 @@ export default function AbsensiScanner() {
                     <button
                       type="submit"
                       disabled={!barcodeInput.trim() || isProcessingScan}
-                      className="absolute right-2 top-2 bottom-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-xs font-bold px-3 rounded-lg transition-all flex items-center gap-1"
+                      className="absolute right-2 top-2 bottom-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-xs font-bold px-3 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
                     >
-                      {isProcessingScan ? "Memproses..." : "Scan"}
+                      {isProcessingScan ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Memproses...</span>
+                        </>
+                      ) : (
+                        <span>Scan</span>
+                      )}
                     </button>
                   </div>
 
@@ -1068,6 +1090,15 @@ export default function AbsensiScanner() {
             <div>
               <h3 className="font-bold text-gray-900 text-base flex items-center gap-2">
                 <Clock className="w-4 h-4 text-blue-600" /> Presensi Scanner Hari Ini
+                <button
+                  type="button"
+                  onClick={loadLiveLogs}
+                  disabled={isLoadingLogs}
+                  className="p-1 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 cursor-pointer"
+                  title="Refresh Data Log"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingLogs ? "animate-spin text-blue-600" : ""}`} />
+                </button>
               </h3>
               <p className="text-xs text-gray-500">Live feed rekap hasil scan Clabel / Scanner eksternal hari ini</p>
             </div>
@@ -1106,39 +1137,50 @@ export default function AbsensiScanner() {
           {/* Bulk Selection Actions Bar */}
           {selectedIds.length > 0 && (
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex flex-col sm:flex-row justify-between items-center gap-3">
-              <span className="text-xs font-bold text-blue-800">
+              <span className="text-xs font-bold text-blue-800 flex items-center gap-1.5">
+                {isSubmittingBulk && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />}
                 {selectedIds.length} entitas terpilih untuk koreksi manual bulk:
               </span>
               <div className="flex gap-1.5 flex-wrap">
                 <button 
                   onClick={() => handleBulkSubmit("Hadir (Auto)")}
-                  className="bg-emerald-600 text-white font-semibold text-xs px-3 py-1.5 rounded-lg hover:bg-emerald-700"
+                  disabled={isSubmittingBulk}
+                  className="bg-emerald-600 text-white font-semibold text-xs px-3 py-1.5 rounded-lg hover:bg-emerald-700 disabled:opacity-50 cursor-pointer flex items-center gap-1"
                 >
-                  Hadir
+                  {isSubmittingBulk ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  <span>Hadir</span>
                 </button>
                 <button 
                   onClick={() => handleBulkSubmit("Terlambat")}
-                  className="bg-orange-100 text-orange-800 font-semibold text-xs px-3 py-1.5 rounded-lg hover:bg-orange-200"
+                  disabled={isSubmittingBulk}
+                  className="bg-orange-100 text-orange-800 font-semibold text-xs px-3 py-1.5 rounded-lg hover:bg-orange-200 disabled:opacity-50 cursor-pointer flex items-center gap-1"
                 >
-                  Telat
+                  {isSubmittingBulk ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  <span>Telat</span>
                 </button>
                 <button 
                   onClick={() => handleBulkSubmit("Sakit")}
-                  className="bg-amber-600 text-white font-semibold text-xs px-3 py-1.5 rounded-lg hover:bg-amber-700"
+                  disabled={isSubmittingBulk}
+                  className="bg-amber-600 text-white font-semibold text-xs px-3 py-1.5 rounded-lg hover:bg-amber-700 disabled:opacity-50 cursor-pointer flex items-center gap-1"
                 >
-                  Sakit
+                  {isSubmittingBulk ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  <span>Sakit</span>
                 </button>
                 <button 
                   onClick={() => handleBulkSubmit("Izin")}
-                  className="bg-indigo-600 text-white font-semibold text-xs px-3 py-1.5 rounded-lg hover:bg-indigo-700"
+                  disabled={isSubmittingBulk}
+                  className="bg-indigo-600 text-white font-semibold text-xs px-3 py-1.5 rounded-lg hover:bg-indigo-700 disabled:opacity-50 cursor-pointer flex items-center gap-1"
                 >
-                  Izin
+                  {isSubmittingBulk ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  <span>Izin</span>
                 </button>
                 <button 
                   onClick={() => handleBulkSubmit("Alfa")}
-                  className="bg-rose-600 text-white font-semibold text-xs px-3 py-1.5 rounded-lg hover:bg-rose-700"
+                  disabled={isSubmittingBulk}
+                  className="bg-rose-600 text-white font-semibold text-xs px-3 py-1.5 rounded-lg hover:bg-rose-700 disabled:opacity-50 cursor-pointer flex items-center gap-1"
                 >
-                  Alfa
+                  {isSubmittingBulk ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  <span>Alfa</span>
                 </button>
               </div>
             </div>
@@ -1384,16 +1426,24 @@ export default function AbsensiScanner() {
                 <button 
                   type="button"
                   onClick={() => setShowManualModal(false)}
-                  className="bg-gray-100 text-gray-600 font-semibold text-xs px-4 py-2.5 rounded-xl hover:bg-gray-200"
+                  disabled={isSubmittingManual}
+                  className="bg-gray-100 text-gray-600 font-semibold text-xs px-4 py-2.5 rounded-xl hover:bg-gray-200 cursor-pointer disabled:opacity-50"
                 >
                   Batal
                 </button>
                 <button 
                   type="submit"
-                  disabled={!manualTarget}
-                  className="bg-blue-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl hover:bg-blue-700 disabled:opacity-50"
+                  disabled={!manualTarget || isSubmittingManual}
+                  className="bg-blue-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 cursor-pointer transition-all"
                 >
-                  Simpan Absensi
+                  {isSubmittingManual ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <span>Simpan Absensi</span>
+                  )}
                 </button>
               </div>
             </form>
