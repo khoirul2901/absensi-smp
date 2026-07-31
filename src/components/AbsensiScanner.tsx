@@ -31,7 +31,10 @@ import {
   CheckCircle2,
   XCircle,
   ShieldCheck,
-  Info
+  Info,
+  Gauge,
+  Timer,
+  FastForward
 } from "lucide-react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { callGas, getStorageKey } from "../lib/gasApi";
@@ -41,6 +44,19 @@ export default function AbsensiScanner() {
   const [kategori, setKategori] = useState<"Siswa" | "Guru">("Siswa");
   const [mode, setMode] = useState<"Masuk" | "Pulang">("Masuk");
   
+  // Fast Scan Express / Speed Mode States
+  const [fastMode, setFastMode] = useState<"normal" | "express" | "turbo">("express");
+  const [autoTimeSwitch, setAutoTimeSwitch] = useState<boolean>(true);
+  const [screenFlash, setScreenFlash] = useState<"success" | "error" | null>(null);
+  const [scanQueue, setScanQueue] = useState<Array<{
+    id: string;
+    code: string;
+    timestamp: string;
+    status: "pending" | "success" | "error";
+    message?: string;
+  }>>([]);
+  const [recentScanTimes, setRecentScanTimes] = useState<number[]>([]);
+
   // Scanner Type: "hardware" (Clabel USB/Bluetooth Scanner / HID) vs "camera" (External USB Camera / Clabel Video Scanner)
   const [scanMethod, setScanMethod] = useState<"hardware" | "camera">("hardware");
 
@@ -240,42 +256,100 @@ export default function AbsensiScanner() {
     }
   }, [scanMethod, autoFocusLock]);
 
+  const triggerFlash = (type: "success" | "error") => {
+    setScreenFlash(type);
+    setTimeout(() => {
+      setScreenFlash(null);
+    }, 500);
+  };
+
+  // Calculate scans per minute (throughput speed)
+  const scansPerMinute = recentScanTimes.filter(t => Date.now() - t < 60000).length;
+
   // Process Scan Logic (Shared by Hardware & Camera)
   const processScanCode = async (rawCode: string) => {
     const code = rawCode.trim();
-    if (!code || isProcessingScan) return;
+    if (!code) return;
 
-    const now = new Date().getTime();
-    if (code === lastScanTextRef.current && (now - lastScanTimeRef.current) < 2500) {
+    // Determine active mode if Auto Time Switch is enabled
+    let activeMode = mode;
+    if (autoTimeSwitch) {
+      const hour = new Date().getHours();
+      activeMode = hour < 12 ? "Masuk" : "Pulang";
+      if (activeMode !== mode) {
+        setMode(activeMode);
+      }
+    }
+
+    const now = Date.now();
+    const debounceMs = fastMode === "turbo" ? 500 : fastMode === "express" ? 1000 : 2500;
+
+    if (code === lastScanTextRef.current && (now - lastScanTimeRef.current) < debounceMs) {
       setScanStatus({ 
         type: "info", 
-        msg: `Data "${code}" baru saja discan`,
-        details: "Mencegah duplikasi scan beruntun (debounced)." 
+        msg: `Data "${code}" dibatasi (${debounceMs / 1000}s debounce)`,
+        details: "Mencegah duplikasi scan beruntun." 
       });
       playBeep(false);
-      setTimeout(() => setScanStatus({ type: null, msg: null }), 2000);
+      triggerFlash("error");
+      setTimeout(() => setScanStatus({ type: null, msg: null }), 1500);
       return;
     }
 
     lastScanTextRef.current = code;
     lastScanTimeRef.current = now;
-    setIsProcessingScan(true);
 
+    // Track throughput
+    setRecentScanTimes(prev => [...prev.filter(t => now - t < 60000), now]);
+
+    // Fast Mode: Instant input reset & focus for hardware reader so next barcode can be scanned right away
+    if (fastMode !== "normal") {
+      setBarcodeInput("");
+      if (barcodeInputRef.current) {
+        barcodeInputRef.current.focus();
+      }
+    } else {
+      setIsProcessingScan(true);
+    }
+
+    // Instant Feedback
     playBeep(true);
-    setScanStatus({ type: "info", msg: `Memproses Scan Clabel: ${code}...` });
+    triggerFlash("success");
+
+    const queueId = Math.random().toString(36).substring(2, 9);
+    const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    // Add item to queue feed
+    setScanQueue(prev => [
+      { id: queueId, code, timestamp: timeStr, status: "pending", message: "Memproses..." },
+      ...prev.slice(0, 7) // keep 8 items
+    ]);
+
+    setScanStatus({ 
+      type: "info", 
+      msg: `[Scan Cepat] Memproses ID: ${code}...`,
+      details: `Mode: ${activeMode} • Speed: ${fastMode.toUpperCase()}`
+    });
 
     try {
-      const res = await callGas("prosesScanQR", [code, kategori, mode]);
+      const res = await callGas("prosesScanQR", [code, kategori, activeMode]);
       if (res && res.success) {
         setScanStatus({ 
           type: "success", 
           msg: res.message || `Absensi ${kategori} Berhasil!`,
           targetName: code,
-          details: `Mode: ${mode} • Kategori: ${kategori}`
+          details: `Mode: ${activeMode} • Kategori: ${kategori}`
         });
 
+        // Update queue item
+        setScanQueue(prev => prev.map(item => 
+          item.id === queueId ? { ...item, status: "success", message: res.message || "Tersimpan" } : item
+        ));
+
         // Voice announcement
-        speakText(`${code}. Absen ${mode} berhasil.`);
+        if (speechEnabled) {
+          speakText(fastMode === "turbo" ? "Hadir!" : `${code}. Absen ${activeMode} berhasil.`);
+        }
 
         loadLiveLogs();
       } else {
@@ -286,7 +360,13 @@ export default function AbsensiScanner() {
           details: `Kode ID: ${code}`
         });
         playBeep(false);
-        speakText("Gagal. Kode tidak terdaftar.");
+        triggerFlash("error");
+
+        setScanQueue(prev => prev.map(item => 
+          item.id === queueId ? { ...item, status: "error", message: errorMsg } : item
+        ));
+
+        if (speechEnabled) speakText("Gagal.");
       }
     } catch (err: any) {
       setScanStatus({ 
@@ -295,6 +375,11 @@ export default function AbsensiScanner() {
         details: err.toString() 
       });
       playBeep(false);
+      triggerFlash("error");
+
+      setScanQueue(prev => prev.map(item => 
+        item.id === queueId ? { ...item, status: "error", message: "Error Koneksi" } : item
+      ));
     } finally {
       setIsProcessingScan(false);
       setBarcodeInput("");
@@ -306,7 +391,7 @@ export default function AbsensiScanner() {
     // Auto clear toast
     setTimeout(() => {
       setScanStatus({ type: null, msg: null });
-    }, 4000);
+    }, 3500);
   };
 
   // Hardware Scanner Form Submit (triggers when Clabel sends Enter key)
@@ -582,8 +667,98 @@ export default function AbsensiScanner() {
         
         {/* LEFT COLUMN: SCANNER INPUT & CONFIGURATION (5 cols) */}
         <div className="lg:col-span-5 space-y-6">
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm space-y-5">
+          <div className={`bg-white rounded-2xl border p-6 shadow-sm space-y-5 transition-all duration-300 ${
+            screenFlash === "success" 
+              ? "border-emerald-500 ring-4 ring-emerald-500/30 shadow-lg shadow-emerald-500/10" 
+              : screenFlash === "error" 
+              ? "border-rose-500 ring-4 ring-rose-500/30 shadow-lg shadow-rose-500/10" 
+              : "border-gray-100"
+          }`}>
             
+            {/* FAST SCAN EXPRESS CONFIGURATION BAR */}
+            <div className="bg-gradient-to-r from-slate-900 to-indigo-950 p-3.5 rounded-xl border border-slate-800 text-white space-y-3">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                  <span className="text-xs font-black text-amber-300 tracking-wider uppercase flex items-center gap-1">
+                    <FastForward className="w-3.5 h-3.5 text-amber-400" /> Mode Scan Cepat Express
+                  </span>
+                </div>
+                
+                {/* Speedometer Throughput Indicator */}
+                <div className="bg-slate-800/90 border border-slate-700/80 px-2.5 py-1 rounded-lg flex items-center gap-1.5 text-[11px] font-mono text-emerald-400 font-bold">
+                  <Gauge className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{scansPerMinute} Scan/Mnt</span>
+                </div>
+              </div>
+
+              {/* Speed Mode Pills */}
+              <div className="grid grid-cols-3 gap-1.5 bg-slate-900/90 p-1 rounded-lg border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setFastMode("normal")}
+                  className={`py-1.5 text-[10px] font-extrabold rounded-md transition-all flex items-center justify-center gap-1 ${
+                    fastMode === "normal"
+                      ? "bg-slate-800 text-white border border-slate-700 shadow-sm"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                  title="Debounce 2.5s (Standar)"
+                >
+                  <span>🐢 Normal</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFastMode("express")}
+                  className={`py-1.5 text-[10px] font-extrabold rounded-md transition-all flex items-center justify-center gap-1 ${
+                    fastMode === "express"
+                      ? "bg-amber-500 text-slate-950 font-black shadow-sm"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                  title="Debounce 1.0s • Input Langsung Bersih"
+                >
+                  <Zap className="w-3 h-3" />
+                  <span>⚡ Express</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFastMode("turbo")}
+                  className={`py-1.5 text-[10px] font-extrabold rounded-md transition-all flex items-center justify-center gap-1 ${
+                    fastMode === "turbo"
+                      ? "bg-emerald-500 text-slate-950 font-black shadow-sm"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                  title="Debounce 0.5s • Super Fast Queue Buffer"
+                >
+                  <FastForward className="w-3 h-3" />
+                  <span>🚀 Turbo</span>
+                </button>
+              </div>
+
+              {/* Auto Time Switch Toggle */}
+              <div className="flex items-center justify-between pt-1 border-t border-slate-800/80 text-[11px]">
+                <div className="flex items-center gap-1.5 text-slate-300">
+                  <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Auto Jam Presensi:</span>
+                  <span className="font-bold text-amber-300">
+                    {new Date().getHours() < 12 ? "Pagi (Masuk)" : "Siang (Pulang)"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAutoTimeSwitch(!autoTimeSwitch)}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border transition-all ${
+                    autoTimeSwitch 
+                      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" 
+                      : "bg-slate-800 text-slate-400 border-slate-700"
+                  }`}
+                >
+                  {autoTimeSwitch ? "✓ Auto Active" : "Manual"}
+                </button>
+              </div>
+            </div>
+
             {/* Input Mode Selector Tabs */}
             <div className="space-y-2">
               <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Metode Scanner Eksternal</label>
@@ -833,6 +1008,40 @@ export default function AbsensiScanner() {
                     </p>
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Real-Time Rapid Scan Queue Feed */}
+          {scanQueue.length > 0 && (
+            <div className="bg-slate-900 rounded-2xl border border-slate-800 p-4 shadow-sm text-white space-y-3">
+              <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
+                <span className="text-xs font-black text-amber-300 flex items-center gap-1.5 uppercase tracking-wider">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" /> Stream Antrean Scan Cepat ({scanQueue.length})
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">Live Speed</span>
+              </div>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                {scanQueue.map((item) => (
+                  <div key={item.id} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800/80 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${
+                        item.status === 'success' ? 'bg-emerald-500' :
+                        item.status === 'error' ? 'bg-rose-500' : 'bg-amber-400 animate-ping'
+                      }`}></span>
+                      <span className="font-mono font-bold text-slate-200 truncate">{item.code}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] shrink-0">
+                      <span className="text-slate-500 font-mono">{item.timestamp}</span>
+                      <span className={`px-2 py-0.5 rounded-md font-bold ${
+                        item.status === 'success' ? 'bg-emerald-500/20 text-emerald-400' :
+                        item.status === 'error' ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-500/20 text-amber-300'
+                      }`}>
+                        {item.status === 'success' ? '✓ Sukses' : item.status === 'error' ? '✕ Gagal' : '⏳ Diproses'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
