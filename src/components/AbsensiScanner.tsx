@@ -36,7 +36,8 @@ import {
   Timer,
   FastForward,
   Loader2,
-  Calendar
+  Calendar,
+  Edit3
 } from "lucide-react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { callGas, getStorageKey } from "../lib/gasApi";
@@ -101,6 +102,7 @@ export default function AbsensiScanner() {
   const [manualTarget, setManualTarget] = useState<string>("");
   const [manualStatus, setManualStatus] = useState<string>("Hadir (Auto)");
   const [manualKet, setManualKet] = useState<string>("");
+  const [manualEditOriginalDate, setManualEditOriginalDate] = useState<string | null>(null);
   const [entitiesList, setEntitiesList] = useState<any[]>([]);
   const [searchManualQuery, setSearchManualQuery] = useState("");
 
@@ -363,7 +365,7 @@ export default function AbsensiScanner() {
           speakText(fastMode === "turbo" ? "Hadir!" : `${code}. Absen ${activeMode} berhasil.`);
         }
 
-        loadLiveLogs();
+        loadLiveLogs(filterTanggal);
       } else {
         const errorMsg = res?.message || "QR/Barcode tidak terdaftar dalam database";
         setScanStatus({ 
@@ -485,7 +487,7 @@ export default function AbsensiScanner() {
         setScanStatus({ type: "success", msg: res.message });
         speakText(`Koreksi massal ${selectedIds.length} data berhasil.`);
         setSelectedIds([]);
-        loadLiveLogs();
+        loadLiveLogs(filterTanggal);
       } else {
         setScanStatus({ type: "error", msg: res?.message || "Gagal absen bulk" });
       }
@@ -497,6 +499,21 @@ export default function AbsensiScanner() {
     setTimeout(() => setScanStatus({ type: null, msg: null }), 3000);
   };
 
+  // Handle Edit Single Row
+  const handleEditRow = (log: LiveAbsen) => {
+    setManualTarget(log.id_target);
+    let defaultStatus = "Hadir (Auto)";
+    if (log.status_masuk && log.status_masuk !== "-") {
+      defaultStatus = log.status_masuk;
+    } else if (log.status_pulang && log.status_pulang !== "-") {
+      defaultStatus = log.status_pulang;
+    }
+    setManualStatus(defaultStatus);
+    setManualKet(log.ket && log.ket !== "-" ? log.ket : "");
+    setManualEditOriginalDate(filterTanggal);
+    setShowManualModal(true);
+  };
+
   // Single Manual Submit
   const handleManualSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -505,6 +522,12 @@ export default function AbsensiScanner() {
 
     try {
       setScanStatus({ type: "info", msg: `Menyimpan data absensi manual (${filterTanggal})...` });
+      
+      // If user changed the date while editing, clear the old date record first
+      if (manualEditOriginalDate && manualEditOriginalDate !== filterTanggal) {
+        await callGas("hapusKehadiran", [manualTarget, kategori, manualEditOriginalDate]);
+      }
+
       const res = await callGas("simpanAbsenManual", [manualTarget, kategori, mode, filterTanggal, manualStatus, manualKet]);
       if (res && res.success) {
         setScanStatus({ type: "success", msg: res.message });
@@ -512,7 +535,9 @@ export default function AbsensiScanner() {
         setShowManualModal(false);
         setManualTarget("");
         setManualKet("");
-        loadLiveLogs();
+        setSearchManualQuery("");
+        setManualEditOriginalDate(null);
+        loadLiveLogs(filterTanggal);
       } else {
         setScanStatus({ type: "error", msg: res?.message || "Gagal menyimpan absensi manual" });
       }
@@ -1080,7 +1105,7 @@ export default function AbsensiScanner() {
             <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-1">
               <span className="text-[11px] text-gray-500 font-bold uppercase">Absen Masuk / Pulang</span>
               <p className="text-2xl font-black text-blue-600">{countMasuk} / {countPulang}</p>
-              <p className="text-[10px] text-gray-400 font-medium">Rekap Hari Ini ({kategori})</p>
+              <p className="text-[10px] text-gray-400 font-medium">Rekap Presensi ({filterTanggal})</p>
             </div>
           </div>
         </div>
@@ -1228,13 +1253,14 @@ export default function AbsensiScanner() {
                   {kategori === "Siswa" && <th className="py-3 px-4">Kelas</th>}
                   <th className="py-3 px-4">Jam Masuk</th>
                   <th className="py-3 px-4">Jam Pulang</th>
+                  <th className="py-3 px-4 text-center">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 text-xs text-gray-700">
                 {filteredLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={kategori === "Siswa" ? 5 : 4} className="py-10 text-center text-gray-400 font-medium">
-                      Belum ada data presensi terekam scanner hari ini
+                    <td colSpan={kategori === "Siswa" ? 6 : 5} className="py-10 text-center text-gray-400 font-medium">
+                      Belum ada data presensi terekam tanggal {filterTanggal}
                     </td>
                   </tr>
                 ) : (
@@ -1266,7 +1292,7 @@ export default function AbsensiScanner() {
                         <td className="py-3 px-4">
                           <div className="font-bold">{log.jam_masuk}</div>
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold mt-1 ${
-                            log.status_masuk.includes("Tepat") ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
+                            log.status_masuk.includes("Tepat") || log.status_masuk.includes("Hadir") ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
                             log.status_masuk.includes("Terlambat") ? "bg-amber-50 text-amber-700 border border-amber-100" :
                             log.status_masuk === "-" ? "text-gray-400" : "bg-rose-50 text-rose-700 border border-rose-100"
                           }`}>
@@ -1276,11 +1302,22 @@ export default function AbsensiScanner() {
                         <td className="py-3 px-4">
                           <div className="font-bold">{log.jam_pulang}</div>
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold mt-1 ${
-                            log.status_pulang.includes("Tepat") ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
+                            log.status_pulang.includes("Tepat") || log.status_pulang.includes("Hadir") ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
                             log.status_pulang === "-" ? "text-gray-400" : "bg-blue-50 text-blue-700 border border-blue-100"
                           }`}>
                             {log.status_pulang}
                           </span>
+                        </td>
+                        <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => handleEditRow(log)}
+                            className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-[11px] font-bold px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                            title={`Edit Presensi ${log.nama_target}`}
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
                         </td>
                       </tr>
                     );
@@ -1377,8 +1414,8 @@ export default function AbsensiScanner() {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-xl max-w-md w-full overflow-hidden">
             <div className="p-6 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
-              <h3 className="font-extrabold text-gray-900 text-base">Koreksi Absensi Manual ({kategori})</h3>
-              <button onClick={() => setShowManualModal(false)} className="text-gray-400 hover:text-gray-600 text-lg font-bold">✕</button>
+              <h3 className="font-extrabold text-gray-900 text-base">{manualEditOriginalDate ? "Edit / Koreksi Presensi" : "Koreksi Absensi Manual"} ({kategori})</h3>
+              <button onClick={() => { setShowManualModal(false); setManualEditOriginalDate(null); }} className="text-gray-400 hover:text-gray-600 text-lg font-bold">✕</button>
             </div>
             
             <form onSubmit={handleManualSubmit} className="p-6 space-y-4">
