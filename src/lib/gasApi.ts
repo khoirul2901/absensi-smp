@@ -468,7 +468,8 @@ function callMock(action: string, args: any[]): any {
       const [idTarget, kategori, mode, tanggal, status, keterangan] = args;
       const tgl = tanggal || new Date().toISOString().split("T")[0];
       const jamDefault = mode === "Masuk" ? "07:00" : "15:30";
-      const jam = (status === "Sakit" || status === "Izin" || status === "Alfa" || status === "-") ? "-" : jamDefault;
+      const isAbsentStatus = status === "Sakit" || status === "Izin" || status === "Alfa" || status === "-";
+      const jam = isAbsentStatus ? "-" : jamDefault;
       const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
       const reports = getStorage(reportsKey);
       
@@ -477,12 +478,19 @@ function callMock(action: string, args: any[]): any {
       
       if (index !== -1) {
         reports[index].tanggal = tgl;
-        if (mode === "Masuk") {
-          reports[index].jam_masuk = jam;
+        if (isAbsentStatus) {
           reports[index].status_masuk = status;
-        } else {
-          reports[index].jam_pulang = jam;
           reports[index].status_pulang = status;
+          reports[index].jam_masuk = "-";
+          reports[index].jam_pulang = "-";
+        } else {
+          if (mode === "Masuk") {
+            reports[index].jam_masuk = (reports[index].jam_masuk && reports[index].jam_masuk !== "-") ? reports[index].jam_masuk : jam;
+            reports[index].status_masuk = status;
+          } else {
+            reports[index].jam_pulang = (reports[index].jam_pulang && reports[index].jam_pulang !== "-") ? reports[index].jam_pulang : jam;
+            reports[index].status_pulang = status;
+          }
         }
         reports[index].ket = keterangan;
       } else {
@@ -495,26 +503,31 @@ function callMock(action: string, args: any[]): any {
           const classKey = kategori === "Siswa" ? `${user.kelas} ${user.jurusan}` : "-";
           const idLog = "LOG-" + new Date().getTime();
           
+          const statusMasuk = isAbsentStatus ? status : (mode === "Masuk" ? status : "-");
+          const statusPulang = isAbsentStatus ? status : (mode === "Pulang" ? status : "-");
+          const jamMasuk = isAbsentStatus ? "-" : (mode === "Masuk" ? jam : "-");
+          const jamPulang = isAbsentStatus ? "-" : (mode === "Pulang" ? jam : "-");
+
           const newRow = kategori === "Siswa" ? {
             id_log_siswa: idLog,
             tanggal: tgl,
             id_siswa: idTarget,
             nama_siswa: nama,
             kelas_jurusan: classKey,
-            jam_masuk: mode === "Masuk" ? jam : "-",
-            status_masuk: mode === "Masuk" ? status : "-",
-            jam_pulang: mode === "Pulang" ? jam : "-",
-            status_pulang: mode === "Pulang" ? status : "-",
+            jam_masuk: jamMasuk,
+            status_masuk: statusMasuk,
+            jam_pulang: jamPulang,
+            status_pulang: statusPulang,
             ket: keterangan
           } : {
             id_log_guru: idLog,
             tanggal: tgl,
             id_guru: idTarget,
             nama_guru: nama,
-            jam_masuk: mode === "Masuk" ? jam : "-",
-            status_masuk: mode === "Masuk" ? status : "-",
-            jam_pulang: mode === "Pulang" ? jam : "-",
-            status_pulang: mode === "Pulang" ? status : "-",
+            jam_masuk: jamMasuk,
+            status_masuk: statusMasuk,
+            jam_pulang: jamPulang,
+            status_pulang: statusPulang,
             ket: keterangan
           };
           reports.push(newRow);
