@@ -35,7 +35,8 @@ import {
   Gauge,
   Timer,
   FastForward,
-  Loader2
+  Loader2,
+  Calendar
 } from "lucide-react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { callGas, getStorageKey } from "../lib/gasApi";
@@ -87,6 +88,9 @@ export default function AbsensiScanner() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterKelas, setFilterKelas] = useState("Semua");
   const [classList, setClassList] = useState<string[]>([]);
+  const [filterTanggal, setFilterTanggal] = useState<string>(
+    new Date().toISOString().split("T")[0]
+  );
   
   const [itemsPerPage, setItemsPerPage] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -188,12 +192,11 @@ export default function AbsensiScanner() {
     fetchClasses();
   }, []);
 
-  // Load live logs of today
-  const loadLiveLogs = async () => {
+  // Load live logs based on selected date and category
+  const loadLiveLogs = async (targetDate = filterTanggal) => {
     setIsLoadingLogs(true);
     try {
-      const today = new Date().toISOString().split("T")[0];
-      const res = await callGas("getLiveAbsenHariIni", [kategori, today, "Semua"]);
+      const res = await callGas("getLiveAbsenHariIni", [kategori, targetDate, "Semua"]);
       if (res && res.success) {
         setRecentLogs(res.data);
       }
@@ -206,7 +209,7 @@ export default function AbsensiScanner() {
 
   useEffect(() => {
     loadLiveLogs();
-  }, [kategori]);
+  }, [kategori, filterTanggal]);
 
   // Load Available Cameras (for external camera scanner mode)
   const detectCameras = async () => {
@@ -341,7 +344,7 @@ export default function AbsensiScanner() {
     });
 
     try {
-      const res = await callGas("prosesScanQR", [code, kategori, activeMode]);
+      const res = await callGas("prosesScanQR", [code, kategori, activeMode, filterTanggal]);
       if (res && res.success) {
         setScanStatus({ 
           type: "success", 
@@ -476,9 +479,8 @@ export default function AbsensiScanner() {
     if (selectedIds.length === 0 || isSubmittingBulk) return;
     setIsSubmittingBulk(true);
     try {
-      setScanStatus({ type: "info", msg: `Memproses ${selectedIds.length} data absensi...` });
-      const today = new Date().toISOString().split("T")[0];
-      const res = await callGas("simpanBulkAbsenManual", [selectedIds, kategori, mode, today, status, "Koreksi Bulk Scanner"]);
+      setScanStatus({ type: "info", msg: `Memproses ${selectedIds.length} data absensi (${filterTanggal})...` });
+      const res = await callGas("simpanBulkAbsenManual", [selectedIds, kategori, mode, filterTanggal, status, `Koreksi Bulk (${filterTanggal})`]);
       if (res && res.success) {
         setScanStatus({ type: "success", msg: res.message });
         speakText(`Koreksi massal ${selectedIds.length} data berhasil.`);
@@ -502,9 +504,8 @@ export default function AbsensiScanner() {
     setIsSubmittingManual(true);
 
     try {
-      setScanStatus({ type: "info", msg: "Menyimpan data absensi manual..." });
-      const today = new Date().toISOString().split("T")[0];
-      const res = await callGas("simpanAbsenManual", [manualTarget, kategori, mode, today, manualStatus, manualKet]);
+      setScanStatus({ type: "info", msg: `Menyimpan data absensi manual (${filterTanggal})...` });
+      const res = await callGas("simpanAbsenManual", [manualTarget, kategori, mode, filterTanggal, manualStatus, manualKet]);
       if (res && res.success) {
         setScanStatus({ type: "success", msg: res.message });
         speakText("Absensi manual tersimpan.");
@@ -526,7 +527,7 @@ export default function AbsensiScanner() {
   // Reset page on filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filterKelas, kategori]);
+  }, [searchQuery, filterKelas, kategori, filterTanggal]);
 
   // Filter logs
   const filteredLogs = recentLogs.filter(log => {
@@ -1089,10 +1090,10 @@ export default function AbsensiScanner() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <h3 className="font-bold text-gray-900 text-base flex items-center gap-2">
-                <Clock className="w-4 h-4 text-blue-600" /> Presensi Scanner Hari Ini
+                <Clock className="w-4 h-4 text-blue-600" /> Data Presensi ({filterTanggal})
                 <button
                   type="button"
-                  onClick={loadLiveLogs}
+                  onClick={() => loadLiveLogs(filterTanggal)}
                   disabled={isLoadingLogs}
                   className="p-1 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 cursor-pointer"
                   title="Refresh Data Log"
@@ -1100,11 +1101,34 @@ export default function AbsensiScanner() {
                   <RefreshCw className={`w-3.5 h-3.5 ${isLoadingLogs ? "animate-spin text-blue-600" : ""}`} />
                 </button>
               </h3>
-              <p className="text-xs text-gray-500">Live feed rekap hasil scan Clabel / Scanner eksternal hari ini</p>
+              <p className="text-xs text-gray-500">
+                Data presensi {kategori} tanggal {filterTanggal} (Scan / Koreksi Manual)
+              </p>
             </div>
             
             {/* Table Filters */}
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              {/* Filter Tanggal */}
+              <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-1.5">
+                <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <input 
+                  type="date"
+                  value={filterTanggal}
+                  onChange={(e) => setFilterTanggal(e.target.value)}
+                  className="bg-transparent text-xs font-bold text-gray-800 focus:outline-none cursor-pointer"
+                />
+                {filterTanggal !== new Date().toISOString().split("T")[0] && (
+                  <button
+                    type="button"
+                    onClick={() => setFilterTanggal(new Date().toISOString().split("T")[0])}
+                    className="text-[10px] bg-blue-100 text-blue-700 hover:bg-blue-200 font-black px-2 py-0.5 rounded-md transition-colors cursor-pointer shrink-0"
+                    title="Kembali ke Tanggal Hari Ini"
+                  >
+                    Hari Ini
+                  </button>
+                )}
+              </div>
+
               {kategori === "Siswa" && (
                 <div className="relative">
                   <select 
@@ -1358,6 +1382,20 @@ export default function AbsensiScanner() {
             </div>
             
             <form onSubmit={handleManualSubmit} className="p-6 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-500">Tanggal Absensi</label>
+                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-2.5">
+                  <Calendar className="w-4 h-4 text-blue-600 shrink-0" />
+                  <input 
+                    type="date"
+                    required
+                    value={filterTanggal}
+                    onChange={(e) => setFilterTanggal(e.target.value)}
+                    className="bg-transparent text-xs text-gray-800 font-bold focus:outline-none w-full cursor-pointer"
+                  />
+                </div>
+              </div>
+
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-gray-500">Pilih Entitas ({kategori})</label>
                 
