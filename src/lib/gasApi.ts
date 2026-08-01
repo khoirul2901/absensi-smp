@@ -730,6 +730,7 @@ function callMock(action: string, args: any[]): any {
           id_target: idTarget,
           nama_target: m[nameKey],
           kelas_jurusan: kategori === "Siswa" ? `${m.kelas} ${m.jurusan}` : "-",
+          tanggal: tgl,
           jam_masuk: rep.jam_masuk || "-",
           status_masuk: rep.status_masuk || "-",
           jam_pulang: rep.jam_pulang || "-",
