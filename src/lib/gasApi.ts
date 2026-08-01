@@ -363,14 +363,14 @@ function callMock(action: string, args: any[]): any {
     }
 
     case "prosesScanQR": {
-      const [qrContent, kategori, mode] = args;
+      const [qrContent, kategori, mode, tanggal] = args;
       const masterKey = kategori === "Siswa" ? "data_siswa" : "data_guru";
       const master = getStorage(masterKey);
       const user = master.find((x: any) => x.qr_content === qrContent);
       
       if (!user) return { success: false, message: "QR Code tidak valid atau tidak terdaftar!" };
       
-      const tgl = new Date().toISOString().split("T")[0];
+      const tgl = tanggal || new Date().toISOString().split("T")[0];
       const jam = new Date().toTimeString().slice(0, 5);
       const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
       const reports = getStorage(reportsKey);
@@ -382,7 +382,7 @@ function callMock(action: string, args: any[]): any {
       const classKey = kategori === "Siswa" ? `${user.kelas} - ${user.jurusan}` : "-";
       
       // Check for duplicate
-      const index = reports.findIndex((r: any) => r.tanggal === tgl && (r.id_siswa === idTarget || r.id_guru === idTarget));
+      const index = reports.findIndex((r: any) => r.tanggal === tgl && (r.id_siswa === idTarget || r.id_guru === idTarget || r.id_target === idTarget || r[idKey] === idTarget));
       const cfg = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
       
       if (mode === "Masuk") {
@@ -711,7 +711,7 @@ function callMock(action: string, args: any[]): any {
       
       const result = master.map((m: any) => {
         const idTarget = m[idKey];
-        const rep = reports.find((r: any) => r.tanggal === tgl && r[idKey] === idTarget) || {};
+        const rep = reports.find((r: any) => r.tanggal === tgl && (r[idKey] === idTarget || r.id_siswa === idTarget || r.id_guru === idTarget || r.id_target === idTarget)) || {};
         
         return {
           id_target: idTarget,
