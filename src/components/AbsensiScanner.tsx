@@ -101,6 +101,7 @@ export default function AbsensiScanner() {
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualTarget, setManualTarget] = useState<string>("");
   const [manualStatus, setManualStatus] = useState<string>("Hadir (Auto)");
+  const [manualJam, setManualJam] = useState<string>("07:00");
   const [manualKet, setManualKet] = useState<string>("");
   const [manualEditOriginalDate, setManualEditOriginalDate] = useState<string | null>(null);
   const [entitiesList, setEntitiesList] = useState<any[]>([]);
@@ -487,11 +488,18 @@ export default function AbsensiScanner() {
     const existing = recentLogs.find((l) => l.id_target === manualTarget);
     if (existing) {
       let defaultStatus = "Hadir (Auto)";
+      let defaultJam = mode === "Masuk" ? "07:00" : "15:30";
+
       if (mode === "Masuk") {
         if (existing.status_masuk && existing.status_masuk !== "-") {
           defaultStatus = existing.status_masuk;
         } else if (existing.status_pulang && existing.status_pulang !== "-") {
           defaultStatus = existing.status_pulang;
+        }
+        if (existing.jam_masuk && existing.jam_masuk !== "-") {
+          defaultJam = existing.jam_masuk;
+        } else if (existing.jam_pulang && existing.jam_pulang !== "-") {
+          defaultJam = existing.jam_pulang;
         }
       } else {
         if (existing.status_pulang && existing.status_pulang !== "-") {
@@ -499,11 +507,18 @@ export default function AbsensiScanner() {
         } else if (existing.status_masuk && existing.status_masuk !== "-") {
           defaultStatus = existing.status_masuk;
         }
+        if (existing.jam_pulang && existing.jam_pulang !== "-") {
+          defaultJam = existing.jam_pulang;
+        } else if (existing.jam_masuk && existing.jam_masuk !== "-") {
+          defaultJam = existing.jam_masuk;
+        }
       }
       setManualStatus(defaultStatus);
+      setManualJam(defaultJam);
       setManualKet(existing.ket && existing.ket !== "-" ? existing.ket : "");
     } else {
       setManualStatus("Hadir (Auto)");
+      setManualJam(mode === "Masuk" ? "07:00" : "15:30");
       setManualKet("");
     }
   }, [manualTarget, filterTanggal, mode, showManualModal, recentLogs]);
@@ -541,6 +556,17 @@ export default function AbsensiScanner() {
       defaultStatus = log.status_pulang;
     }
     setManualStatus(defaultStatus);
+    
+    let defaultJam = mode === "Masuk" ? "07:00" : "15:30";
+    if (mode === "Masuk") {
+      if (log.jam_masuk && log.jam_masuk !== "-") defaultJam = log.jam_masuk;
+      else if (log.jam_pulang && log.jam_pulang !== "-") defaultJam = log.jam_pulang;
+    } else {
+      if (log.jam_pulang && log.jam_pulang !== "-") defaultJam = log.jam_pulang;
+      else if (log.jam_masuk && log.jam_masuk !== "-") defaultJam = log.jam_masuk;
+    }
+    setManualJam(defaultJam);
+
     setManualKet(log.ket && log.ket !== "-" ? log.ket : "");
     setManualEditOriginalDate(filterTanggal);
     setShowManualModal(true);
@@ -560,7 +586,7 @@ export default function AbsensiScanner() {
         await callGas("hapusKehadiran", [manualTarget, kategori, manualEditOriginalDate]);
       }
 
-      const res = await callGas("simpanAbsenManual", [manualTarget, kategori, mode, filterTanggal, manualStatus, manualKet]);
+      const res = await callGas("simpanAbsenManual", [manualTarget, kategori, mode, filterTanggal, manualStatus, manualKet, manualJam]);
       if (res && res.success) {
         setScanStatus({ type: "success", msg: res.message });
         speakText("Absensi manual tersimpan.");
@@ -1524,6 +1550,21 @@ export default function AbsensiScanner() {
                   <option value="Izin">Izin</option>
                   <option value="Alfa">Alfa (Tanpa Keterangan)</option>
                 </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-500">Waktu / Jam Presensi ({mode})</label>
+                <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl p-2.5">
+                  <Clock className="w-4 h-4 text-blue-600 shrink-0" />
+                  <input 
+                    type="text"
+                    required
+                    placeholder={mode === "Masuk" ? "07:30" : "15:30"}
+                    value={manualJam}
+                    onChange={(e) => setManualJam(e.target.value)}
+                    className="bg-transparent text-xs text-gray-800 font-bold font-mono focus:outline-none w-full"
+                  />
+                </div>
               </div>
 
               <div className="space-y-1.5">
