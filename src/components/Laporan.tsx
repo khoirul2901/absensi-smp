@@ -606,7 +606,8 @@ export default function Laporan() {
             "Masuk",
             editTanggal,
             editStatusMasuk,
-            editKet || "-"
+            editKet || "-",
+            editJamMasuk || "-"
           ]);
         }
         let resPulang: any = { success: true };
@@ -617,7 +618,8 @@ export default function Laporan() {
             "Pulang",
             editTanggal,
             editStatusPulang,
-            editKet || "-"
+            editKet || "-",
+            editJamPulang || "-"
           ]);
         }
         res = (resMasuk && resMasuk.success) || (resPulang && resPulang.success)
