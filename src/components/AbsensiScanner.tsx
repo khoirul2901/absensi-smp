@@ -346,7 +346,8 @@ export default function AbsensiScanner() {
     });
 
     try {
-      const res = await callGas("prosesScanQR", [code, kategori, activeMode, filterTanggal]);
+      const scanTodayStr = new Date().toISOString().split("T")[0];
+      const res = await callGas("prosesScanQR", [code, kategori, activeMode, scanTodayStr]);
       if (res && res.success) {
         setScanStatus({ 
           type: "success", 
@@ -365,7 +366,10 @@ export default function AbsensiScanner() {
           speakText(fastMode === "turbo" ? "Hadir!" : `${code}. Absen ${activeMode} berhasil.`);
         }
 
-        loadLiveLogs(filterTanggal);
+        if (filterTanggal !== scanTodayStr) {
+          setFilterTanggal(scanTodayStr);
+        }
+        loadLiveLogs(scanTodayStr);
       } else {
         const errorMsg = res?.message || "QR/Barcode tidak terdaftar dalam database";
         setScanStatus({ 
@@ -1277,6 +1281,7 @@ export default function AbsensiScanner() {
                       )}
                     </button>
                   </th>
+                  <th className="py-3 px-4">Tanggal</th>
                   <th className="py-3 px-4">Nama</th>
                   {kategori === "Siswa" && <th className="py-3 px-4">Kelas</th>}
                   <th className="py-3 px-4">Jam Masuk</th>
@@ -1287,7 +1292,7 @@ export default function AbsensiScanner() {
               <tbody className="divide-y divide-gray-50 text-xs text-gray-700">
                 {filteredLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={kategori === "Siswa" ? 6 : 5} className="py-10 text-center text-gray-400 font-medium">
+                    <td colSpan={kategori === "Siswa" ? 7 : 6} className="py-10 text-center text-gray-400 font-medium">
                       Belum ada data presensi terekam tanggal {filterTanggal}
                     </td>
                   </tr>
@@ -1309,6 +1314,9 @@ export default function AbsensiScanner() {
                               <Square className="w-4 h-4" />
                             )}
                           </button>
+                        </td>
+                        <td className="py-3 px-4 font-mono text-[11px] font-bold text-gray-700 whitespace-nowrap">
+                          {log.tanggal || filterTanggal}
                         </td>
                         <td className="py-3 px-4">
                           <div className="font-bold text-gray-900">{log.nama_target}</div>
