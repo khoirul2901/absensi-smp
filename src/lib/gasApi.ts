@@ -465,11 +465,11 @@ function callMock(action: string, args: any[]): any {
     }
 
     case "simpanAbsenManual": {
-      const [idTarget, kategori, mode, tanggal, status, keterangan] = args;
+      const [idTarget, kategori, mode, tanggal, status, keterangan, jamCustom] = args;
       const tgl = tanggal || new Date().toISOString().split("T")[0];
       const jamDefault = mode === "Masuk" ? "07:00" : "15:30";
       const isAbsentStatus = status === "Sakit" || status === "Izin" || status === "Alfa" || status === "-";
-      const jam = isAbsentStatus ? "-" : jamDefault;
+      const jam = isAbsentStatus ? "-" : (jamCustom && jamCustom !== "-" ? jamCustom : jamDefault);
       const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
       const reports = getStorage(reportsKey);
       
@@ -485,10 +485,10 @@ function callMock(action: string, args: any[]): any {
           reports[index].jam_pulang = "-";
         } else {
           if (mode === "Masuk") {
-            reports[index].jam_masuk = (reports[index].jam_masuk && reports[index].jam_masuk !== "-") ? reports[index].jam_masuk : jam;
+            reports[index].jam_masuk = jam;
             reports[index].status_masuk = status;
           } else {
-            reports[index].jam_pulang = (reports[index].jam_pulang && reports[index].jam_pulang !== "-") ? reports[index].jam_pulang : jam;
+            reports[index].jam_pulang = jam;
             reports[index].status_pulang = status;
           }
         }
