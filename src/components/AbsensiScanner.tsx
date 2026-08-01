@@ -476,6 +476,34 @@ export default function AbsensiScanner() {
     loadEntities();
   }, [showManualModal, kategori]);
 
+  // Sync existing attendance record for selected manualTarget on filterTanggal
+  useEffect(() => {
+    if (!showManualModal || !manualTarget) return;
+
+    const existing = recentLogs.find((l) => l.id_target === manualTarget);
+    if (existing) {
+      let defaultStatus = "Hadir (Auto)";
+      if (mode === "Masuk") {
+        if (existing.status_masuk && existing.status_masuk !== "-") {
+          defaultStatus = existing.status_masuk;
+        } else if (existing.status_pulang && existing.status_pulang !== "-") {
+          defaultStatus = existing.status_pulang;
+        }
+      } else {
+        if (existing.status_pulang && existing.status_pulang !== "-") {
+          defaultStatus = existing.status_pulang;
+        } else if (existing.status_masuk && existing.status_masuk !== "-") {
+          defaultStatus = existing.status_masuk;
+        }
+      }
+      setManualStatus(defaultStatus);
+      setManualKet(existing.ket && existing.ket !== "-" ? existing.ket : "");
+    } else {
+      setManualStatus("Hadir (Auto)");
+      setManualKet("");
+    }
+  }, [manualTarget, filterTanggal, mode, showManualModal, recentLogs]);
+
   // Bulk Submit
   const handleBulkSubmit = async (status: string) => {
     if (selectedIds.length === 0 || isSubmittingBulk) return;
@@ -1427,7 +1455,11 @@ export default function AbsensiScanner() {
                     type="date"
                     required
                     value={filterTanggal}
-                    onChange={(e) => setFilterTanggal(e.target.value)}
+                    onChange={(e) => {
+                      const d = e.target.value;
+                      setFilterTanggal(d);
+                      loadLiveLogs(d);
+                    }}
                     className="bg-transparent text-xs text-gray-800 font-bold focus:outline-none w-full cursor-pointer"
                   />
                 </div>
