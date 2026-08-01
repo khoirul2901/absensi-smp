@@ -468,10 +468,10 @@ export default function Laporan() {
 
           if (itemRes && !itemRes.success && typeof itemRes.message === "string" && itemRes.message.toLowerCase().includes("tidak dikenal")) {
             if (item.status_masuk && item.status_masuk !== "-") {
-              itemRes = await callGas("simpanAbsenManual", [item.id_target, editKategori, "Masuk", editTanggal, item.status_masuk, item.ket || "-"]);
+              itemRes = await callGas("simpanAbsenManual", [item.id_target, editKategori, "Masuk", editTanggal, item.status_masuk, item.ket || "-", item.jam_masuk || "-"]);
             }
             if (item.status_pulang && item.status_pulang !== "-") {
-              itemRes = await callGas("simpanAbsenManual", [item.id_target, editKategori, "Pulang", editTanggal, item.status_pulang, item.ket || "-"]);
+              itemRes = await callGas("simpanAbsenManual", [item.id_target, editKategori, "Pulang", editTanggal, item.status_pulang, item.ket || "-", item.jam_pulang || "-"]);
             }
           }
 
@@ -1671,7 +1671,15 @@ export default function Laporan() {
                       <label className="text-[11px] font-bold text-gray-600 mb-1 block">Status Masuk</label>
                       <select
                         value={editStatusMasuk}
-                        onChange={(e) => setEditStatusMasuk(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditStatusMasuk(val);
+                          if ((val === "Tepat Waktu" || val === "Terlambat" || val === "Lupa Scan Masuk") && (editJamMasuk === "-" || !editJamMasuk)) {
+                            setEditJamMasuk("07:00");
+                          } else if (val === "Sakit" || val === "Izin" || val === "Alfa" || val === "-") {
+                            setEditJamMasuk("-");
+                          }
+                        }}
                         className="w-full bg-white border border-gray-200 rounded-xl py-1.5 px-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
                       >
                         <option value="Tepat Waktu">Tepat Waktu</option>
@@ -1700,7 +1708,15 @@ export default function Laporan() {
                       <label className="text-[11px] font-bold text-gray-600 mb-1 block">Status Pulang</label>
                       <select
                         value={editStatusPulang}
-                        onChange={(e) => setEditStatusPulang(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditStatusPulang(val);
+                          if ((val === "Tepat Waktu" || val === "Terlambat" || val === "Lupa Scan Pulang") && (editJamPulang === "-" || !editJamPulang)) {
+                            setEditJamPulang("15:30");
+                          } else if (val === "-") {
+                            setEditJamPulang("-");
+                          }
+                        }}
                         className="w-full bg-white border border-gray-200 rounded-xl py-1.5 px-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
                       >
                         <option value="Tepat Waktu">Tepat Waktu</option>
