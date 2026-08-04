@@ -87,6 +87,31 @@ function initMockDb() {
   if (!localStorage.getItem(getKey("data_kelas"))) {
     localStorage.setItem(getKey("data_kelas"), JSON.stringify(["X RPL 1", "X RPL 2", "XI RPL 1", "XI RPL 2", "XII RPL 1"]));
   }
+  if (!localStorage.getItem(getKey("jam_pelajaran"))) {
+    localStorage.setItem(getKey("jam_pelajaran"), JSON.stringify([
+      { id_jam: "JP-1", jam_ke: 1, nama_jam: "Jam ke-1", jam_mulai: "07:00", jam_selesai: "07:45", tipe: "Pelajaran" },
+      { id_jam: "JP-2", jam_ke: 2, nama_jam: "Jam ke-2", jam_mulai: "07:45", jam_selesai: "08:30", tipe: "Pelajaran" },
+      { id_jam: "JP-3", jam_ke: 3, nama_jam: "Jam ke-3", jam_mulai: "08:30", jam_selesai: "09:15", tipe: "Pelajaran" },
+      { id_jam: "JP-IST1", jam_ke: 0, nama_jam: "Istirahat Pertama", jam_mulai: "09:15", jam_selesai: "09:45", tipe: "Istirahat" },
+      { id_jam: "JP-4", jam_ke: 4, nama_jam: "Jam ke-4", jam_mulai: "09:45", jam_selesai: "10:30", tipe: "Pelajaran" },
+      { id_jam: "JP-5", jam_ke: 5, nama_jam: "Jam ke-5", jam_mulai: "10:30", jam_selesai: "11:15", tipe: "Pelajaran" },
+      { id_jam: "JP-6", jam_ke: 6, nama_jam: "Jam ke-6", jam_mulai: "11:15", jam_selesai: "12:00", tipe: "Pelajaran" },
+      { id_jam: "JP-IST2", jam_ke: 0, nama_jam: "ISOMA (Istirahat & Sholat)", jam_mulai: "12:00", jam_selesai: "13:00", tipe: "Istirahat" },
+      { id_jam: "JP-7", jam_ke: 7, nama_jam: "Jam ke-7", jam_mulai: "13:00", jam_selesai: "13:45", tipe: "Pelajaran" },
+      { id_jam: "JP-8", jam_ke: 8, nama_jam: "Jam ke-8", jam_mulai: "13:45", jam_selesai: "14:30", tipe: "Pelajaran" }
+    ]));
+  }
+  if (!localStorage.getItem(getKey("jadwal_pelajaran"))) {
+    localStorage.setItem(getKey("jadwal_pelajaran"), JSON.stringify([
+      { id_jadwal: "JPEL-101", hari: "Senin", id_jam: "JP-1", jam_ke: 1, jam_mulai: "07:00", jam_selesai: "07:45", kelas: "XI RPL 1", mapel: "Pemrograman Web", id_guru: "G-001", nama_guru: "Bahrul Ulum, S.Kom", ruangan: "Lab Komputer 1" },
+      { id_jadwal: "JPEL-102", hari: "Senin", id_jam: "JP-2", jam_ke: 2, jam_mulai: "07:45", jam_selesai: "08:30", kelas: "XI RPL 1", mapel: "Pemrograman Web", id_guru: "G-001", nama_guru: "Bahrul Ulum, S.Kom", ruangan: "Lab Komputer 1" },
+      { id_jadwal: "JPEL-103", hari: "Senin", id_jam: "JP-3", jam_ke: 3, jam_mulai: "08:30", jam_selesai: "09:15", kelas: "XI RPL 1", mapel: "Matematika", id_guru: "G-002", nama_guru: "Eka Rahmawati, S.Pd", ruangan: "R. XI RPL 1" },
+      { id_jadwal: "JPEL-104", hari: "Selasa", id_jam: "JP-1", jam_ke: 1, jam_mulai: "07:00", jam_selesai: "07:45", kelas: "X RPL 1", mapel: "Informatika", id_guru: "G-001", nama_guru: "Bahrul Ulum, S.Kom", ruangan: "Lab Komputer 2" }
+    ]));
+  }
+  if (!localStorage.getItem(getKey("absensi_mengajar_guru"))) {
+    localStorage.setItem(getKey("absensi_mengajar_guru"), JSON.stringify([]));
+  }
 }
 
 // Call local mock APIs
@@ -419,6 +444,44 @@ function callMock(action: string, args: any[]): any {
         
         reports.push(newRow);
         setStorage(reportsKey, reports);
+        
+        // Auto sync to absensi_mengajar_guru for Guru category based on schedule
+        if (kategori === "Guru") {
+          try {
+            const hariList = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+            const hariIni = hariList[new Date().getDay()];
+            const schedules = getStorage("jadwal_pelajaran") || [];
+            const jamSlots = getStorage("jam_pelajaran") || [];
+            const teacherSchedules = schedules.filter((s: any) => s.id_guru === idTarget && (s.hari === hariIni || hariIni === "Minggu"));
+            if (teacherSchedules.length > 0) {
+              const activeSlot = jamSlots.find((j: any) => jam >= j.jam_mulai && jam <= j.jam_selesai) || jamSlots[0];
+              const matchSch = teacherSchedules.find((s: any) => s.jam_ke === (activeSlot?.jam_ke || 1)) || teacherSchedules[0];
+              const jamMulai = matchSch.jam_mulai || activeSlot?.jam_mulai || "07:00";
+              const statusMengajar = jam <= jamMulai ? "Hadir Tepat Waktu" : "Terlambat Masuk Kelas";
+              const absLogs = getStorage("absensi_mengajar_guru") || [];
+              const existingIdx = absLogs.findIndex((a: any) => a.tanggal === tgl && a.id_guru === idTarget && a.jam_ke === Number(matchSch.jam_ke));
+              const logItem = {
+                id_log_mengajar: existingIdx !== -1 ? absLogs[existingIdx].id_log_mengajar : "LOG-MENG-" + Date.now(),
+                tanggal: tgl,
+                waktu_absen: jam,
+                hari: hariIni !== "Minggu" ? hariIni : "Senin",
+                id_guru: idTarget,
+                nama_guru: nama,
+                kelas: matchSch.kelas || "X RPL 1",
+                mapel: matchSch.mapel || "Pelajaran Umum",
+                jam_ke: Number(matchSch.jam_ke || 1),
+                jam_mulai_jadwal: jamMulai,
+                jam_selesai_jadwal: matchSch.jam_selesai || activeSlot?.jam_selesai || "07:45",
+                status: statusMengajar,
+                catatan_materi: "Presensi Otomatis via Menu Absensi"
+              };
+              if (existingIdx !== -1) absLogs[existingIdx] = logItem;
+              else absLogs.push(logItem);
+              setStorage("absensi_mengajar_guru", absLogs);
+            }
+          } catch (e) { console.error("Auto sync guru schedule error", e); }
+        }
+
         return { success: true, message: `Berhasil Absen Masuk (SIMULASI).\nStatus: ${statusMasuk}\nNama: ${nama}` };
       } else {
         // Mode Pulang
@@ -1030,6 +1093,158 @@ function callMock(action: string, args: any[]): any {
       list = list.filter((j: any) => j.id_jadwal !== idJadwal);
       setStorage("jadwal_guru", list);
       return { success: true, message: "Jadwal guru berhasil dihapus (SIMULASI)." };
+    }
+
+    // Jam Pelajaran (Lesson Period Slots)
+    case "getJamPelajaran": {
+      return { success: true, data: getStorage("jam_pelajaran") };
+    }
+
+    case "simpanJamPelajaran": {
+      const [jamObj] = args;
+      const list = getStorage("jam_pelajaran");
+      const idJam = jamObj.id_jam || "JP-" + Date.now();
+      const existingIdx = list.findIndex((j: any) => j.id_jam === idJam || j.jam_ke === jamObj.jam_ke);
+      const newObj = {
+        id_jam: idJam,
+        jam_ke: Number(jamObj.jam_ke || 0),
+        nama_jam: jamObj.nama_jam || `Jam ke-${jamObj.jam_ke}`,
+        jam_mulai: jamObj.jam_mulai || "07:00",
+        jam_selesai: jamObj.jam_selesai || "07:45",
+        tipe: jamObj.tipe || "Pelajaran"
+      };
+
+      if (existingIdx !== -1) {
+        list[existingIdx] = newObj;
+      } else {
+        list.push(newObj);
+      }
+      // sort by jam_ke or time
+      list.sort((a: any, b: any) => a.jam_mulai.localeCompare(b.jam_mulai));
+      setStorage("jam_pelajaran", list);
+      return { success: true, message: "Jam pelajaran berhasil disimpan (SIMULASI)." };
+    }
+
+    case "hapusJamPelajaran": {
+      const [idJam] = args;
+      let list = getStorage("jam_pelajaran");
+      list = list.filter((j: any) => j.id_jam !== idJam);
+      setStorage("jam_pelajaran", list);
+      return { success: true, message: "Jam pelajaran berhasil dihapus (SIMULASI)." };
+    }
+
+    // Jadwal Pelajaran (Subject Schedule Matrix)
+    case "getJadwalPelajaranSemua": {
+      return { success: true, data: getStorage("jadwal_pelajaran") };
+    }
+
+    case "tambahJadwalPelajaran": {
+      const [payload] = args;
+      const list = getStorage("jadwal_pelajaran");
+      const idJadwal = "JPEL-" + Math.floor(Math.random() * 100000);
+      const newSchedule = {
+        id_jadwal: idJadwal,
+        hari: payload.hari,
+        id_jam: payload.id_jam || "JP-" + payload.jam_ke,
+        jam_ke: Number(payload.jam_ke || 1),
+        jam_mulai: payload.jam_mulai || "-",
+        jam_selesai: payload.jam_selesai || "-",
+        kelas: payload.kelas,
+        mapel: payload.mapel,
+        id_guru: payload.id_guru,
+        nama_guru: payload.nama_guru,
+        ruangan: payload.ruangan || "-"
+      };
+      list.push(newSchedule);
+      setStorage("jadwal_pelajaran", list);
+      return { success: true, message: "Jadwal pelajaran berhasil ditambahkan (SIMULASI)." };
+    }
+
+    case "editJadwalPelajaran": {
+      const [idJadwal, payload] = args;
+      const list = getStorage("jadwal_pelajaran");
+      const idx = list.findIndex((j: any) => j.id_jadwal === idJadwal);
+      if (idx !== -1) {
+        list[idx] = {
+          ...list[idx],
+          hari: payload.hari,
+          id_jam: payload.id_jam || list[idx].id_jam,
+          jam_ke: Number(payload.jam_ke || list[idx].jam_ke),
+          jam_mulai: payload.jam_mulai || list[idx].jam_mulai,
+          jam_selesai: payload.jam_selesai || list[idx].jam_selesai,
+          kelas: payload.kelas,
+          mapel: payload.mapel,
+          id_guru: payload.id_guru,
+          nama_guru: payload.nama_guru,
+          ruangan: payload.ruangan || list[idx].ruangan || "-"
+        };
+        setStorage("jadwal_pelajaran", list);
+        return { success: true, message: "Jadwal pelajaran berhasil diperbarui (SIMULASI)." };
+      }
+      return { success: false, message: "Jadwal pelajaran tidak ditemukan." };
+    }
+
+    case "hapusJadwalPelajaran": {
+      const [idJadwal] = args;
+      let list = getStorage("jadwal_pelajaran");
+      list = list.filter((j: any) => j.id_jadwal !== idJadwal);
+      setStorage("jadwal_pelajaran", list);
+      return { success: true, message: "Jadwal pelajaran berhasil dihapus (SIMULASI)." };
+    }
+
+    // Absensi Mengajar Guru (Teacher Class Attendance per Lesson Period)
+    case "getAbsensiMengajarGuru": {
+      return { success: true, data: getStorage("absensi_mengajar_guru") };
+    }
+
+    case "simpanAbsensiMengajarGuru": {
+      const [payload] = args;
+      const list = getStorage("absensi_mengajar_guru");
+      const idLog = "LOG-MENG-" + Date.now();
+      const tgl = payload.tanggal || new Date().toISOString().split("T")[0];
+      const timeStr = payload.waktu_absen || new Date().toTimeString().slice(0, 5);
+
+      // Check if already logged for same guru, date, kelas, jam_ke
+      const existingIdx = list.findIndex(
+        (item: any) =>
+          item.tanggal === tgl &&
+          item.id_guru === payload.id_guru &&
+          item.kelas === payload.kelas &&
+          item.jam_ke === Number(payload.jam_ke)
+      );
+
+      const logItem = {
+        id_log_mengajar: existingIdx !== -1 ? list[existingIdx].id_log_mengajar : idLog,
+        tanggal: tgl,
+        waktu_absen: timeStr,
+        hari: payload.hari || "Senin",
+        id_guru: payload.id_guru,
+        nama_guru: payload.nama_guru,
+        kelas: payload.kelas,
+        mapel: payload.mapel,
+        jam_ke: Number(payload.jam_ke),
+        jam_mulai_jadwal: payload.jam_mulai_jadwal || "-",
+        jam_selesai_jadwal: payload.jam_selesai_jadwal || "-",
+        status: payload.status || "Hadir Tepat Waktu",
+        catatan_materi: payload.catatan_materi || "-"
+      };
+
+      if (existingIdx !== -1) {
+        list[existingIdx] = logItem;
+      } else {
+        list.push(logItem);
+      }
+
+      setStorage("absensi_mengajar_guru", list);
+      return { success: true, message: `Presensi mengajar ${payload.nama_guru} kelas ${payload.kelas} jam ke-${payload.jam_ke} berhasil dicatat!` };
+    }
+
+    case "hapusAbsensiMengajarGuru": {
+      const [idLog] = args;
+      let list = getStorage("absensi_mengajar_guru");
+      list = list.filter((item: any) => item.id_log_mengajar !== idLog);
+      setStorage("absensi_mengajar_guru", list);
+      return { success: true, message: "Riwayat presensi mengajar berhasil dihapus (SIMULASI)." };
     }
 
     case "buatStrukturDatabaseOtomatis": {
