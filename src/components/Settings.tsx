@@ -19,13 +19,18 @@ import {
   Link2,
   HelpCircle,
   CreditCard,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Code,
+  Copy,
+  Check
 } from "lucide-react";
 import { callGas, getGasUrl, getStorageKey } from "../lib/gasApi";
 import { ConfigJam, HariLibur } from "../types";
 
 export default function Settings() {
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isScriptCopied, setIsScriptCopied] = useState(false);
+  const [showScriptCode, setShowScriptCode] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem(getStorageKey("SIAS_SESSION"));
@@ -100,9 +105,9 @@ export default function Settings() {
 
   // Card Settings
   const [cardConfig, setCardConfig] = useState(() => ({
-    schoolName: localStorage.getItem(getStorageKey('cardSchoolName')) || 'SMP AL-HIKAM',
-    schoolAddress: localStorage.getItem(getStorageKey('cardSchoolAddress')) || 'Sendang Mulyo, Sendang Agung, Lampung Tengah',
-    principalName: localStorage.getItem(getStorageKey('cardPrincipalName')) || 'Khoirul Malik, S.Kom',
+    schoolName: localStorage.getItem(getStorageKey('cardSchoolName')) || 'SMK AL-HIKAM KREJENGAN',
+    schoolAddress: localStorage.getItem(getStorageKey('cardSchoolAddress')) || 'Krejengan Kec. Krejengan Kab. Probolinggo',
+    principalName: localStorage.getItem(getStorageKey('cardPrincipalName')) || 'Fulan, S.Pd',
     signatureUrl: localStorage.getItem(getStorageKey('cardSignatureUrl')) || '',
     logoLeftUrl: localStorage.getItem(getStorageKey('cardLogoLeftUrl')) || '',
     logoRightUrl: localStorage.getItem(getStorageKey('cardLogoRightUrl')) || ''
@@ -752,6 +757,144 @@ export default function Settings() {
             Inisialisasi Ulang Struktur Sheets
           </button>
         </div>
+      </div>
+
+      {/* GOOGLE APPS SCRIPT KODE.GS CODE & INSTRUCTION */}
+      <div className="bg-slate-900 text-white rounded-2xl p-6 space-y-4 shadow-sm border border-slate-800">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Code className="w-5 h-5 text-amber-400" />
+            <h3 className="font-extrabold text-white text-sm">Kode Backend Google Apps Script (Kode.gs)</h3>
+          </div>
+          <button
+            onClick={() => {
+              const codeText = `/**
+ * Google Apps Script Backend (Kode.gs) - Sistem Informasi Presensi Sekolah (SIAS)
+ * Tempelkan kode ini di Ekstensi -> Apps Script di Spreadsheet Google Anda
+ */
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const action = data.action;
+    const args = data.args || [];
+    
+    let result = { success: false, message: "Action tidak dikenali" };
+
+    switch (action) {
+      case "getJamPelajaran":
+        result = getJamPelajaran();
+        break;
+      case "simpanJamPelajaran":
+      case "tambahJamPelajaran":
+      case "editJamPelajaran":
+        result = simpanJamPelajaran(args[0], args[1]);
+        break;
+      case "hapusJamPelajaran":
+        result = hapusJamPelajaran(args[0]);
+        break;
+      case "getJadwalPelajaranSemua":
+        result = getJadwalPelajaranSemua();
+        break;
+      case "tambahJadwalPelajaran":
+        result = tambahJadwalPelajaran(args[0]);
+        break;
+      case "editJadwalPelajaran":
+        result = editJadwalPelajaran(args[0], args[1]);
+        break;
+      case "hapusJadwalPelajaran":
+        result = hapusJadwalPelajaran(args[0]);
+        break;
+      case "getAbsensiMengajarGuru":
+        result = getAbsensiMengajarGuru();
+        break;
+      case "simpanAbsensiMengajarGuru":
+        result = simpanAbsensiMengajarGuru(args[0]);
+        break;
+      case "hapusAbsensiMengajarGuru":
+        result = hapusAbsensiMengajarGuru(args[0]);
+        break;
+      case "getPengaturanSemua":
+        result = getPengaturanSemua();
+        break;
+      case "simpanKonfigurasiJam":
+        result = simpanKonfigurasiJam(args[0], args[1], args[2]);
+        break;
+      case "getHariLiburSemua":
+        result = getHariLiburSemua();
+        break;
+      case "tambahHariLibur":
+        result = tambahHariLibur(args[0], args[1]);
+        break;
+      case "hapusHariLibur":
+        result = hapusHariLibur(args[0]);
+        break;
+      case "getKelasSemua":
+        result = getKelasSemua();
+        break;
+      case "tambahKelas":
+        result = tambahKelas(args[0]);
+        break;
+      case "editKelas":
+        result = editKelas(args[0], args[1]);
+        break;
+      case "hapusKelas":
+        result = hapusKelas(args[0]);
+        break;
+      default:
+        result = { success: false, message: "Action " + action + " tidak ditemukan" };
+    }
+
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+              navigator.clipboard.writeText(codeText);
+              setIsScriptCopied(true);
+              setTimeout(() => setIsScriptCopied(false), 2500);
+            }}
+            className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-sm"
+          >
+            {isScriptCopied ? <Check className="w-4 h-4 text-emerald-950" /> : <Copy className="w-4 h-4" />}
+            {isScriptCopied ? "Berhasil Disalin!" : "Salin Kode.gs ke Clipboard"}
+          </button>
+        </div>
+
+        <p className="text-xs text-slate-300 leading-relaxed font-medium">
+          Jika Anda menggunakan database Google Sheets langsung, pastikan Web App Google Apps Script Anda memuat seluruh handler tindakan terbaru (seperti <code className="text-amber-300 font-bold bg-slate-800 px-1 py-0.5 rounded">simpanJamPelajaran</code>, <code className="text-amber-300 font-bold bg-slate-800 px-1 py-0.5 rounded">tambahJadwalPelajaran</code>, <code className="text-amber-300 font-bold bg-slate-800 px-1 py-0.5 rounded">simpanAbsensiMengajarGuru</code>). Klik tombol di atas untuk menyalin handler dasar ke clipboard.
+        </p>
+
+        <button
+          onClick={() => setShowScriptCode(!showScriptCode)}
+          className="text-xs text-amber-400 font-bold underline hover:text-amber-300 flex items-center gap-1"
+        >
+          {showScriptCode ? "Sembunyikan Cuplikan Kode.gs" : "Tampilkan Cuplikan Kode.gs Backend"}
+        </button>
+
+        {showScriptCode && (
+          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 font-mono text-[11px] text-amber-200 overflow-x-auto max-h-60 leading-relaxed">
+            <pre>{`/**
+ * Google Apps Script Backend (Kode.gs) - SIAS
+ * Handler doPost untuk simpanJamPelajaran & Jadwal Pelajaran
+ */
+function doPost(e) {
+  const data = JSON.parse(e.postData.contents);
+  const action = data.action;
+  const args = data.args || [];
+  
+  if (action === "simpanJamPelajaran" || action === "tambahJamPelajaran") {
+    return simpanJamPelajaran(args[0]);
+  } else if (action === "getJamPelajaran") {
+    return getJamPelajaran();
+  } else if (action === "hapusJamPelajaran") {
+    return hapusJamPelajaran(args[0]);
+  }
+  // ... handler action lainnya ...
+}`}</pre>
+          </div>
+        )}
       </div>
     </div>
   );
