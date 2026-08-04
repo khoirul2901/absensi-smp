@@ -43,7 +43,7 @@ import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { callGas, getStorageKey } from "../lib/gasApi";
 import { LiveAbsen } from "../types";
 
-export default function AbsensiScanner() {
+export default function AbsensiScanner({ session }: { session?: any }) {
   const [kategori, setKategori] = useState<"Siswa" | "Guru">("Siswa");
   const [mode, setMode] = useState<"Masuk" | "Pulang">("Masuk");
   
@@ -134,11 +134,13 @@ export default function AbsensiScanner() {
     }
   }, []);
 
-  const isGuru = currentUser?.role === "Guru";
+  const activeRole = session?.role || currentUser?.role;
+  const isGuru = activeRole === "Guru";
 
   useEffect(() => {
     if (isGuru) {
       setKategori("Siswa");
+      setScanMethod("hardware");
     }
   }, [isGuru]);
 
@@ -708,13 +710,15 @@ export default function AbsensiScanner() {
             <span>Petunjuk Clabel</span>
           </button>
 
-          <button 
-            onClick={() => setShowManualModal(true)}
-            className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow-md shadow-blue-600/20 flex items-center gap-1.5"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Absen Manual</span>
-          </button>
+          {!isGuru && (
+            <button 
+              onClick={() => setShowManualModal(true)}
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow-md shadow-blue-600/20 flex items-center gap-1.5"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Absen Manual</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -861,36 +865,43 @@ export default function AbsensiScanner() {
             {/* Input Mode Selector Tabs */}
             <div className="space-y-2">
               <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Metode Scanner Eksternal</label>
-              <div className="grid grid-cols-2 gap-2 bg-gray-100 p-1.5 rounded-xl border border-gray-200/80">
-                <button
-                  type="button"
-                  onClick={() => setScanMethod("hardware")}
-                  className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                    scanMethod === "hardware" 
-                      ? "bg-white text-indigo-700 shadow-sm border border-gray-200" 
-                      : "text-gray-500 hover:text-gray-900"
-                  }`}
-                >
-                  <Keyboard className="w-4 h-4 text-indigo-600" />
-                  <span>Hardware Scanner</span>
-                </button>
+              {!isGuru ? (
+                <div className="grid grid-cols-2 gap-2 bg-gray-100 p-1.5 rounded-xl border border-gray-200/80">
+                  <button
+                    type="button"
+                    onClick={() => setScanMethod("hardware")}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                      scanMethod === "hardware" 
+                        ? "bg-white text-indigo-700 shadow-sm border border-gray-200" 
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    <Keyboard className="w-4 h-4 text-indigo-600" />
+                    <span>Hardware Scanner</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setScanMethod("camera");
-                    detectCameras();
-                  }}
-                  className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                    scanMethod === "camera" 
-                      ? "bg-white text-blue-700 shadow-sm border border-gray-200" 
-                      : "text-gray-500 hover:text-gray-900"
-                  }`}
-                >
-                  <Camera className="w-4 h-4 text-blue-600" />
-                  <span>Kamera Eksternal</span>
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setScanMethod("camera");
+                      detectCameras();
+                    }}
+                    className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                      scanMethod === "camera" 
+                        ? "bg-white text-blue-700 shadow-sm border border-gray-200" 
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    <Camera className="w-4 h-4 text-blue-600" />
+                    <span>Kamera Eksternal</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Hak Akses Guru: Aktif pemindaian absensi siswa via <strong>Hardware Scanner</strong>.</span>
+                </div>
+              )}
             </div>
 
             {/* Category & Mode Settings */}
@@ -1242,7 +1253,7 @@ export default function AbsensiScanner() {
           </div>
 
           {/* Bulk Selection Actions Bar */}
-          {selectedIds.length > 0 && (
+          {!isGuru && selectedIds.length > 0 && (
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex flex-col sm:flex-row justify-between items-center gap-3">
               <span className="text-xs font-bold text-blue-800 flex items-center gap-1.5">
                 {isSubmittingBulk && <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />}
@@ -1298,27 +1309,29 @@ export default function AbsensiScanner() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-gray-50/70 border-b border-gray-100 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="py-3 px-4 w-10">
-                    <button onClick={toggleSelectAll} className="text-gray-400 hover:text-gray-600">
-                      {selectedIds.length === filteredLogs.length && filteredLogs.length > 0 ? (
-                        <CheckSquare className="w-4 h-4 text-blue-600" />
-                      ) : (
-                        <Square className="w-4 h-4" />
-                      )}
-                    </button>
-                  </th>
+                  {!isGuru && (
+                    <th className="py-3 px-4 w-10">
+                      <button onClick={toggleSelectAll} className="text-gray-400 hover:text-gray-600">
+                        {selectedIds.length === filteredLogs.length && filteredLogs.length > 0 ? (
+                          <CheckSquare className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <Square className="w-4 h-4" />
+                        )}
+                      </button>
+                    </th>
+                  )}
                   <th className="py-3 px-4">Tanggal</th>
                   <th className="py-3 px-4">Nama</th>
                   {kategori === "Siswa" && <th className="py-3 px-4">Kelas</th>}
                   <th className="py-3 px-4">Jam Masuk</th>
                   <th className="py-3 px-4">Jam Pulang</th>
-                  <th className="py-3 px-4 text-center">Aksi</th>
+                  {!isGuru && <th className="py-3 px-4 text-center">Aksi</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50 text-xs text-gray-700">
                 {filteredLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={kategori === "Siswa" ? 7 : 6} className="py-10 text-center text-gray-400 font-medium">
+                    <td colSpan={kategori === "Siswa" ? (!isGuru ? 7 : 5) : (!isGuru ? 6 : 4)} className="py-10 text-center text-gray-400 font-medium">
                       Belum ada data presensi terekam tanggal {filterTanggal}
                     </td>
                   </tr>
@@ -1329,18 +1342,20 @@ export default function AbsensiScanner() {
                     return (
                       <tr 
                         key={log.id_target}
-                        onClick={() => toggleSelectId(log.id_target)}
-                        className={`hover:bg-slate-50 cursor-pointer transition-all duration-150 ${isSelected ? "bg-blue-50/40" : ""}`}
+                        onClick={() => !isGuru && toggleSelectId(log.id_target)}
+                        className={`hover:bg-slate-50 transition-all duration-150 ${isSelected ? "bg-blue-50/40" : ""}`}
                       >
-                        <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
-                          <button onClick={() => toggleSelectId(log.id_target)} className="text-gray-400 hover:text-gray-600">
-                            {isSelected ? (
-                              <CheckSquare className="w-4 h-4 text-blue-600" />
-                            ) : (
-                              <Square className="w-4 h-4" />
-                            )}
-                          </button>
-                        </td>
+                        {!isGuru && (
+                          <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                            <button onClick={() => toggleSelectId(log.id_target)} className="text-gray-400 hover:text-gray-600">
+                              {isSelected ? (
+                                <CheckSquare className="w-4 h-4 text-blue-600" />
+                              ) : (
+                                <Square className="w-4 h-4" />
+                              )}
+                            </button>
+                          </td>
+                        )}
                         <td className="py-3 px-4 font-mono text-[11px] font-bold text-gray-700 whitespace-nowrap">
                           {log.tanggal || filterTanggal}
                         </td>
@@ -1370,17 +1385,19 @@ export default function AbsensiScanner() {
                             {log.status_pulang}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            onClick={() => handleEditRow(log)}
-                            className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-[11px] font-bold px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                            title={`Edit Presensi ${log.nama_target}`}
-                          >
-                            <Edit3 className="w-3 h-3" />
-                            <span>Edit</span>
-                          </button>
-                        </td>
+                        {!isGuru && (
+                          <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => handleEditRow(log)}
+                              className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-[11px] font-bold px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                              title={`Edit Presensi ${log.nama_target}`}
+                            >
+                              <Edit3 className="w-3 h-3" />
+                              <span>Edit</span>
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     );
                   })
