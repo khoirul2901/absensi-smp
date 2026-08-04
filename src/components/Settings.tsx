@@ -95,11 +95,14 @@ export default function Settings() {
   const [newLiburTgl, setNewLiburTgl] = useState("");
   const [newLiburKet, setNewLiburKet] = useState("");
 
-  // Classes list
-  const [kelasList, setKelasList] = useState<string[]>([]);
+  // Classes list & Teachers list
+  const [kelasList, setKelasList] = useState<{ nama_kelas: string; wali_kelas: string }[]>([]);
+  const [guruList, setGuruList] = useState<any[]>([]);
   const [newKelasName, setNewKelasName] = useState("");
+  const [newWaliKelas, setNewWaliKelas] = useState("-");
   const [editKelasLama, setEditKelasLama] = useState<string | null>(null);
   const [editKelasBaru, setEditKelasBaru] = useState("");
+  const [editWaliKelas, setEditWaliKelas] = useState("-");
 
   const [loading, setLoading] = useState(false);
 
@@ -217,6 +220,13 @@ export default function Settings() {
         localStorage.setItem(getStorageKey('cardLogoRightUrl'), updatedCardConfig.logoRightUrl);
       }
 
+      // Load teachers for Wali Kelas dropdown
+      const guruRes = await callGas("getDataMaster", ["Guru"]);
+      const gList = Array.isArray(guruRes)
+        ? guruRes
+        : (guruRes?.data && Array.isArray(guruRes.data) ? guruRes.data : []);
+      setGuruList(gList);
+
       // Load holidays
       const liburRes = await callGas("getHariLiburSemua");
       const libList = Array.isArray(liburRes)
@@ -239,7 +249,15 @@ export default function Settings() {
       const kList = Array.isArray(kelasRes)
         ? kelasRes
         : (kelasRes?.data && Array.isArray(kelasRes.data) ? kelasRes.data : []);
-      const parsed = kList.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
+      const parsed = kList.map((item: any) => {
+        if (typeof item === 'string') {
+          return { nama_kelas: item, wali_kelas: "-" };
+        }
+        return {
+          nama_kelas: item.nama_kelas || item.kelas || String(item),
+          wali_kelas: item.wali_kelas || "-"
+        };
+      }).filter((item: any) => Boolean(item.nama_kelas));
       setKelasList(parsed);
       return parsed;
     } catch (err) {
@@ -329,9 +347,10 @@ export default function Settings() {
     if (!newKelasName.trim()) return;
     try {
       setLoading(true);
-      const res = await callGas("tambahKelas", [newKelasName.trim()]);
+      const res = await callGas("tambahKelas", [newKelasName.trim(), newWaliKelas]);
       if (res && res.success) {
         setNewKelasName("");
+        setNewWaliKelas("-");
         await fetchKelasList();
       } else {
         alert(res?.message || "Gagal menambah kelas");
@@ -349,10 +368,11 @@ export default function Settings() {
     if (!editKelasLama || !editKelasBaru.trim()) return;
     try {
       setLoading(true);
-      const res = await callGas("editKelas", [editKelasLama, editKelasBaru.trim()]);
+      const res = await callGas("editKelas", [editKelasLama, editKelasBaru.trim(), editWaliKelas]);
       if (res && res.success) {
         setEditKelasLama(null);
         setEditKelasBaru("");
+        setEditWaliKelas("-");
         await fetchKelasList();
       } else {
         alert(res?.message || "Gagal memperbarui kelas");
@@ -549,7 +569,7 @@ export default function Settings() {
 
           {/* Edit form */}
           {editKelasLama ? (
-            <form onSubmit={handleEditClass} className="flex gap-2">
+            <form onSubmit={handleEditClass} className="flex flex-col sm:flex-row gap-2">
               <input 
                 type="text"
                 value={editKelasBaru}
@@ -557,23 +577,37 @@ export default function Settings() {
                 className="flex-grow bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-800"
                 placeholder="Nama kelas baru..."
               />
-              <button 
-                type="submit"
-                className="bg-indigo-600 text-white font-bold text-xs px-3 py-1.5 rounded-xl hover:bg-indigo-700"
+              <select
+                value={editWaliKelas}
+                onChange={(e) => setEditWaliKelas(e.target.value)}
+                className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-gray-800"
               >
-                Ubah
-              </button>
-              <button 
-                type="button"
-                onClick={() => setEditKelasLama(null)}
-                className="bg-gray-100 text-gray-500 font-semibold text-xs px-3 py-1.5 rounded-xl hover:bg-gray-200"
-              >
-                Batal
-              </button>
+                <option value="-">-- Pilih Wali Kelas --</option>
+                {guruList.map((g, i) => (
+                  <option key={i} value={g.nama_guru || g.id_guru}>
+                    {g.nama_guru}
+                  </option>
+                ))}
+              </select>
+              <div className="flex gap-1 shrink-0">
+                <button 
+                  type="submit"
+                  className="bg-indigo-600 text-white font-bold text-xs px-3 py-1.5 rounded-xl hover:bg-indigo-700"
+                >
+                  Ubah
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setEditKelasLama(null)}
+                  className="bg-gray-100 text-gray-500 font-semibold text-xs px-3 py-1.5 rounded-xl hover:bg-gray-200"
+                >
+                  Batal
+                </button>
+              </div>
             </form>
           ) : (
             /* Add form */
-            <form onSubmit={handleAddClass} className="flex gap-2">
+            <form onSubmit={handleAddClass} className="flex flex-col sm:flex-row gap-2">
               <input 
                 type="text"
                 value={newKelasName}
@@ -581,38 +615,63 @@ export default function Settings() {
                 className="flex-grow bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-800"
                 placeholder="Tambah nama kelas baru (misal: XI RPL 1)..."
               />
+              <select
+                value={newWaliKelas}
+                onChange={(e) => setNewWaliKelas(e.target.value)}
+                className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-gray-800"
+              >
+                <option value="-">-- Pilih Wali Kelas --</option>
+                {guruList.map((g, i) => (
+                  <option key={i} value={g.nama_guru || g.id_guru}>
+                    {g.nama_guru}
+                  </option>
+                ))}
+              </select>
               <button 
                 type="submit"
-                className="bg-blue-600 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl hover:bg-blue-700"
+                className="bg-blue-600 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl hover:bg-blue-700 shrink-0 flex items-center justify-center gap-1"
               >
                 <Plus className="w-4 h-4" />
+                <span>Tambah</span>
               </button>
             </form>
           )}
 
           {/* List display */}
-          <div className="border border-gray-100 rounded-xl overflow-hidden max-h-[190px] overflow-y-auto">
+          <div className="border border-gray-100 rounded-xl overflow-hidden max-h-[220px] overflow-y-auto">
             <table className="w-full text-left text-xs text-gray-700">
+              <thead className="bg-gray-50 border-b border-gray-100 text-[11px] font-extrabold text-gray-500 uppercase tracking-wider">
+                <tr>
+                  <th className="py-2 px-4">Nama Kelas</th>
+                  <th className="py-2 px-4">Wali Kelas</th>
+                  <th className="py-2 px-4 text-right">Aksi</th>
+                </tr>
+              </thead>
               <tbody className="divide-y divide-gray-50">
                 {kelasList.length === 0 ? (
                   <tr>
-                    <td className="py-4 text-center text-gray-400 font-medium">Belum ada kelas terdaftar</td>
+                    <td colSpan={3} className="py-4 text-center text-gray-400 font-medium">Belum ada kelas terdaftar</td>
                   </tr>
                 ) : (
                   kelasList.map((kls, idx) => (
                     <tr key={idx} className="hover:bg-slate-50/50">
-                      <td className="py-2.5 px-4 font-bold text-gray-800">{kls}</td>
+                      <td className="py-2.5 px-4 font-bold text-gray-800">{kls.nama_kelas}</td>
+                      <td className="py-2.5 px-4 font-semibold text-indigo-700">
+                        {kls.wali_kelas && kls.wali_kelas !== "-" ? kls.wali_kelas : <span className="text-gray-400 font-normal italic">Belum Set</span>}
+                      </td>
                       <td className="py-2.5 px-4 text-right">
                         <div className="flex justify-end gap-1">
                           <button 
-                            onClick={() => { setEditKelasLama(kls); setEditKelasBaru(kls); }}
+                            onClick={() => { setEditKelasLama(kls.nama_kelas); setEditKelasBaru(kls.nama_kelas); setEditWaliKelas(kls.wali_kelas || "-"); }}
                             className="p-1 text-indigo-600 hover:bg-indigo-50 rounded"
+                            title="Edit Kelas & Wali Kelas"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button 
-                            onClick={() => handleDeleteClass(kls)}
+                            onClick={() => handleDeleteClass(kls.nama_kelas)}
                             className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+                            title="Hapus Kelas"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
