@@ -9,7 +9,7 @@ export const GAS_TOKEN_STORAGE_KEY = "SIAS_GAS_TOKEN";
 
 export function getGasUrl(): string {
   // Ganti placeholder di bawah dengan Web App URL Google Apps Script Anda
-  return "https://script.google.com/macros/s/AKfycbxKcc68ujRI-Wi-DLH8Ni6yiCoDZMowf0WVG4U8O8Yn7nldUd40Uvz0DyXwvjRNWdlp/exec"; // CONTOH - Ganti dengan URL asli
+  return "https://script.google.com/macros/s/AKfycbzCjuiKC99_2xw6E8KY7wOOHLMrqWo3O6LjsU7LX0XZWMCie9_qXtTB-IyhRXxvUKkz9Q/exec"; // CONTOH - Ganti dengan URL asli
 }
 
 export function setGasUrl(url: string): void {
