@@ -142,7 +142,9 @@ export default function Laporan() {
           bulanMinta
         ]);
         if (res && res.success) {
-          setDetailLogs(res.data);
+          setDetailLogs(Array.isArray(res.data) ? res.data : []);
+        } else if (Array.isArray(res)) {
+          setDetailLogs(res);
         } else {
           setError(res?.message || "Gagal memuat rekap detail");
         }
@@ -156,7 +158,9 @@ export default function Laporan() {
           bulanMinta
         ]);
         if (res && res.success) {
-          setRekapRows(res.data);
+          setRekapRows(Array.isArray(res.data) ? res.data : []);
+        } else if (Array.isArray(res)) {
+          setRekapRows(res);
         } else {
           setError(res?.message || "Gagal memuat rekap persentase");
         }
@@ -955,9 +959,11 @@ export default function Laporan() {
                       </tr>
                     ) : (
                       paginatedDetailLogs.map((row, idx) => {
-                        const id = row.id_siswa || row.id_guru || "-";
-                        const name = row.nama_siswa || row.nama_guru || "-";
-                        const classFull = row.kelas_jurusan || "-";
+                        const id = row.id_siswa || row.id_guru || row.id_target || "-";
+                        const name = row.nama_siswa || row.nama_guru || row.nama_target || row.nama || "-";
+                        const classFull = row.kelas_jurusan || (row.kelas ? `${row.kelas} ${row.jurusan || ""}`.trim() : "-");
+                        const statusMasuk = String(row.status_masuk || "-");
+                        const statusPulang = String(row.status_pulang || "-");
                         
                         return (
                           <tr key={idx} className="hover:bg-slate-50/50 transition-all duration-150">
@@ -965,24 +971,24 @@ export default function Laporan() {
                             <td className="py-3.5 px-6 font-mono text-gray-400">{id}</td>
                             <td className="py-3.5 px-6 font-bold text-gray-900">{name}</td>
                             {kategori === "Siswa" && <td className="py-3.5 px-6 text-gray-600 font-medium">{classFull}</td>}
-                            <td className="py-3.5 px-6 font-bold">{row.jam_masuk}</td>
+                            <td className="py-3.5 px-6 font-bold">{row.jam_masuk || "-"}</td>
                             <td className="py-3.5 px-6">
                               <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                row.status_masuk.includes("Tepat") ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
-                                row.status_masuk.includes("Terlambat") ? "bg-amber-50 text-amber-700 border border-amber-100" :
-                                row.status_masuk.includes("Lupa") ? "bg-indigo-50 text-indigo-700 border border-indigo-100" :
-                                row.status_masuk === "-" ? "text-gray-400" : "bg-rose-50 text-rose-700 border border-rose-100"
+                                statusMasuk.includes("Tepat") ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
+                                statusMasuk.includes("Terlambat") ? "bg-amber-50 text-amber-700 border border-amber-100" :
+                                statusMasuk.includes("Lupa") ? "bg-indigo-50 text-indigo-700 border border-indigo-100" :
+                                statusMasuk === "-" ? "text-gray-400" : "bg-rose-50 text-rose-700 border border-rose-100"
                               }`}>
-                                {row.status_masuk}
+                                {statusMasuk}
                               </span>
                             </td>
-                            <td className="py-3.5 px-6 font-bold">{row.jam_pulang}</td>
+                            <td className="py-3.5 px-6 font-bold">{row.jam_pulang || "-"}</td>
                             <td className="py-3.5 px-6">
                               <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                row.status_pulang.includes("Tepat") ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
-                                row.status_pulang === "-" ? "text-gray-400" : "bg-blue-50 text-blue-700 border border-blue-100"
+                                statusPulang.includes("Tepat") ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
+                                statusPulang === "-" ? "text-gray-400" : "bg-blue-50 text-blue-700 border border-blue-100"
                               }`}>
-                                {row.status_pulang}
+                                {statusPulang}
                               </span>
                             </td>
                             <td className="py-3.5 px-6 text-gray-500 font-medium">{row.ket || "-"}</td>
