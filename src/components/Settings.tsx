@@ -764,340 +764,867 @@ export default function Settings() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Code className="w-5 h-5 text-amber-400" />
-            <h3 className="font-extrabold text-white text-sm">Kode Backend Google Apps Script Terbaru (Kode.gs)</h3>
+            <h3 className="font-extrabold text-white text-sm">Kode Backend Google Apps Script Terbaru v3.0 (Kode.gs)</h3>
           </div>
           <button
             onClick={() => {
               const codeText = `/**
- * Google Apps Script Backend (Kode.gs) - Sistem Informasi Presensi Sekolah (SIAS)
- * Tempelkan seluruh kode ini pada Google Apps Script Anda (Ekstensi -> Apps Script)
- * Lalu klik "Terapkan" -> "Penerapan Baru" (Web App -> Siapa Saja)
+ * ==============================================================================
+ * GOOGLE APPS SCRIPT BACKEND (Kode.gs) - VERSION 3.0 (FULL SYNC)
+ * SISTEM INFORMASI PRESENSI & JADWAL PELAJARAN SEKOLAH (SIAS)
+ * ==============================================================================
  */
 
 function doGet(e) {
-  return ContentService.createTextOutput(JSON.stringify({
+  return responseJSON({
     status: "ok",
-    message: "Google Apps Script Backend SIAS Berjalan Aktif"
-  })).setMimeType(ContentService.MimeType.JSON);
+    message: "Google Apps Script Backend SIAS v3.0 Berjalan Aktif",
+    timestamp: new Date().toISOString()
+  });
 }
 
 function doPost(e) {
   try {
+    if (!e || !e.postData || !e.postData.contents) {
+      return responseJSON({ success: false, message: "Request body kosong." });
+    }
+
     const data = JSON.parse(e.postData.contents);
     const action = data.action;
     const args = data.args || [];
-    
-    // Inisialisasi/buat otomatis sheet & header jika belum ada
+
     initSheets();
 
-    let result = { success: false, message: "Action tidak dikenali" };
+    let result = { success: false, message: "Action '" + action + "' tidak dikenal." };
 
     switch (action) {
-      // --- SLOT JAM PELAJARAN ---
-      case "getJamPelajaran":
-        result = getSheetData("JamPelajaran");
-        break;
+      case "getDataMaster": result = getDataMaster(args[0]); break;
+      case "tambahDataMaster": result = tambahDataMaster(args[0], args[1]); break;
+      case "editDataMaster": result = editDataMaster(args[0], args[1], args[2]); break;
+      case "hapusDataMaster": result = hapusDataMaster(args[0], args[1]); break;
+      case "importDataMassal": result = importDataMassal(args[0], args[1]); break;
+      case "getSiswa": result = getDataMaster("Siswa"); break;
+      case "getGuru": result = getDataMaster("Guru"); break;
+
+      case "prosesScanQR": result = prosesScanQR(args[0], args[1], args[2], args[3]); break;
+      case "simpanAbsenManual": result = simpanAbsenManual(args[0], args[1], args[2], args[3], args[4], args[5], args[6]); break;
+      case "simpanBulkAbsenManual": result = simpanBulkAbsenManual(args[0], args[1], args[2], args[3], args[4], args[5]); break;
+      case "simpanKoreksiManual":
+      case "editKehadiran":
+      case "editKehadiranFull": result = editKehadiran(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]); break;
+      case "editKehadiranBulk": result = editKehadiranBulk(args[0], args[1], args[2]); break;
+      case "hapusKehadiran":
+      case "hapusLogKehadiran":
+      case "hapusAbsensi":
+      case "hapusAbsen":
+      case "deleteKehadiran": result = hapusKehadiran(args[0], args[1], args[2]); break;
+      case "getLiveAbsenHariIni": result = getLiveAbsenHariIni(args[0], args[1], args[2]); break;
+
+      case "getLaporanPresensi":
+      case "getLaporanFilter": result = getLaporanFilter(args[0], args[1], args[2], args[3], args[4], args[5]); break;
+      case "hitungRekapPersentase": result = hitungRekapPersentase(args[0], args[1], args[2], args[3], args[4], args[5]); break;
+      case "getDashboardMetrics": result = getDashboardMetrics(); break;
+
+      case "getJamPelajaran": result = getJamPelajaran(); break;
       case "simpanJamPelajaran":
       case "tambahJamPelajaran":
-      case "editJamPelajaran":
-        result = simpanJamPelajaran(args[0], args[1]);
-        break;
-      case "hapusJamPelajaran":
-        result = hapusRowByColumn("JamPelajaran", "id_jam", args[0]);
-        break;
+      case "editJamPelajaran": result = simpanJamPelajaran(args[0], args[1]); break;
+      case "hapusJamPelajaran": result = hapusRowByColumn("JamPelajaran", ["id_jam"], args[0]); break;
 
-      // --- JADWAL PELAJARAN (MATRIKS MAPEL) ---
-      case "getJadwalPelajaranSemua":
-        result = getSheetData("JadwalPelajaran");
-        break;
+      case "getJadwalPelajaranSemua": result = getSheetDataObj("JadwalPelajaran"); break;
       case "tambahJadwalPelajaran":
       case "editJadwalPelajaran":
-        result = simpanJadwalPelajaran(args[0], args[1]);
-        break;
-      case "hapusJadwalPelajaran":
-        result = hapusRowByColumn("JadwalPelajaran", "id_jadwal", args[0]);
-        break;
+      case "simpanJadwalPelajaran": result = simpanJadwalPelajaran(args[0], args[1]); break;
+      case "hapusJadwalPelajaran": result = hapusRowByColumn("JadwalPelajaran", ["id_jadwal"], args[0]); break;
 
-      // --- ABSENSI MENGAJAR GURU (PER JAM) ---
-      case "getAbsensiMengajarGuru":
-        result = getSheetData("AbsensiMengajar");
-        break;
+      case "getAbsensiMengajarGuru": result = getSheetDataObj("AbsensiMengajar"); break;
       case "simpanAbsensiMengajarGuru":
-        result = simpanAbsensiMengajarGuru(args[0]);
-        break;
-      case "hapusAbsensiMengajarGuru":
-        result = hapusRowByColumn("AbsensiMengajar", "id_log_mengajar", args[0]);
-        break;
+      case "tambahAbsensiMengajarGuru": result = simpanAbsensiMengajarGuru(args[0]); break;
+      case "hapusAbsensiMengajarGuru": result = hapusRowByColumn("AbsensiMengajar", ["id_log_mengajar"], args[0]); break;
 
-      // --- DATA KELAS ---
-      case "getKelasSemua":
-        result = getSheetData("Kelas");
-        break;
-      case "tambahKelas":
-      case "editKelas":
-        result = simpanKelas(args[0], args[1]);
-        break;
-      case "hapusKelas":
-        result = hapusRowByColumn("Kelas", "nama_kelas", args[0]);
-        break;
+      case "getJadwalGuruSemua": result = getSheetDataObj("JadwalGuru"); break;
+      case "tambahJadwalGuru":
+      case "editJadwalGuru": result = simpanJadwalGuru(args[0], args[1]); break;
+      case "hapusJadwalGuru": result = hapusRowByColumn("JadwalGuru", ["id_jadwal"], args[0]); break;
 
-      // --- HARI LIBUR ---
-      case "getHariLiburSemua":
-        result = getSheetData("HariLibur");
-        break;
+      case "getKelasSemua": result = getKelasSemua(); break;
+      case "tambahKelas": result = simpanKelas(args[0]); break;
+      case "editKelas": result = editKelas(args[0], args[1]); break;
+      case "hapusKelas": result = hapusRowByColumn("Kelas", ["nama_kelas", "id_kelas"], args[0]); break;
+
+      case "getHariLiburSemua": result = getSheetDataObj("HariLibur"); break;
       case "tambahHariLibur":
-        result = simpanHariLibur(args[0], args[1]);
-        break;
-      case "hapusHariLibur":
-        result = hapusRowByColumn("HariLibur", "tanggal", args[0]);
-        break;
+      case "simpanHariLibur": result = simpanHariLibur(args[0], args[1]); break;
+      case "hapusHariLibur": result = hapusRowByColumn("HariLibur", ["tanggal"], args[0]); break;
 
-      // --- PENGATURAN OPERASIONAL ---
       case "getPengaturanSemua":
-        result = getPengaturan();
-        break;
+      case "getKonfigurasiJam": result = getPengaturan(); break;
       case "simpanKonfigurasiJam":
-        result = simpanPengaturan(args[0], args[1], args[2]);
-        break;
+      case "simpanPengaturan": result = simpanPengaturan(args[0], args[1], args[2]); break;
+      case "simpanPengaturanCustom": result = simpanPengaturanCustom(args[0]); break;
 
-      // --- SISWA, GURU & PRESENSI HARIAN ---
-      case "getSiswa":
-        result = getSheetData("Siswa");
-        break;
-      case "getGuru":
-        result = getSheetData("Guru");
-        break;
-      case "getAbsensi":
-        result = getSheetData("Presensi");
-        break;
-      case "simpanPresensi":
-        result = simpanPresensiHarian(args[0]);
-        break;
+      case "verifikasiLogin": result = verifikasiLogin(args[0], args[1]); break;
+      case "ubahPasswordUser": result = ubahPasswordUser(args[0], args[1], args[2]); break;
+      case "getUsersSemua":
+      case "getUsers": result = getSheetDataObj("Users"); break;
+      case "tambahUserData": result = simpanUser(args[0], null); break;
+      case "editUserData": result = simpanUser(args[1], args[0]); break;
+      case "hapusUserData": result = hapusRowByColumn("Users", ["username"], args[0]); break;
 
-      default:
-        result = { success: false, message: "Action '" + action + "' tidak dikenali." };
+      default: result = { success: false, message: "Action '" + action + "' tidak dikenali di Kode.gs." };
     }
 
-    return ContentService.createTextOutput(JSON.stringify(result))
-      .setMimeType(ContentService.MimeType.JSON);
+    return responseJSON(result);
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, message: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return responseJSON({ success: false, message: "Exception Error: " + err.toString() });
   }
 }
 
-// ==========================================
-// HELPER FUNCTIONS GOOGLE SHEETS
-// ==========================================
+function responseJSON(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
 
-function getSpreadsheet() {
-  return SpreadsheetApp.getActiveSpreadsheet();
+function getSpreadsheet() { return SpreadsheetApp.getActiveSpreadsheet(); }
+
+function findSheetByName(possibleNames) {
+  const ss = getSpreadsheet();
+  if (typeof possibleNames === "string") possibleNames = [possibleNames];
+  for (let i = 0; i < possibleNames.length; i++) {
+    const sheet = ss.getSheetByName(possibleNames[i]);
+    if (sheet) return sheet;
+  }
+  return null;
+}
+
+function getOrCreateSheet(primaryName, headers, aliases) {
+  let sheet = findSheetByName([primaryName].concat(aliases || []));
+  if (!sheet) {
+    sheet = getSpreadsheet().insertSheet(primaryName);
+    sheet.appendRow(headers);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold").setBackground("#f3f4f6");
+  } else if (sheet.getLastRow() === 0) {
+    sheet.appendRow(headers);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold").setBackground("#f3f4f6");
+  }
+  return sheet;
 }
 
 function initSheets() {
-  const ss = getSpreadsheet();
-  const sheets = [
-    { name: "JamPelajaran", headers: ["id_jam", "jam_ke", "nama_jam", "jam_mulai", "jam_selesai", "tipe"] },
-    { name: "JadwalPelajaran", headers: ["id_jadwal", "hari", "kelas", "jam_ke", "id_jam", "jam_mulai", "jam_selesai", "mapel", "id_guru", "nama_guru", "ruangan"] },
-    { name: "AbsensiMengajar", headers: ["id_log_mengajar", "tanggal", "waktu_absen", "hari", "id_guru", "nama_guru", "kelas", "mapel", "jam_ke", "jam_mulai_jadwal", "jam_selesai_jadwal", "status", "catatan_materi"] },
-    { name: "Kelas", headers: ["id_kelas", "nama_kelas", "wali_kelas"] },
-    { name: "HariLibur", headers: ["tanggal", "keterangan"] },
-    { name: "Pengaturan", headers: ["key", "value"] },
-    { name: "Presensi", headers: ["id_presensi", "nama", "role", "nis_nip", "status", "waktu_absen", "tanggal", "kelas"] }
-  ];
-
-  sheets.forEach(s => {
-    let sheet = ss.getSheetByName(s.name);
-    if (!sheet) {
-      sheet = ss.insertSheet(s.name);
-      sheet.appendRow(s.headers);
-      sheet.getRange(1, 1, 1, s.headers.length).setFontWeight("bold").setBackground("#f3f4f6");
-    }
-  });
+  getOrCreateSheet("Siswa", ["id_siswa", "nisn", "nama_siswa", "jenis_kelamin", "kelas", "jurusan", "no_hp_ortu", "qr_content"], ["DataSiswa", "Data_Siswa"]);
+  getOrCreateSheet("Guru", ["id_guru", "nip_nuptk", "nama_guru", "jenis_kelamin", "jabatan_tugas", "no_hp", "qr_content", "password"], ["DataGuru", "Data_Guru"]);
+  getOrCreateSheet("PresensiSiswa", ["id_log_siswa", "tanggal", "id_siswa", "nama_siswa", "kelas_jurusan", "jam_masuk", "status_masuk", "jam_pulang", "status_pulang", "ket"], ["LaporanSiswa"]);
+  getOrCreateSheet("PresensiGuru", ["id_log_guru", "tanggal", "id_guru", "nama_guru", "jam_masuk", "status_masuk", "jam_pulang", "status_pulang", "ket"], ["LaporanGuru"]);
+  getOrCreateSheet("JamPelajaran", ["id_jam", "jam_ke", "nama_jam", "jam_mulai", "jam_selesai", "tipe"]);
+  getOrCreateSheet("JadwalPelajaran", ["id_jadwal", "hari", "kelas", "jam_ke", "id_jam", "jam_mulai", "jam_selesai", "mapel", "id_guru", "nama_guru", "ruangan"]);
+  getOrCreateSheet("AbsensiMengajar", ["id_log_mengajar", "tanggal", "waktu_absen", "hari", "id_guru", "nama_guru", "kelas", "mapel", "jam_ke", "jam_mulai_jadwal", "jam_selesai_jadwal", "status", "catatan_materi"]);
+  getOrCreateSheet("JadwalGuru", ["id_jadwal", "id_guru", "nama_guru", "hari", "jam_masuk_mulai", "jam_masuk_batas", "jam_pulang_mulai"]);
+  getOrCreateSheet("Kelas", ["id_kelas", "nama_kelas", "wali_kelas"]);
+  getOrCreateSheet("HariLibur", ["tanggal", "keterangan"]);
+  getOrCreateSheet("Pengaturan", ["key", "value"]);
+  getOrCreateSheet("Users", ["username", "password", "role", "target_id"]);
 }
 
-function getSheetData(sheetName) {
-  const sheet = getSpreadsheet().getSheetByName(sheetName);
+function getSheetDataObj(sheetPrimaryName, aliases) {
+  const sheet = findSheetByName([sheetPrimaryName].concat(aliases || []));
   if (!sheet) return { success: true, data: [] };
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return { success: true, data: [] };
-  
-  const headers = data[0];
+  const rawHeaders = data[0].map(h => String(h).trim());
   const rows = [];
   for (let i = 1; i < data.length; i++) {
     let row = {};
-    for (let j = 0; j < headers.length; j++) {
-      row[headers[j]] = data[i][j];
+    let empty = true;
+    for (let j = 0; j < rawHeaders.length; j++) {
+      const val = data[i][j];
+      if (val !== "" && val !== null && val !== undefined) empty = false;
+      const key = rawHeaders[j];
+      if (key) row[key] = val;
     }
-    rows.push(row);
+    if (!empty) rows.push(row);
   }
   return { success: true, data: rows };
 }
 
-function simpanJamPelajaran(param1, param2) {
-  const payload = (typeof param1 === 'object' && param1 !== null) ? param1 : param2;
-  if (!payload) return { success: false, message: "Payload tidak valid" };
+function getDataMaster(kategori) {
+  const isSiswa = kategori === "Siswa";
+  const primarySheet = isSiswa ? "Siswa" : "Guru";
+  const aliases = isSiswa ? ["DataSiswa", "Data_Siswa"] : ["DataGuru", "Data_Guru"];
+  const res = getSheetDataObj(primarySheet, aliases);
 
-  const sheet = getSpreadsheet().getSheetByName("JamPelajaran");
+  if (!res.data) return { success: true, data: [] };
+
+  const idKey = isSiswa ? "id_siswa" : "id_guru";
+  const nameKey = isSiswa ? "nama_siswa" : "nama_guru";
+  const idNumKey = isSiswa ? "nisn" : "nip_nuptk";
+
+  const normalized = res.data.map((item, idx) => {
+    const idVal = item[idKey] || item.id || (isSiswa ? "S-" + (1000 + idx) : "G-" + (1000 + idx));
+    const nameVal = item[nameKey] || item.nama || item.nama_lengkap || "-";
+    const idNumVal = item[idNumKey] || item.nis || item.nip || item.nuptk || "-";
+    const qrVal = item.qr_content || (idVal + "_" + idNumVal + "_" + String(nameVal).replace(/\\s+/g, '-'));
+
+    if (isSiswa) {
+      return {
+        id_siswa: String(idVal),
+        nisn: String(idNumVal),
+        nama_siswa: String(nameVal),
+        jenis_kelamin: String(item.jenis_kelamin || item.jk || "L"),
+        kelas: String(item.kelas || "-"),
+        jurusan: String(item.jurusan || "-"),
+        no_hp_ortu: String(item.no_hp_ortu || item.hp_ortu || item.no_hp || "-"),
+        qr_content: String(qrVal)
+      };
+    } else {
+      return {
+        id_guru: String(idVal),
+        nip_nuptk: String(idNumVal),
+        nama_guru: String(nameVal),
+        jenis_kelamin: String(item.jenis_kelamin || item.jk || "L"),
+        jabatan_tugas: String(item.jabatan_tugas || item.jabatan || item.mapel || "Guru"),
+        no_hp: String(item.no_hp || item.hp || "-"),
+        qr_content: String(qrVal),
+        password: String(item.password || "guru123")
+      };
+    }
+  });
+
+  return { success: true, data: normalized };
+}
+
+function tambahDataMaster(kategori, dataObj) {
+  if (!dataObj) return { success: false, message: "Data tidak valid." };
+  const isSiswa = kategori === "Siswa";
+  const sheet = getOrCreateSheet(isSiswa ? "Siswa" : "Guru", isSiswa ?
+    ["id_siswa", "nisn", "nama_siswa", "jenis_kelamin", "kelas", "jurusan", "no_hp_ortu", "qr_content"] :
+    ["id_guru", "nip_nuptk", "nama_guru", "jenis_kelamin", "jabatan_tugas", "no_hp", "qr_content", "password"]
+  );
+
+  const prefix = isSiswa ? "S-" : "G-";
+  const newId = prefix + Date.now();
+  const qrContent = "QR-" + newId;
+
+  if (isSiswa) {
+    sheet.appendRow([newId, dataObj.nisn || "-", dataObj.nama_siswa || "-", dataObj.jenis_kelamin || "L", dataObj.kelas || "-", dataObj.jurusan || "-", dataObj.no_hp_ortu || "-", qrContent]);
+  } else {
+    sheet.appendRow([newId, dataObj.nip_nuptk || "-", dataObj.nama_guru || "-", dataObj.jenis_kelamin || "L", dataObj.jabatan_tugas || "-", dataObj.no_hp || "-", qrContent, dataObj.password || "guru123"]);
+  }
+  return { success: true, message: "Berhasil menambah " + kategori + " baru!" };
+}
+
+function editDataMaster(kategori, idTarget, dataObj) {
+  const isSiswa = kategori === "Siswa";
+  const primarySheet = isSiswa ? "Siswa" : "Guru";
+  const sheet = findSheetByName([primarySheet, isSiswa ? "DataSiswa" : "DataGuru"]);
+  if (!sheet) return { success: false, message: "Sheet tidak ditemukan." };
+
   const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const idJam = payload.id_jam || ("JP-" + Date.now());
-  
-  const idColIdx = headers.indexOf("id_jam");
-  let foundRowIdx = -1;
-  
+  if (data.length <= 1) return { success: false, message: "Data kosong." };
+  const headers = data[0].map(h => String(h).trim());
+  const idColIdx = findHeaderIndex(headers, [isSiswa ? "id_siswa" : "id_guru", "id"]);
+  if (idColIdx === -1) return { success: false, message: "Kolom ID tidak ditemukan." };
+
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][idColIdx]) === String(idJam)) {
-      foundRowIdx = i + 1;
-      break;
+    if (String(data[i][idColIdx]) === String(idTarget)) {
+      if (isSiswa) {
+        setRowValueByHeader(sheet, i + 1, headers, "nisn", dataObj.nisn);
+        setRowValueByHeader(sheet, i + 1, headers, "nama_siswa", dataObj.nama_siswa);
+        setRowValueByHeader(sheet, i + 1, headers, "jenis_kelamin", dataObj.jenis_kelamin);
+        setRowValueByHeader(sheet, i + 1, headers, "kelas", dataObj.kelas);
+        setRowValueByHeader(sheet, i + 1, headers, "jurusan", dataObj.jurusan);
+        setRowValueByHeader(sheet, i + 1, headers, "no_hp_ortu", dataObj.no_hp_ortu);
+      } else {
+        setRowValueByHeader(sheet, i + 1, headers, "nip_nuptk", dataObj.nip_nuptk);
+        setRowValueByHeader(sheet, i + 1, headers, "nama_guru", dataObj.nama_guru);
+        setRowValueByHeader(sheet, i + 1, headers, "jenis_kelamin", dataObj.jenis_kelamin);
+        setRowValueByHeader(sheet, i + 1, headers, "jabatan_tugas", dataObj.jabatan_tugas);
+        setRowValueByHeader(sheet, i + 1, headers, "no_hp", dataObj.no_hp);
+        if (dataObj.password) setRowValueByHeader(sheet, i + 1, headers, "password", dataObj.password);
+      }
+      return { success: true, message: "Data " + kategori + " berhasil diperbarui!" };
+    }
+  }
+  return { success: false, message: "ID target tidak ditemukan." };
+}
+
+function hapusDataMaster(kategori, idTarget) {
+  const isSiswa = kategori === "Siswa";
+  return hapusRowByColumn(isSiswa ? "Siswa" : "Guru", [isSiswa ? "id_siswa" : "id_guru", "id"], idTarget);
+}
+
+function importDataMassal(kategori, arrayData) {
+  if (!arrayData || !arrayData.length) return { success: false, message: "Tidak ada data." };
+  let count = 0;
+  arrayData.forEach(item => { tambahDataMaster(kategori, item); count++; });
+  return { success: true, message: "Berhasil mengimpor " + count + " data " + kategori + "!" };
+}
+
+function prosesScanQR(qrContent, kategori, mode, tanggal) {
+  const masterRes = getDataMaster(kategori);
+  if (!masterRes.data || !masterRes.data.length) return { success: false, message: "Data master kosong." };
+  const user = masterRes.data.find(x => x.qr_content === qrContent || x.id_siswa === qrContent || x.id_guru === qrContent);
+  if (!user) return { success: false, message: "QR Code tidak valid atau belum terdaftar!" };
+
+  const tgl = tanggal || new Date().toISOString().split("T")[0];
+  const jamNow = new Date().toTimeString().slice(0, 5);
+  const isSiswa = kategori === "Siswa";
+  const idTarget = isSiswa ? user.id_siswa : user.id_guru;
+  const namaTarget = isSiswa ? user.nama_siswa : user.nama_guru;
+  const classKey = isSiswa ? (user.kelas + " " + user.jurusan).trim() : "-";
+  const cfg = getPengaturan().data || { jam_masuk_mulai: "06:00", jam_masuk_batas: "07:15", jam_pulang_mulai: "15:30" };
+  const sheetName = isSiswa ? "PresensiSiswa" : "PresensiGuru";
+  const sheet = getOrCreateSheet(sheetName, isSiswa ?
+    ["id_log_siswa", "tanggal", "id_siswa", "nama_siswa", "kelas_jurusan", "jam_masuk", "status_masuk", "jam_pulang", "status_pulang", "ket"] :
+    ["id_log_guru", "tanggal", "id_guru", "nama_guru", "jam_masuk", "status_masuk", "jam_pulang", "status_pulang", "ket"]
+  );
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(h => String(h).trim());
+  const idColIdx = findHeaderIndex(headers, [isSiswa ? "id_siswa" : "id_guru", "id_target"]);
+  const tglColIdx = findHeaderIndex(headers, ["tanggal"]);
+
+  let foundRowIdx = -1;
+  let existingRowData = null;
+  if (idColIdx !== -1 && tglColIdx !== -1) {
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][tglColIdx]).split("T")[0] === tgl && String(data[i][idColIdx]) === String(idTarget)) {
+        foundRowIdx = i + 1;
+        existingRowData = data[i];
+        break;
+      }
     }
   }
 
-  const newRow = [
-    idJam,
-    payload.jam_ke || 1,
-    payload.nama_jam || ("Jam ke-" + (payload.jam_ke || 1)),
-    payload.jam_mulai || "07:00",
-    payload.jam_selesai || "07:45",
-    payload.tipe || "Pelajaran"
-  ];
+  if (mode === "Masuk") {
+    if (foundRowIdx > 0 && existingRowData) {
+      const jamMskIdx = findHeaderIndex(headers, ["jam_masuk"]);
+      if (jamMskIdx !== -1 && existingRowData[jamMskIdx] !== "-" && existingRowData[jamMskIdx] !== "") {
+        return { success: false, message: namaTarget + " sudah scan masuk hari ini!" };
+      }
+    }
+    if (jamNow < (cfg.jam_masuk_mulai || "06:00")) return { success: false, message: "Absen masuk belum dibuka." };
+    const statusMasuk = (jamNow <= (cfg.jam_masuk_batas || "07:15")) ? "Tepat Waktu" : "Terlambat";
+    const logId = (isSiswa ? "LOG-S-" : "LOG-G-") + Date.now();
 
-  if (foundRowIdx > 0) {
-    sheet.getRange(foundRowIdx, 1, 1, newRow.length).setValues([newRow]);
+    if (foundRowIdx > 0) {
+      setRowValueByHeader(sheet, foundRowIdx, headers, "jam_masuk", jamNow);
+      setRowValueByHeader(sheet, foundRowIdx, headers, "status_masuk", statusMasuk);
+    } else {
+      if (isSiswa) sheet.appendRow([logId, tgl, idTarget, namaTarget, classKey, jamNow, statusMasuk, "-", "-", "-"]);
+      else sheet.appendRow([logId, tgl, idTarget, namaTarget, jamNow, statusMasuk, "-", "-", "-"]);
+    }
+    return { success: true, message: "Absen Masuk Berhasil!\nNama: " + namaTarget + "\nStatus: " + statusMasuk + "\nJam: " + jamNow };
   } else {
-    sheet.appendRow(newRow);
+    if (jamNow < (cfg.jam_pulang_mulai || "15:30")) return { success: false, message: "Absen pulang belum dibuka." };
+    if (foundRowIdx > 0) {
+      setRowValueByHeader(sheet, foundRowIdx, headers, "jam_pulang", jamNow);
+      setRowValueByHeader(sheet, foundRowIdx, headers, "status_pulang", "Tepat Waktu");
+      return { success: true, message: "Absen Pulang Berhasil!\nNama: " + namaTarget + "\nJam: " + jamNow };
+    } else {
+      const logId = (isSiswa ? "LOG-S-" : "LOG-G-") + Date.now();
+      if (isSiswa) sheet.appendRow([logId, tgl, idTarget, namaTarget, classKey, "-", "Lupa Scan Masuk", jamNow, "Tepat Waktu", "-"]);
+      else sheet.appendRow([logId, tgl, idTarget, namaTarget, "-", "Lupa Scan Masuk", jamNow, "Tepat Waktu", "-"]);
+      return { success: true, message: "Absen Pulang Berhasil!\nCatatan: Lupa scan masuk.\nNama: " + namaTarget };
+    }
+  }
+}
+
+function simpanAbsenManual(idTarget, kategori, mode, tanggal, status, keterangan, jamCustom) {
+  const isSiswa = kategori === "Siswa";
+  const tgl = tanggal || new Date().toISOString().split("T")[0];
+  const isAbsentStatus = status === "Sakit" || status === "Izin" || status === "Alfa" || status === "Alpha";
+  const jamDefault = mode === "Masuk" ? "07:00" : "15:30";
+  const jam = isAbsentStatus ? "-" : (jamCustom && jamCustom !== "-" ? jamCustom : jamDefault);
+  const sheetName = isSiswa ? "PresensiSiswa" : "PresensiGuru";
+  const sheet = getOrCreateSheet(sheetName, isSiswa ?
+    ["id_log_siswa", "tanggal", "id_siswa", "nama_siswa", "kelas_jurusan", "jam_masuk", "status_masuk", "jam_pulang", "status_pulang", "ket"] :
+    ["id_log_guru", "tanggal", "id_guru", "nama_guru", "jam_masuk", "status_masuk", "jam_pulang", "status_pulang", "ket"]
+  );
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(h => String(h).trim());
+  const idColIdx = findHeaderIndex(headers, [isSiswa ? "id_siswa" : "id_guru", "id_target"]);
+  const tglColIdx = findHeaderIndex(headers, ["tanggal"]);
+
+  let foundRowIdx = -1;
+  if (idColIdx !== -1 && tglColIdx !== -1) {
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][tglColIdx]).split("T")[0] === tgl && String(data[i][idColIdx]) === String(idTarget)) {
+        foundRowIdx = i + 1;
+        break;
+      }
+    }
   }
 
+  if (foundRowIdx > 0) {
+    if (isAbsentStatus) {
+      setRowValueByHeader(sheet, foundRowIdx, headers, "status_masuk", status);
+      setRowValueByHeader(sheet, foundRowIdx, headers, "status_pulang", status);
+      setRowValueByHeader(sheet, foundRowIdx, headers, "jam_masuk", "-");
+      setRowValueByHeader(sheet, foundRowIdx, headers, "jam_pulang", "-");
+    } else {
+      if (mode === "Masuk") {
+        setRowValueByHeader(sheet, foundRowIdx, headers, "jam_masuk", jam);
+        setRowValueByHeader(sheet, foundRowIdx, headers, "status_masuk", status);
+      } else {
+        setRowValueByHeader(sheet, foundRowIdx, headers, "jam_pulang", jam);
+        setRowValueByHeader(sheet, foundRowIdx, headers, "status_pulang", status);
+      }
+    }
+    setRowValueByHeader(sheet, foundRowIdx, headers, "ket", keterangan || "-");
+  } else {
+    const masterRes = getDataMaster(kategori);
+    const user = (masterRes.data || []).find(x => x.id_siswa === idTarget || x.id_guru === idTarget);
+    const namaTarget = user ? (isSiswa ? user.nama_siswa : user.nama_guru) : "Target";
+    const classKey = user && isSiswa ? (user.kelas + " " + user.jurusan).trim() : "-";
+    const logId = "LOG-" + Date.now();
+
+    const statusMasuk = isAbsentStatus ? status : (mode === "Masuk" ? status : "-");
+    const statusPulang = isAbsentStatus ? status : (mode === "Pulang" ? status : "-");
+    const jamMasuk = isAbsentStatus ? "-" : (mode === "Masuk" ? jam : "-");
+    const jamPulang = isAbsentStatus ? "-" : (mode === "Pulang" ? jam : "-");
+
+    if (isSiswa) sheet.appendRow([logId, tgl, idTarget, namaTarget, classKey, jamMasuk, statusMasuk, jamPulang, statusPulang, keterangan || "-"]);
+    else sheet.appendRow([logId, tgl, idTarget, namaTarget, jamMasuk, statusMasuk, jamPulang, statusPulang, keterangan || "-"]);
+  }
+  return { success: true, message: "Koreksi manual berhasil disimpan!" };
+}
+
+function simpanBulkAbsenManual(ids, kategori, mode, tanggal, status, keterangan) {
+  if (!ids || !ids.length) return { success: false, message: "Pilih minimal 1 data." };
+  let count = 0;
+  ids.forEach(idTarget => { simpanAbsenManual(idTarget, kategori, mode, tanggal, status, keterangan, "-"); count++; });
+  return { success: true, message: "Berhasil memperbarui " + count + " data presensi!" };
+}
+
+function editKehadiran(idTarget, kategori, tanggal, arg3, arg4, arg5, arg6, arg7) {
+  const dataObj = typeof arg3 === "object" && arg3 !== null ? arg3 : { jam_masuk: arg3 || "-", status_masuk: arg4 || "-", jam_pulang: arg5 || "-", status_pulang: arg6 || "-", ket: arg7 || "-" };
+  const isSiswa = kategori === "Siswa";
+  const tgl = tanggal || new Date().toISOString().split("T")[0];
+  const sheetName = isSiswa ? "PresensiSiswa" : "PresensiGuru";
+  const sheet = getOrCreateSheet(sheetName, isSiswa ?
+    ["id_log_siswa", "tanggal", "id_siswa", "nama_siswa", "kelas_jurusan", "jam_masuk", "status_masuk", "jam_pulang", "status_pulang", "ket"] :
+    ["id_log_guru", "tanggal", "id_guru", "nama_guru", "jam_masuk", "status_masuk", "jam_pulang", "status_pulang", "ket"]
+  );
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(h => String(h).trim());
+  const idColIdx = findHeaderIndex(headers, [isSiswa ? "id_siswa" : "id_guru", "id_target"]);
+  const tglColIdx = findHeaderIndex(headers, ["tanggal"]);
+
+  let foundRowIdx = -1;
+  if (idColIdx !== -1 && tglColIdx !== -1) {
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][tglColIdx]).split("T")[0] === tgl && String(data[i][idColIdx]) === String(idTarget)) {
+        foundRowIdx = i + 1;
+        break;
+      }
+    }
+  }
+
+  const isAllEmpty = (!dataObj.jam_masuk || dataObj.jam_masuk === "-") && (!dataObj.status_masuk || dataObj.status_masuk === "-") && (!dataObj.jam_pulang || dataObj.jam_pulang === "-") && (!dataObj.status_pulang || dataObj.status_pulang === "-") && (!dataObj.ket || dataObj.ket === "-");
+
+  if (foundRowIdx > 0) {
+    if (isAllEmpty) sheet.deleteRow(foundRowIdx);
+    else {
+      if (dataObj.jam_masuk !== undefined) setRowValueByHeader(sheet, foundRowIdx, headers, "jam_masuk", dataObj.jam_masuk);
+      if (dataObj.status_masuk !== undefined) setRowValueByHeader(sheet, foundRowIdx, headers, "status_masuk", dataObj.status_masuk);
+      if (dataObj.jam_pulang !== undefined) setRowValueByHeader(sheet, foundRowIdx, headers, "jam_pulang", dataObj.jam_pulang);
+      if (dataObj.status_pulang !== undefined) setRowValueByHeader(sheet, foundRowIdx, headers, "status_pulang", dataObj.status_pulang);
+      if (dataObj.ket !== undefined) setRowValueByHeader(sheet, foundRowIdx, headers, "ket", dataObj.ket);
+    }
+  } else if (!isAllEmpty) {
+    const masterRes = getDataMaster(kategori);
+    const user = (masterRes.data || []).find(x => x.id_siswa === idTarget || x.id_guru === idTarget);
+    const namaTarget = user ? (isSiswa ? user.nama_siswa : user.nama_guru) : "Target";
+    const classKey = user && isSiswa ? (user.kelas + " " + user.jurusan).trim() : "-";
+    const logId = "LOG-" + Date.now();
+
+    if (isSiswa) sheet.appendRow([logId, tgl, idTarget, namaTarget, classKey, dataObj.jam_masuk || "-", dataObj.status_masuk || "-", dataObj.jam_pulang || "-", dataObj.status_pulang || "-", dataObj.ket || "-"]);
+    else sheet.appendRow([logId, tgl, idTarget, namaTarget, dataObj.jam_masuk || "-", dataObj.status_masuk || "-", dataObj.jam_pulang || "-", dataObj.status_pulang || "-", dataObj.ket || "-"]);
+  }
+  return { success: true, message: "Koreksi kehadiran berhasil diperbarui!" };
+}
+
+function editKehadiranBulk(rows, kategori, tanggal) {
+  if (!rows || !rows.length) return { success: false, message: "Data kosong." };
+  let count = 0;
+  rows.forEach(item => {
+    if (item.id_target) {
+      editKehadiran(item.id_target, kategori, tanggal, item.jam_masuk, item.status_masuk, item.jam_pulang, item.status_pulang, item.ket);
+      count++;
+    }
+  });
+  return { success: true, message: "Berhasil memperbarui " + count + " baris kehadiran!" };
+}
+
+function hapusKehadiran(idTarget, kategori, tanggal) {
+  const isSiswa = kategori === "Siswa";
+  const sheetName = isSiswa ? "PresensiSiswa" : "PresensiGuru";
+  const sheet = findSheetByName([sheetName, "Presensi"]);
+  if (!sheet) return { success: true };
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return { success: true };
+  const headers = data[0].map(h => String(h).trim());
+  const idColIdx = findHeaderIndex(headers, [isSiswa ? "id_siswa" : "id_guru", "id_target"]);
+  const tglColIdx = findHeaderIndex(headers, ["tanggal"]);
+  if (idColIdx === -1 || tglColIdx === -1) return { success: true };
+
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][tglColIdx]).split("T")[0] === tanggal && String(data[i][idColIdx]) === String(idTarget)) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+  return { success: true, message: "Presensi berhasil dihapus!" };
+}
+
+function getLiveAbsenHariIni(kategori, tanggal, filterKelas) {
+  const tgl = tanggal || new Date().toISOString().split("T")[0];
+  const isSiswa = kategori === "Siswa";
+  const masterRes = getDataMaster(kategori);
+  const masterData = masterRes.data || [];
+  const sheetName = isSiswa ? "PresensiSiswa" : "PresensiGuru";
+  const rptRes = getSheetDataObj(sheetName, ["Presensi"]);
+  const rptData = rptRes.data || [];
+  const idKey = isSiswa ? "id_siswa" : "id_guru";
+  const nameKey = isSiswa ? "nama_siswa" : "nama_guru";
+
+  const result = masterData.map(m => {
+    const idVal = m[idKey];
+    const rep = rptData.find(r => String(r.tanggal || "").split("T")[0] === tgl && (String(r[idKey]) === String(idVal) || String(r.id_target) === String(idVal))) || {};
+    return {
+      id_target: idVal,
+      nama_target: m[nameKey] || "-",
+      kelas_jurusan: isSiswa ? (m.kelas + " " + m.jurusan).trim() : "-",
+      tanggal: tgl,
+      jam_masuk: rep.jam_masuk || "-",
+      status_masuk: rep.status_masuk || "-",
+      jam_pulang: rep.jam_pulang || "-",
+      status_pulang: rep.status_pulang || "-",
+      ket: rep.ket || "-"
+    };
+  });
+
+  const filtered = result.filter(item => {
+    if (isSiswa && filterKelas && filterKelas !== "Semua") {
+      return item.kelas_jurusan.indexOf(filterKelas) !== -1;
+    }
+    return true;
+  });
+  return { success: true, data: filtered };
+}
+
+function getLaporanFilter(kategori, kelas, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta) {
+  const isSiswa = kategori === "Siswa";
+  const sheetName = isSiswa ? "PresensiSiswa" : "PresensiGuru";
+  const res = getSheetDataObj(sheetName, ["Presensi"]);
+  const data = res.data || [];
+
+  const filtered = data.filter(row => {
+    const rowTgl = String(row.tanggal || "").split("T")[0];
+    if (!rowTgl) return false;
+    if (jenisFilter === "rentang" && tanggalMulai && tanggalSelesai) {
+      if (rowTgl < tanggalMulai || rowTgl > tanggalSelesai) return false;
+    } else if (jenisFilter === "bulan" && bulanMinta) {
+      if (rowTgl.indexOf(bulanMinta) !== 0) return false;
+    }
+    if (isSiswa && kelas && kelas !== "Semua") {
+      if (String(row.kelas_jurusan || row.kelas || "").indexOf(kelas) === -1) return false;
+    }
+    return true;
+  });
+  return { success: true, data: filtered };
+}
+
+function hitungRekapPersentase(kategori, kelas, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta) {
+  const isSiswa = kategori === "Siswa";
+  const masterRes = getDataMaster(kategori);
+  let masterData = masterRes.data || [];
+
+  if (isSiswa && kelas && kelas !== "Semua") {
+    masterData = masterData.filter(m => (m.kelas + " " + m.jurusan).indexOf(kelas) !== -1);
+  }
+
+  const rptRes = getLaporanFilter(kategori, kelas, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta);
+  const rptData = rptRes.data || [];
+  const idKey = isSiswa ? "id_siswa" : "id_guru";
+  const nameKey = isSiswa ? "nama_siswa" : "nama_guru";
+
+  const rekap = masterData.map(m => {
+    const idVal = m[idKey];
+    const namaVal = m[nameKey];
+    const userRpts = rptData.filter(r => String(r[idKey]) === String(idVal) || String(r.id_target) === String(idVal));
+
+    let hadir = 0, sakit = 0, izin = 0, alfa = 0;
+    const jamMasuks = [], jamPulangs = [];
+
+    userRpts.forEach(r => {
+      const sm = String(r.status_masuk || "").toLowerCase();
+      if (sm.indexOf("tepat") !== -1 || sm.indexOf("terlambat") !== -1 || sm.indexOf("lupa") !== -1 || sm.indexOf("hadir") !== -1) hadir++;
+      else if (sm.indexOf("sakit") !== -1) sakit++;
+      else if (sm.indexOf("izin") !== -1) izin++;
+      else if (sm.indexOf("alfa") !== -1 || sm.indexOf("alpha") !== -1) alfa++;
+      else if (r.status_masuk && r.status_masuk !== "-") hadir++;
+
+      if (r.jam_masuk && r.jam_masuk !== "-") jamMasuks.push(r.jam_masuk);
+      if (r.jam_pulang && r.jam_pulang !== "-") jamPulangs.push(r.jam_pulang);
+    });
+
+    const totalDays = hadir + sakit + izin + alfa;
+    const persentase = totalDays === 0 ? "0%" : ((hadir / totalDays) * 100).toFixed(1) + "%";
+
+    return { id: idVal, nama: namaVal, hadir, sakit, izin, alfa, persentase, jam_masuk: jamMasuks.length > 0 ? jamMasuks.join(", ") : "-", jam_pulang: jamPulangs.length > 0 ? jamPulangs.join(", ") : "-" };
+  });
+
+  return { success: true, data: rekap };
+}
+
+function getDashboardMetrics() {
+  const siswaData = (getDataMaster("Siswa").data) || [];
+  const guruData = (getDataMaster("Guru").data) || [];
+  const tgl = new Date().toISOString().split("T")[0];
+  const rptSiswa = (getSheetDataObj("PresensiSiswa").data) || [];
+  const rptGuru = (getSheetDataObj("PresensiGuru").data) || [];
+
+  function calcStats(masterList, rptList) {
+    let hadirMasuk = 0, hadirPulang = 0, totalTepat = 0, rawAlfa = 0;
+    const todayRpts = rptList.filter(r => String(r.tanggal || "").split("T")[0] === tgl);
+    todayRpts.forEach(r => {
+      const sm = String(r.status_masuk || "").toLowerCase();
+      const sp = String(r.status_pulang || "").toLowerCase();
+      if (sm.indexOf("tepat") !== -1 || sm.indexOf("terlambat") !== -1 || sm.indexOf("lupa") !== -1 || sm.indexOf("hadir") !== -1) {
+        hadirMasuk++;
+        if (sm.indexOf("tepat") !== -1) totalTepat++;
+      } else if (sm.indexOf("alfa") !== -1 || sm.indexOf("alpha") !== -1) rawAlfa++;
+      if (sp.indexOf("tepat") !== -1 || sp.indexOf("terlambat") !== -1 || sp.indexOf("lupa") !== -1 || sp.indexOf("hadir") !== -1) hadirPulang++;
+    });
+    const persentaseTepatInt = hadirMasuk > 0 ? Math.round((totalTepat / hadirMasuk) * 100) : 0;
+    const pAlfa = masterList.length > 0 ? Math.round((rawAlfa / masterList.length) * 100) : 0;
+    const pPulang = masterList.length > 0 ? Math.round((hadirPulang / masterList.length) * 100) : 0;
+    return { hadirMasuk, hadirPulang, persentaseTepat: persentaseTepatInt + "%", persentaseTepatInt, pAlfa, pPulang };
+  }
+
+  const sStat = calcStats(siswaData, rptSiswa);
+  const gStat = calcStats(guruData, rptGuru);
+  const chartLabels = [], chartData = [];
+
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split("T")[0];
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agus", "Sep", "Okt", "Nov", "Des"];
+    chartLabels.push(d.getDate() + " " + monthNames[d.getMonth()]);
+    const count = rptSiswa.filter(r => String(r.tanggal || "").split("T")[0] === dateStr && (String(r.status_masuk || "").toLowerCase().indexOf("tepat") !== -1 || String(r.status_masuk || "").toLowerCase().indexOf("terlambat") !== -1 || String(r.status_masuk || "").toLowerCase().indexOf("hadir") !== -1)).length;
+    chartData.push(count);
+  }
+
+  return {
+    success: true,
+    data: {
+      totalSiswa: siswaData.length, siswaMasuk: sStat.hadirMasuk, siswaPulang: sStat.hadirPulang, siswaTepat: sStat.persentaseTepat, siswaTepatInt: sStat.persentaseTepatInt, siswaPulangPersenInt: sStat.pPulang, siswaAlfaInt: sStat.pAlfa,
+      totalGuru: guruData.length, guruMasuk: gStat.hadirMasuk, guruPulang: gStat.hadirPulang, guruTepat: gStat.persentaseTepat, guruTepatInt: gStat.persentaseTepatInt, guruPulangPersenInt: gStat.pPulang, guruAlfaInt: gStat.pAlfa,
+      chartLabels, chartData
+    }
+  };
+}
+
+function getJamPelajaran() {
+  const res = getSheetDataObj("JamPelajaran");
+  const data = res.data || [];
+  data.sort((a, b) => String(a.jam_mulai || "").localeCompare(String(b.jam_mulai || "")));
+  return { success: true, data };
+}
+
+function simpanJamPelajaran(param1, param2) {
+  const payload = (typeof param1 === 'object' && param1 !== null) ? param1 : param2;
+  if (!payload) return { success: false, message: "Payload tidak valid." };
+  const sheet = getOrCreateSheet("JamPelajaran", ["id_jam", "jam_ke", "nama_jam", "jam_mulai", "jam_selesai", "tipe"]);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(h => String(h).trim());
+  const idJam = payload.id_jam || ("JP-" + Date.now());
+  const idColIdx = findHeaderIndex(headers, ["id_jam"]);
+  let foundRowIdx = -1;
+  if (idColIdx !== -1) {
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][idColIdx]) === String(idJam)) { foundRowIdx = i + 1; break; }
+    }
+  }
+  const newRow = [idJam, payload.jam_ke || 1, payload.nama_jam || ("Jam ke-" + (payload.jam_ke || 1)), payload.jam_mulai || "07:00", payload.jam_selesai || "07:45", payload.tipe || "Pelajaran"];
+  if (foundRowIdx > 0) sheet.getRange(foundRowIdx, 1, 1, newRow.length).setValues([newRow]);
+  else sheet.appendRow(newRow);
   return { success: true, message: "Slot Jam Pelajaran berhasil disimpan!" };
 }
 
 function simpanJadwalPelajaran(param1, param2) {
   const payload = (typeof param1 === 'object' && param1 !== null) ? param1 : param2;
-  const sheet = getSpreadsheet().getSheetByName("JadwalPelajaran");
+  if (!payload) return { success: false, message: "Payload tidak valid." };
+  const sheet = getOrCreateSheet("JadwalPelajaran", ["id_jadwal", "hari", "kelas", "jam_ke", "id_jam", "jam_mulai", "jam_selesai", "mapel", "id_guru", "nama_guru", "ruangan"]);
   const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  
+  const headers = data[0].map(h => String(h).trim());
   const idJadwal = payload.id_jadwal || ("JPEL-" + Math.floor(Math.random() * 100000));
-  const idColIdx = headers.indexOf("id_jadwal");
+  const idColIdx = findHeaderIndex(headers, ["id_jadwal"]);
   let foundRowIdx = -1;
-
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][idColIdx]) === String(idJadwal)) {
-      foundRowIdx = i + 1;
-      break;
+  if (idColIdx !== -1) {
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][idColIdx]) === String(idJadwal)) { foundRowIdx = i + 1; break; }
     }
   }
-
-  const newRow = [
-    idJadwal,
-    payload.hari || "Senin",
-    payload.kelas || "",
-    payload.jam_ke || 1,
-    payload.id_jam || ("JP-" + payload.jam_ke),
-    payload.jam_mulai || "-",
-    payload.jam_selesai || "-",
-    payload.mapel || "",
-    payload.id_guru || "",
-    payload.nama_guru || "",
-    payload.ruangan || "Kelas Utama"
-  ];
-
-  if (foundRowIdx > 0) {
-    sheet.getRange(foundRowIdx, 1, 1, newRow.length).setValues([newRow]);
-  } else {
-    sheet.appendRow(newRow);
-  }
-
+  const newRow = [idJadwal, payload.hari || "Senin", payload.kelas || "", payload.jam_ke || 1, payload.id_jam || ("JP-" + payload.jam_ke), payload.jam_mulai || "-", payload.jam_selesai || "-", payload.mapel || "", payload.id_guru || "", payload.nama_guru || "", payload.ruangan || "Kelas Utama"];
+  if (foundRowIdx > 0) sheet.getRange(foundRowIdx, 1, 1, newRow.length).setValues([newRow]);
+  else sheet.appendRow(newRow);
   return { success: true, message: "Jadwal Pelajaran berhasil disimpan!" };
 }
 
 function simpanAbsensiMengajarGuru(payload) {
-  const sheet = getSpreadsheet().getSheetByName("AbsensiMengajar");
-  const idLog = "LOG-MENG-" + Date.now();
-  const newRow = [
-    idLog,
-    payload.tanggal || new Date().toISOString().split("T")[0],
-    payload.waktu_absen || new Date().toTimeString().slice(0, 5),
-    payload.hari || "Senin",
-    payload.id_guru || "",
-    payload.nama_guru || "",
-    payload.kelas || "",
-    payload.mapel || "",
-    payload.jam_ke || 1,
-    payload.jam_mulai_jadwal || "-",
-    payload.jam_selesai_jadwal || "-",
-    payload.status || "Hadir Tepat Waktu",
-    payload.catatan_materi || "-"
-  ];
-  sheet.appendRow(newRow);
-  return { success: true, message: "Absensi mengajar guru berhasil dicatat!" };
+  if (!payload) return { success: false, message: "Payload tidak valid." };
+  const sheet = getOrCreateSheet("AbsensiMengajar", ["id_log_mengajar", "tanggal", "waktu_absen", "hari", "id_guru", "nama_guru", "kelas", "mapel", "jam_ke", "jam_mulai_jadwal", "jam_selesai_jadwal", "status", "catatan_materi"]);
+  sheet.appendRow([payload.id_log_mengajar || ("LOG-MENG-" + Date.now()), payload.tanggal || new Date().toISOString().split("T")[0], payload.waktu_absen || new Date().toTimeString().slice(0, 5), payload.hari || "Senin", payload.id_guru || "", payload.nama_guru || "", payload.kelas || "", payload.mapel || "", payload.jam_ke || 1, payload.jam_mulai_jadwal || "-", payload.jam_selesai_jadwal || "-", payload.status || "Hadir Tepat Waktu", payload.catatan_materi || "-"]);
+  return { success: true, message: "Presensi Mengajar Guru berhasil dicatat!" };
 }
 
-function simpanKelas(param1, param2) {
-  const namaKelas = (typeof param1 === 'string') ? param1 : (param1.nama_kelas || param2);
-  const sheet = getSpreadsheet().getSheetByName("Kelas");
+function simpanJadwalGuru(param1, param2) {
+  const payload = (typeof param1 === 'object' && param1 !== null) ? param1 : param2;
+  if (!payload) return { success: false, message: "Payload tidak valid." };
+  const sheet = getOrCreateSheet("JadwalGuru", ["id_jadwal", "id_guru", "nama_guru", "hari", "jam_masuk_mulai", "jam_masuk_batas", "jam_pulang_mulai"]);
+  sheet.appendRow([payload.id_jadwal || ("J-" + Math.floor(Math.random() * 10000)), payload.id_guru || "", payload.nama_guru || "", payload.hari || "Senin", payload.jam_masuk_mulai || "06:00", payload.jam_masuk_batas || "07:15", payload.jam_pulang_mulai || "15:30"]);
+  return { success: true, message: "Jadwal guru berhasil disimpan!" };
+}
+
+function getKelasSemua() {
+  const res = getSheetDataObj("Kelas");
+  const list = res.data || [];
+  return { success: true, data: list.map(item => item.nama_kelas || item.kelas || String(item)).filter(Boolean) };
+}
+
+function simpanKelas(namaKelasInput) {
+  const namaKelas = typeof namaKelasInput === "string" ? namaKelasInput : (namaKelasInput.nama_kelas || "");
+  if (!namaKelas) return { success: false, message: "Nama kelas tidak boleh kosong." };
+  const sheet = getOrCreateSheet("Kelas", ["id_kelas", "nama_kelas", "wali_kelas"]);
   sheet.appendRow(["KLS-" + Date.now(), namaKelas, "Wali Kelas"]);
   return { success: true, message: "Kelas berhasil ditambahkan!" };
 }
 
+function editKelas(kelasLama, kelasBaru) {
+  const sheet = findSheetByName(["Kelas"]);
+  if (!sheet) return { success: false, message: "Sheet Kelas tidak ditemukan." };
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][1]) === String(kelasLama) || String(data[i][0]) === String(kelasLama)) {
+      sheet.getRange(i + 1, 2).setValue(kelasBaru);
+      return { success: true, message: "Kelas berhasil diperbarui!" };
+    }
+  }
+  return { success: false, message: "Kelas lama tidak ditemukan." };
+}
+
 function simpanHariLibur(param1, param2) {
-  const tgl = (typeof param1 === 'string') ? param1 : param1.tanggal;
-  const ket = param2 || (typeof param1 === 'object' ? param1.keterangan : "Libur");
-  const sheet = getSpreadsheet().getSheetByName("HariLibur");
+  const tgl = (typeof param1 === 'string') ? param1 : (param1.tanggal || "");
+  const ket = param2 || (typeof param1 === 'object' ? param1.keterangan : "Libur Sekolah");
+  if (!tgl) return { success: false, message: "Tanggal libur tidak valid." };
+  const sheet = getOrCreateSheet("HariLibur", ["tanggal", "keterangan"]);
   sheet.appendRow([tgl, ket]);
-  return { success: true, message: "Hari libur berhasil disimpan!" };
+  return { success: true, message: "Hari Libur berhasil disimpan!" };
 }
 
 function getPengaturan() {
-  const sheet = getSpreadsheet().getSheetByName("Pengaturan");
-  if (!sheet) return { jam_masuk_mulai: "06:00", jam_masuk_batas: "07:15", jam_pulang_mulai: "15:30" };
+  const sheet = findSheetByName(["Pengaturan"]);
+  if (!sheet) return { success: true, data: { jam_masuk_mulai: "06:00", jam_masuk_batas: "07:15", jam_pulang_mulai: "15:30" } };
   const data = sheet.getDataRange().getValues();
-  let cfg = {};
-  for (let i = 1; i < data.length; i++) {
-    cfg[data[i][0]] = data[i][1];
-  }
-  return cfg;
+  let cfg = { jam_masuk_mulai: "06:00", jam_masuk_batas: "07:15", jam_pulang_mulai: "15:30" };
+  for (let i = 1; i < data.length; i++) { if (data[i][0]) cfg[String(data[i][0])] = data[i][1]; }
+  return { success: true, data: cfg };
 }
 
 function simpanPengaturan(jMulai, jBatas, jPulang) {
-  const sheet = getSpreadsheet().getSheetByName("Pengaturan");
-  sheet.clearContents();
-  sheet.appendRow(["key", "value"]);
-  sheet.appendRow(["jam_masuk_mulai", jMulai]);
-  sheet.appendRow(["jam_masuk_batas", jBatas]);
-  sheet.appendRow(["jam_pulang_mulai", jPulang]);
+  const sheet = getOrCreateSheet("Pengaturan", ["key", "value"]);
+  sheet.clearContents(); sheet.appendRow(["key", "value"]);
+  sheet.appendRow(["jam_masuk_mulai", jMulai || "06:00"]);
+  sheet.appendRow(["jam_masuk_batas", jBatas || "07:15"]);
+  sheet.appendRow(["jam_pulang_mulai", jPulang || "15:30"]);
   return { success: true, message: "Pengaturan operasional berhasil disimpan!" };
 }
 
-function simpanPresensiHarian(payload) {
-  const sheet = getSpreadsheet().getSheetByName("Presensi");
-  sheet.appendRow([
-    "PRES-" + Date.now(),
-    payload.nama || "",
-    payload.role || "Siswa",
-    payload.nis_nip || "",
-    payload.status || "Hadir Tepat Waktu",
-    payload.waktu_absen || new Date().toTimeString().slice(0, 5),
-    payload.tanggal || new Date().toISOString().split("T")[0],
-    payload.kelas || "-"
-  ]);
-  return { success: true, message: "Presensi berhasil dicatat!" };
+function simpanPengaturanCustom(configObj) {
+  if (!configObj) return { success: false, message: "Pengaturan tidak valid." };
+  const sheet = getOrCreateSheet("Pengaturan", ["key", "value"]);
+  sheet.clearContents(); sheet.appendRow(["key", "value"]);
+  Object.keys(configObj).forEach(k => sheet.appendRow([k, configObj[k]]));
+  return { success: true, message: "Pengaturan kustom berhasil disimpan!" };
 }
 
-function hapusRowByColumn(sheetName, colHeader, value) {
-  const sheet = getSpreadsheet().getSheetByName(sheetName);
-  if (!sheet) return { success: true };
+function verifikasiLogin(username, password) {
+  const sheet = getOrCreateSheet("Users", ["username", "password", "role", "target_id"]);
   const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const colIdx = headers.indexOf(colHeader);
-  if (colIdx === -1) return { success: true };
-
-  for (let i = data.length - 1; i >= 1; i--) {
-    if (String(data[i][colIdx]) === String(value)) {
-      sheet.deleteRow(i + 1);
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]).toLowerCase() === String(username).toLowerCase() && String(data[i][1]) === String(password)) {
+      return { success: true, role: data[i][2] || "Admin", target_id: data[i][3] || "-", username: data[i][0], message: "Login Berhasil!" };
     }
   }
-  return { success: true, message: "Data berhasil dihapus dari Spreadsheet!" };
+  const guruRes = getDataMaster("Guru");
+  const guruMatch = (guruRes.data || []).find(g => String(username).replace(/\\s+/g, "").toLowerCase() === String(g.nama_guru || "").replace(/\\s+/g, "").toLowerCase() && String(password) === String(g.password || "guru123"));
+  if (guruMatch) return { success: true, role: "Guru", target_id: guruMatch.id_guru, username: guruMatch.nama_guru, message: "Login Berhasil (Otomatis Guru)!" };
+  return { success: false, message: "Username atau Password salah!" };
+}
+
+function ubahPasswordUser(username, passwordLama, passwordBaru) {
+  const sheet = findSheetByName(["Users"]);
+  if (sheet) {
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).toLowerCase() === String(username).toLowerCase() && String(data[i][1]) === String(passwordLama)) {
+        sheet.getRange(i + 1, 2).setValue(passwordBaru);
+        return { success: true, message: "Password berhasil diperbarui!" };
+      }
+    }
+  }
+  return { success: false, message: "Password lama tidak sesuai." };
+}
+
+function simpanUser(userObj, oldUsername) {
+  if (!userObj || !userObj.username) return { success: false, message: "Data user tidak valid." };
+  const sheet = getOrCreateSheet("Users", ["username", "password", "role", "target_id"]);
+  const data = sheet.getDataRange().getValues();
+  if (oldUsername) {
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).toLowerCase() === String(oldUsername).toLowerCase()) {
+        sheet.getRange(i + 1, 1).setValue(userObj.username);
+        sheet.getRange(i + 1, 2).setValue(userObj.password || "123456");
+        sheet.getRange(i + 1, 3).setValue(userObj.role || "TU");
+        sheet.getRange(i + 1, 4).setValue(userObj.target_id || "-");
+        return { success: true, message: "User berhasil diperbarui!" };
+      }
+    }
+  }
+  sheet.appendRow([userObj.username, userObj.password || "123456", userObj.role || "TU", userObj.target_id || "-"]);
+  return { success: true, message: "User baru berhasil ditambahkan!" };
+}
+
+function findHeaderIndex(headers, possibleKeys) {
+  for (let i = 0; i < possibleKeys.length; i++) {
+    const key = possibleKeys[i].toLowerCase();
+    for (let j = 0; j < headers.length; j++) {
+      if (headers[j].toLowerCase() === key) return j;
+    }
+  }
+  return -1;
+}
+
+function setRowValueByHeader(sheet, rowNum, headers, targetHeader, value) {
+  const idx = findHeaderIndex(headers, [targetHeader]);
+  if (idx !== -1) sheet.getRange(rowNum, idx + 1).setValue(value);
+}
+
+function hapusRowByColumn(sheetPrimaryName, possibleColHeaders, value) {
+  const sheet = findSheetByName([sheetPrimaryName]);
+  if (!sheet) return { success: true, message: "Sheet tidak ditemukan." };
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return { success: true, message: "Data kosong." };
+  const headers = data[0].map(h => String(h).trim());
+  const colIdx = findHeaderIndex(headers, possibleColHeaders);
+  if (colIdx === -1) return { success: false, message: "Kolom kunci tidak ditemukan." };
+  let deletedCount = 0;
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][colIdx]) === String(value)) { sheet.deleteRow(i + 1); deletedCount++; }
+  }
+  return { success: true, message: deletedCount + " baris berhasil dihapus!" };
 }`;
               navigator.clipboard.writeText(codeText);
               setIsScriptCopied(true);
@@ -1106,39 +1633,41 @@ function hapusRowByColumn(sheetName, colHeader, value) {
             className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-sm"
           >
             {isScriptCopied ? <Check className="w-4 h-4 text-emerald-950" /> : <Copy className="w-4 h-4" />}
-            {isScriptCopied ? "Berhasil Disalin!" : "Salin Kode.gs Terbaru ke Clipboard"}
+            {isScriptCopied ? "Berhasil Disalin!" : "Salin Kode.gs v3.0 Terbaru ke Clipboard"}
           </button>
         </div>
 
         <p className="text-xs text-slate-300 leading-relaxed font-medium">
-          Jika Anda menghubungkan SIAS ke Google Sheets, pastikan Web App Google Apps Script Anda memuat seluruh handler tindakan jadwal & presensi terbaru (<code className="text-amber-300 font-bold bg-slate-800 px-1 py-0.5 rounded">JamPelajaran</code>, <code className="text-amber-300 font-bold bg-slate-800 px-1 py-0.5 rounded">JadwalPelajaran</code>, <code className="text-amber-300 font-bold bg-slate-800 px-1 py-0.5 rounded">AbsensiMengajar</code>). Klik tombol di atas untuk menyalin kode lengkap backend Google Apps Script yang sudah disesuaikan.
+          Jika Anda menghubungkan SIAS ke Google Sheets, pastikan Web App Google Apps Script Anda memuat seluruh handler tindakan jadwal, presensi & data master terbaru v3.0. Klik tombol di atas untuk menyalin kode lengkap backend Google Apps Script yang sudah diselaraskan dengan database Google Sheets Anda.
         </p>
 
         <button
           onClick={() => setShowScriptCode(!showScriptCode)}
           className="text-xs text-amber-400 font-bold underline hover:text-amber-300 flex items-center gap-1"
         >
-          {showScriptCode ? "Sembunyikan Cuplikan Kode.gs" : "Tampilkan Ringkasan Kode.gs Backend"}
+          {showScriptCode ? "Sembunyikan Cuplikan Kode.gs" : "Tampilkan Ringkasan Kode.gs Backend v3.0"}
         </button>
 
         {showScriptCode && (
           <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 font-mono text-[11px] text-amber-200 overflow-x-auto max-h-60 leading-relaxed">
             <pre>{`/**
- * Google Apps Script Backend (Kode.gs) - Database Google Sheets SIAS
- * Mendukung JamPelajaran, JadwalPelajaran, AbsensiMengajar Guru, HariLibur, Kelas, etc.
+ * Google Apps Script Backend v3.0 (Kode.gs) - Database Google Sheets SIAS
+ * Full support untuk Data Master (Siswa/Guru), Presensi QR & Manual, Laporan, Dashboard, Jadwal & Slot Jam
  */
 function doPost(e) {
   const data = JSON.parse(e.postData.contents);
-  initSheets(); // Pembuatan otomatis tab JamPelajaran, JadwalPelajaran, AbsensiMengajar
+  initSheets(); // Pembuatan otomatis tab jika belum ada, tanpa merusak data lama
   
   switch (data.action) {
-    case "getJamPelajaran": return getSheetData("JamPelajaran");
-    case "simpanJamPelajaran": return simpanJamPelajaran(data.args[0]);
-    case "getJadwalPelajaranSemua": return getSheetData("JadwalPelajaran");
-    case "tambahJadwalPelajaran": return simpanJadwalPelajaran(data.args[0]);
-    case "getAbsensiMengajarGuru": return getSheetData("AbsensiMengajar");
-    case "simpanAbsensiMengajarGuru": return simpanAbsensiMengajarGuru(data.args[0]);
-    // ...
+    case "getDataMaster": return getDataMaster(data.args[0]);
+    case "prosesScanQR": return prosesScanQR(data.args[0], data.args[1], data.args[2], data.args[3]);
+    case "simpanAbsenManual": return simpanAbsenManual(data.args[0], data.args[1], data.args[2], data.args[3], data.args[4], data.args[5], data.args[6]);
+    case "getLaporanFilter": return getLaporanFilter(data.args[0], data.args[1], data.args[2], data.args[3], data.args[4], data.args[5]);
+    case "getDashboardMetrics": return getDashboardMetrics();
+    case "getJamPelajaran": return getJamPelajaran();
+    case "getJadwalPelajaranSemua": return getSheetDataObj("JadwalPelajaran");
+    case "getAbsensiMengajarGuru": return getSheetDataObj("AbsensiMengajar");
+    // ... 24+ handler lengkap
   }
 }`}</pre>
           </div>
