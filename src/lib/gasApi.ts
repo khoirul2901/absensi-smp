@@ -18,7 +18,7 @@ export function setGasUrl(url: string): void {
 
 export function getGasToken(): string {
   // Ganti nilai di bawah dengan Token Anda, default "sias_token_smkalhikam"
-  return "sias_token_smpalhikam";
+  return "sias_token_smkalhikam";
 }
 
 export function getStorageKey(baseKey: string): string {
@@ -818,16 +818,21 @@ export function callMock(action: string, args: any[] = []): any {
       const reports = getStorage(reportsKey);
       
       const filtered = reports.filter((row: any) => {
+        const rowTgl = String(row.tanggal || "").split("T")[0];
+        if (!rowTgl) return false;
+
         // Date filter
         if (jenisFilter === "rentang" && tanggalMulai && tanggalSelesai) {
-          if (row.tanggal < tanggalMulai || row.tanggal > tanggalSelesai) return false;
+          if (rowTgl < tanggalMulai || rowTgl > tanggalSelesai) return false;
         } else if (jenisFilter === "bulan" && bulanMinta) {
-          if (!row.tanggal.startsWith(bulanMinta)) return false;
+          if (!rowTgl.startsWith(bulanMinta)) return false;
         }
         
         // Class filter
         if (kategori === "Siswa" && kelas && kelas !== "Semua") {
-          if (!row.kelas_jurusan || !row.kelas_jurusan.includes(kelas)) return false;
+          const kJur = String(row.kelas_jurusan || row.kelas || "").replace(/[\s-]+/g, " ").toLowerCase();
+          const cleanKelas = String(kelas).replace(/[\s-]+/g, " ").toLowerCase();
+          if (!kJur.includes(cleanKelas) && !cleanKelas.includes(kJur)) return false;
         }
         
         return true;
@@ -839,23 +844,33 @@ export function callMock(action: string, args: any[] = []): any {
     case "hitungRekapPersentase": {
       const [kategori, kelas, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta] = args;
       const masterRes = callMock("getDataMaster", [kategori]);
-      let masterData = masterRes.data;
+      let masterData = masterRes.data || [];
       
       if (kategori === "Siswa" && kelas && kelas !== "Semua") {
-        masterData = masterData.filter((m: any) => `${m.kelas} ${m.jurusan}`.includes(kelas));
+        const cleanKelas = String(kelas).replace(/[\s-]+/g, " ").toLowerCase();
+        masterData = masterData.filter((m: any) => {
+          const kJur = `${m.kelas || ""} ${m.jurusan || ""}`.replace(/[\s-]+/g, " ").toLowerCase();
+          return kJur.includes(cleanKelas) || cleanKelas.includes(kJur);
+        });
       }
       
       const rptRes = callMock("getLaporanFilter", [kategori, kelas, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta]);
-      const rptData = rptRes.data;
+      const rptData = rptRes.data || [];
       
       const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
+      const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
       
       const rekap = masterData.map((m: any) => {
-        const idTarget = m[idKey];
-        const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
-        const nama = m[nameKey];
+        const idTarget = String(m[idKey] || "").trim();
+        const nama = String(m[nameKey] || "").trim();
         
-        const userRpts = rptData.filter((r: any) => r[idKey] === idTarget);
+        const userRpts = rptData.filter((r: any) => {
+          const rId = String(r[idKey] || r.id_target || r.id_siswa || r.id_guru || "").trim();
+          const rNama = String(r.nama_siswa || r.nama_guru || r.nama || "").trim();
+          if (idTarget && rId && rId === idTarget) return true;
+          if (nama && rNama && rNama.toLowerCase() === nama.toLowerCase()) return true;
+          return false;
+        });
         
         let hadir = 0;
         let sakit = 0;
@@ -874,7 +889,7 @@ export function callMock(action: string, args: any[] = []): any {
             izin++;
           } else if (sm.includes("alfa") || sm.includes("alpha")) {
             alfa++;
-          } else {
+          } else if (r.status_masuk && r.status_masuk !== "-") {
             hadir++;
           }
           
