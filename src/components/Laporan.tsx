@@ -27,13 +27,14 @@ import {
   Save,
   RefreshCw,
   Sparkles,
+  BookOpen,
   Users
 } from "lucide-react";
 import { callGas, getStorageKey } from "../lib/gasApi";
-import { LaporanRow, RekapPersentase } from "../types";
+import { LaporanRow, RekapPersentase, AbsensiMengajarItem } from "../types";
 
 export default function Laporan() {
-  const [kategori, setKategori] = useState<"Siswa" | "Guru">("Siswa");
+  const [kategori, setKategori] = useState<"Siswa" | "Guru" | "Mengajar">("Siswa");
   const [viewMode, setViewMode] = useState<"detail" | "rekap">("detail");
   const [jenisFilter, setJenisFilter] = useState<"rentang" | "bulan">("bulan");
   
@@ -51,10 +52,10 @@ export default function Laporan() {
   const isGuru = currentUser?.role === "Guru";
 
   useEffect(() => {
-    if (isGuru) {
+    if (isGuru && kategori === "Guru") {
       setKategori("Siswa");
     }
-  }, [isGuru]);
+  }, [isGuru, kategori]);
   
   // Filter Fields
   const [tanggalMulai, setTanggalMulai] = useState("");
@@ -67,6 +68,16 @@ export default function Laporan() {
   // Loaded Data States
   const [detailLogs, setDetailLogs] = useState<LaporanRow[]>([]);
   const [rekapRows, setRekapRows] = useState<RekapPersentase[]>([]);
+  const [mengajarLogs, setMengajarLogs] = useState<AbsensiMengajarItem[]>([]);
+  const [rekapMengajarRows, setRekapMengajarRows] = useState<{
+    id_guru: string;
+    nama_guru: string;
+    total: number;
+    tepat: number;
+    terlambat: number;
+    izinSakit: number;
+    persentase: string;
+  }[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -134,7 +145,71 @@ export default function Laporan() {
       setLoading(true);
       setError(null);
       
-      if (viewMode === "detail") {
+      if (kategori === "Mengajar") {
+        const res = await callGas("getAbsensiMengajarGuru");
+        const rawLogs: AbsensiMengajarItem[] = Array.isArray(res)
+          ? res
+          : (res && res.success && Array.isArray(res.data) ? res.data : []);
+
+        const filtered = rawLogs.filter((item) => {
+          let matchDate = true;
+          const itemDate = String(item.tanggal || "").split("T")[0];
+          if (jenisFilter === "bulan") {
+            if (bulanMinta) {
+              matchDate = itemDate.startsWith(bulanMinta);
+            }
+          } else if (jenisFilter === "rentang") {
+            if (tanggalMulai && tanggalSelesai) {
+              matchDate = itemDate >= tanggalMulai && itemDate <= tanggalSelesai;
+            }
+          }
+
+          let matchClass = true;
+          if (selectedKelas && selectedKelas !== "Semua") {
+            matchClass = String(item.kelas || "").toLowerCase() === selectedKelas.toLowerCase();
+          }
+
+          return matchDate && matchClass;
+        });
+
+        setMengajarLogs(filtered);
+
+        // Compute group rekap for Mengajar
+        const guruGroup: Record<string, { id_guru: string; nama_guru: string; total: number; tepat: number; terlambat: number; izinSakit: number }> = {};
+        filtered.forEach((item) => {
+          const key = item.id_guru || item.nama_guru || "GURU";
+          if (!guruGroup[key]) {
+            guruGroup[key] = {
+              id_guru: item.id_guru || "-",
+              nama_guru: item.nama_guru || "-",
+              total: 0,
+              tepat: 0,
+              terlambat: 0,
+              izinSakit: 0
+            };
+          }
+          guruGroup[key].total += 1;
+          const st = String(item.status || "");
+          if (st.includes("Tepat")) {
+            guruGroup[key].tepat += 1;
+          } else if (st.includes("Terlambat")) {
+            guruGroup[key].terlambat += 1;
+          } else {
+            guruGroup[key].izinSakit += 1;
+          }
+        });
+
+        const rekapList = Object.values(guruGroup).map((g) => {
+          const totalHadir = g.tepat + g.terlambat;
+          const pct = g.total > 0 ? Math.round((totalHadir / g.total) * 100) : 0;
+          return {
+            ...g,
+            persentase: `${pct}%`
+          };
+        });
+
+        setRekapMengajarRows(rekapList);
+      } else if (viewMode === "detail") {
         const res = await callGas("getLaporanFilter", [
           kategori, 
           selectedKelas, 
@@ -169,6 +244,27 @@ export default function Laporan() {
       }
     } catch (err: any) {
       setError(err.toString());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteMengajarLog = async (idLog: string, namaGuru: string) => {
+    if (!idLog) return;
+    const confirmDelete = window.confirm(`Apakah Anda yakin ingin menghapus catatan presensi mengajar guru ${namaGuru}?`);
+    if (!confirmDelete) return;
+
+    try {
+      setLoading(true);
+      const res = await callGas("hapusAbsensiMengajarGuru", [idLog]);
+      if (res && res.success) {
+        alert(res.message || "Riwayat presensi mengajar berhasil dihapus.");
+        handleQuery();
+      } else {
+        alert(res?.message || "Gagal menghapus catatan presensi mengajar.");
+      }
+    } catch (err: any) {
+      alert("Error: " + err.toString());
     } finally {
       setLoading(false);
     }
@@ -662,7 +758,45 @@ export default function Laporan() {
   const handleExportCSV = () => {
     let csvContent = "data:text/csv;charset=utf-8,";
     
-    if (viewMode === "detail") {
+    if (kategori === "Mengajar") {
+      if (viewMode === "detail") {
+        if (filteredMengajarLogs.length === 0) return;
+        const headers = ["ID Log", "Tanggal", "Hari", "Waktu Absen", "ID Guru", "Nama Guru", "Kelas", "Mapel", "Jam Ke", "Status", "Catatan Materi"];
+        csvContent += headers.join(",") + "\n";
+        filteredMengajarLogs.forEach(row => {
+          const csvRow = [
+            row.id_log_mengajar || "-",
+            row.tanggal,
+            row.hari || "-",
+            row.waktu_absen || "-",
+            row.id_guru || "-",
+            `"${row.nama_guru}"`,
+            `"${row.kelas}"`,
+            `"${row.mapel}"`,
+            `Jam ke-${row.jam_ke}`,
+            `"${row.status}"`,
+            `"${row.catatan_materi || "-"}"`
+          ];
+          csvContent += csvRow.join(",") + "\n";
+        });
+      } else {
+        if (filteredRekapMengajarRows.length === 0) return;
+        const headers = ["ID Guru", "Nama Guru", "Total Sesi Mengajar", "Hadir Tepat Waktu", "Terlambat", "Izin/Sakit/Tugas", "Persentase Kehadiran"];
+        csvContent += headers.join(",") + "\n";
+        filteredRekapMengajarRows.forEach(row => {
+          const csvRow = [
+            row.id_guru,
+            `"${row.nama_guru}"`,
+            row.total,
+            row.tepat,
+            row.terlambat,
+            row.izinSakit,
+            `"${row.persentase}"`
+          ];
+          csvContent += csvRow.join(",") + "\n";
+        });
+      }
+    } else if (viewMode === "detail") {
       if (detailLogs.length === 0) return;
       const headers = ["ID Log", "Tanggal", "ID", "Nama", "Kelas/Jabatan", "Jam Masuk", "Status Masuk", "Jam Pulang", "Status Pulang", "Keterangan"];
       csvContent += headers.join(",") + "\n";
@@ -730,6 +864,22 @@ export default function Laporan() {
     return name.includes(searchQuery.toLowerCase()) || id.includes(searchQuery.toLowerCase());
   });
 
+  const filteredMengajarLogs = mengajarLogs.filter(row => {
+    const name = (row.nama_guru || "").toLowerCase();
+    const id = (row.id_guru || "").toLowerCase();
+    const mapel = (row.mapel || "").toLowerCase();
+    const kelas = (row.kelas || "").toLowerCase();
+    const query = searchQuery.toLowerCase();
+    return name.includes(query) || id.includes(query) || mapel.includes(query) || kelas.includes(query);
+  });
+
+  const filteredRekapMengajarRows = rekapMengajarRows.filter(row => {
+    const name = row.nama_guru.toLowerCase();
+    const id = row.id_guru.toLowerCase();
+    const query = searchQuery.toLowerCase();
+    return name.includes(query) || id.includes(query);
+  });
+
   // Paginated data calculations
   const startIndexDetail = (currentPageDetail - 1) * itemsPerPage;
   const paginatedDetailLogs = filteredDetailLogs.slice(startIndexDetail, startIndexDetail + itemsPerPage);
@@ -738,6 +888,12 @@ export default function Laporan() {
   const startIndexRekap = (currentPageRekap - 1) * itemsPerPage;
   const paginatedRekapRows = filteredRekapRows.slice(startIndexRekap, startIndexRekap + itemsPerPage);
   const totalPagesRekap = Math.ceil(filteredRekapRows.length / itemsPerPage);
+
+  const paginatedMengajarLogs = filteredMengajarLogs.slice(startIndexDetail, startIndexDetail + itemsPerPage);
+  const totalPagesMengajarDetail = Math.ceil(filteredMengajarLogs.length / itemsPerPage);
+
+  const paginatedRekapMengajarRows = filteredRekapMengajarRows.slice(startIndexRekap, startIndexRekap + itemsPerPage);
+  const totalPagesMengajarRekap = Math.ceil(filteredRekapMengajarRows.length / itemsPerPage);
 
   return (
     <div className="space-y-6 animate-fade-in print:bg-white print:p-0">
@@ -750,22 +906,31 @@ export default function Laporan() {
         </div>
 
         {/* Categories Selector */}
-        {!isGuru && (
-          <div className="flex bg-gray-50 border border-gray-200 p-1 rounded-xl">
-            <button 
-              onClick={() => setKategori("Siswa")}
-              className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all duration-150 ${kategori === "Siswa" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
-            >
-              Siswa
-            </button>
+        <div className="flex flex-wrap bg-gray-50 border border-gray-200 p-1 rounded-xl gap-1">
+          <button 
+            onClick={() => setKategori("Siswa")}
+            className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${kategori === "Siswa" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>Presensi Siswa</span>
+          </button>
+          {!isGuru && (
             <button 
               onClick={() => setKategori("Guru")}
-              className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all duration-150 ${kategori === "Guru" ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${kategori === "Guru" ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
             >
-              Guru
+              <Users className="w-3.5 h-3.5" />
+              <span>Presensi Guru</span>
             </button>
-          </div>
-        )}
+          )}
+          <button 
+            onClick={() => setKategori("Mengajar")}
+            className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${kategori === "Mengajar" ? "bg-white text-emerald-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+          >
+            <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Rekap Presensi Mengajar</span>
+          </button>
+        </div>
       </div>
 
       {/* Navigation Filter Panel (Hidden on print) */}
@@ -858,7 +1023,7 @@ export default function Laporan() {
               <Filter className="w-3.5 h-3.5" />
               Saringan Kelas
             </label>
-            {kategori === "Siswa" ? (
+            {kategori === "Siswa" || kategori === "Mengajar" ? (
               <select 
                 value={selectedKelas}
                 onChange={(e) => setSelectedKelas(e.target.value)}
@@ -882,7 +1047,7 @@ export default function Laporan() {
           <div className="relative w-full sm:max-w-xs">
             <input 
               type="text"
-              placeholder="Saring nama / id target..."
+              placeholder="Saring nama / id target / mapel..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2 pl-9 pr-4 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-blue-500"
@@ -891,13 +1056,15 @@ export default function Laporan() {
           </div>
 
           <div className="flex gap-2 w-full sm:w-auto">
-            <button 
-              onClick={() => handleOpenEditModal()}
-              className="bg-amber-500 text-white font-extrabold text-xs px-4 py-2 rounded-xl hover:bg-amber-600 transition-all duration-150 flex items-center gap-1.5 shadow-sm cursor-pointer"
-            >
-              <Pencil className="w-4 h-4" />
-              Edit Kehadiran
-            </button>
+            {kategori !== "Mengajar" && (
+              <button 
+                onClick={() => handleOpenEditModal()}
+                className="bg-amber-500 text-white font-extrabold text-xs px-4 py-2 rounded-xl hover:bg-amber-600 transition-all duration-150 flex items-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <Pencil className="w-4 h-4" />
+                Edit Kehadiran
+              </button>
+            )}
             <button 
               onClick={() => window.print()}
               className="bg-white border border-gray-200 text-gray-700 font-bold text-xs px-4 py-2 rounded-xl hover:bg-gray-50 transition-all duration-150 flex items-center gap-1.5 shadow-sm cursor-pointer"
@@ -919,10 +1086,12 @@ export default function Laporan() {
       {/* PRINT-ONLY HEADERS */}
       <div className="hidden print:block space-y-4 mb-6 border-b-[3px] border-slate-900 pb-4 text-center">
         <h2 className="text-2xl font-black text-slate-950 uppercase tracking-wide">SMK AL-HIKAM KREJENGAN</h2>
-        <h3 className="text-lg font-bold text-slate-800 uppercase tracking-normal">LAPORAN REKAP ABSENSI {kategori.toUpperCase()}</h3>
+        <h3 className="text-lg font-bold text-slate-800 uppercase tracking-normal">
+          LAPORAN REKAP ABSENSI {kategori === "Mengajar" ? "PENGAJARAN GURU" : kategori.toUpperCase()}
+        </h3>
         <p className="text-xs text-slate-500 font-semibold">
           {jenisFilter === "bulan" ? `Periode Bulan: ${bulanMinta}` : `Periode Tanggal: ${tanggalMulai} s.d ${tanggalSelesai}`}
-          {kategori === "Siswa" && ` | Kelas: ${selectedKelas}`}
+          {(kategori === "Siswa" || kategori === "Mengajar") && ` | Kelas: ${selectedKelas}`}
         </p>
       </div>
 
@@ -932,6 +1101,293 @@ export default function Laporan() {
           <div className="p-12 text-center text-gray-400 font-medium">Mengambil data dari server...</div>
         ) : error ? (
           <div className="p-12 text-center text-red-500 font-medium">{error}</div>
+        ) : kategori === "Mengajar" ? (
+          viewMode === "detail" ? (
+            /* REKAP MENGAJAR DETAIL LOG VIEW MODE */
+            <div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-emerald-50/70 border-b border-gray-100 text-[11px] font-semibold text-emerald-900 uppercase tracking-wider print:bg-slate-100 print:text-black">
+                      <th className="py-3.5 px-6">Tanggal & Hari</th>
+                      <th className="py-3.5 px-6">Waktu Input</th>
+                      <th className="py-3.5 px-6">Guru Pengajar</th>
+                      <th className="py-3.5 px-6">Kelas & Mapel</th>
+                      <th className="py-3.5 px-6 text-center">Jam Ke</th>
+                      <th className="py-3.5 px-6">Status Kehadiran</th>
+                      <th className="py-3.5 px-6">Catatan / Ringkasan Materi</th>
+                      <th className="py-3.5 px-6 text-center print:hidden">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 text-xs text-gray-700 print:divide-slate-300">
+                    {filteredMengajarLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-gray-400 font-medium">
+                          Tidak ada log presensi mengajar guru terekam
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedMengajarLogs.map((row, idx) => {
+                        const isTepat = String(row.status || "").includes("Tepat");
+                        const isTerlambat = String(row.status || "").includes("Terlambat");
+                        
+                        return (
+                          <tr key={row.id_log_mengajar || idx} className="hover:bg-slate-50/50 transition-all duration-150">
+                            <td className="py-3.5 px-6 font-semibold text-gray-800">
+                              <div>{row.tanggal}</div>
+                              <div className="text-[10px] text-gray-400 font-normal">{row.hari || "-"}</div>
+                            </td>
+                            <td className="py-3.5 px-6 font-mono text-gray-500">{row.waktu_absen || "-"}</td>
+                            <td className="py-3.5 px-6">
+                              <div className="font-bold text-gray-900">{row.nama_guru}</div>
+                              <div className="text-[10px] font-mono text-gray-400">{row.id_guru || "-"}</div>
+                            </td>
+                            <td className="py-3.5 px-6">
+                              <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 mr-1.5">{row.kelas}</span>
+                              <span className="font-medium text-gray-700">{row.mapel}</span>
+                            </td>
+                            <td className="py-3.5 px-6 text-center">
+                              <span className="bg-gray-100 text-gray-800 font-mono font-bold px-2 py-0.5 rounded-full text-[11px]">
+                                Jam ke-{row.jam_ke}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-6">
+                              <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                isTepat ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                                isTerlambat ? "bg-amber-50 text-amber-700 border border-amber-200" :
+                                "bg-indigo-50 text-indigo-700 border border-indigo-200"
+                              }`}>
+                                {row.status}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-6 text-gray-600 font-medium max-w-xs truncate" title={row.catatan_materi || "-"}>
+                              {row.catatan_materi || "-"}
+                            </td>
+                            <td className="py-3.5 px-6 text-center print:hidden">
+                              <button
+                                onClick={() => handleDeleteMengajarLog(row.id_log_mengajar || "", row.nama_guru)}
+                                className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 font-bold px-2.5 py-1 rounded-lg text-[11px] transition-colors cursor-pointer"
+                                title="Hapus Log Mengajar"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                Hapus
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mengajar Detail Pagination */}
+              {totalPagesMengajarDetail > 1 && (
+                <div className="flex items-center justify-between border-t border-gray-100 bg-white px-6 py-4 print:hidden">
+                  <div className="flex flex-1 justify-between sm:hidden">
+                    <button
+                      disabled={currentPageDetail === 1}
+                      onClick={() => setCurrentPageDetail(p => Math.max(p - 1, 1))}
+                      className={`relative inline-flex items-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-700 ${
+                        currentPageDetail === 1 ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      Sebelumnya
+                    </button>
+                    <button
+                      disabled={currentPageDetail === totalPagesMengajarDetail}
+                      onClick={() => setCurrentPageDetail(p => Math.min(p + 1, totalPagesMengajarDetail))}
+                      className={`relative ml-3 inline-flex items-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-700 ${
+                        currentPageDetail === totalPagesMengajarDetail ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      Selanjutnya
+                    </button>
+                  </div>
+                  <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs text-gray-500 font-semibold">
+                        Menampilkan <span className="font-bold text-gray-950">{startIndexDetail + 1}</span> sampai{" "}
+                        <span className="font-bold text-gray-950">
+                          {Math.min(startIndexDetail + itemsPerPage, filteredMengajarLogs.length)}
+                        </span>{" "}
+                        dari <span className="font-bold text-gray-950">{filteredMengajarLogs.length}</span> data
+                      </p>
+                    </div>
+                    <div>
+                      <nav className="isolate inline-flex -space-x-px rounded-xl gap-1" aria-label="Pagination">
+                        <button
+                          onClick={() => setCurrentPageDetail(p => Math.max(p - 1, 1))}
+                          disabled={currentPageDetail === 1}
+                          className={`relative inline-flex items-center rounded-lg px-2.5 py-1.5 text-gray-400 hover:bg-gray-50 ${
+                            currentPageDetail === 1 ? "opacity-40 cursor-not-allowed" : ""
+                          }`}
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        
+                        {Array.from({ length: totalPagesMengajarDetail }, (_, i) => i + 1).map((page) => (
+                          <button
+                            key={page}
+                            onClick={() => setCurrentPageDetail(page)}
+                            className={`relative inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-bold transition-all duration-150 ${
+                              currentPageDetail === page
+                                ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/10"
+                                : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        ))}
+
+                        <button
+                          onClick={() => setCurrentPageDetail(p => Math.min(p + 1, totalPagesMengajarDetail))}
+                          disabled={currentPageDetail === totalPagesMengajarDetail}
+                          className={`relative inline-flex items-center rounded-lg px-2.5 py-1.5 text-gray-400 hover:bg-gray-50 ${
+                            currentPageDetail === totalPagesMengajarDetail ? "opacity-40 cursor-not-allowed" : ""
+                          }`}
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </nav>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* REKAP MENGAJAR PERCENTAGE VIEW MODE */
+            <div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-emerald-50/70 border-b border-gray-100 text-[11px] font-semibold text-emerald-900 uppercase tracking-wider print:bg-slate-100 print:text-black">
+                      <th className="py-3.5 px-6">ID Guru</th>
+                      <th className="py-3.5 px-6">Nama Guru</th>
+                      <th className="py-3.5 px-6 text-center">Total Jam Sesi</th>
+                      <th className="py-3.5 px-6 text-center">Tepat Waktu</th>
+                      <th className="py-3.5 px-6 text-center">Terlambat</th>
+                      <th className="py-3.5 px-6 text-center">Izin / Sakit / Tugas</th>
+                      <th className="py-3.5 px-6 text-right">Persentase Kehadiran</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 text-xs text-gray-700 print:divide-slate-300">
+                    {filteredRekapMengajarRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-gray-400 font-medium">
+                          Tidak ada data rekap presensi mengajar
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedRekapMengajarRows.map((row) => {
+                        const pctNum = parseFloat(row.persentase);
+                        const isHighRisk = pctNum < 75;
+
+                        return (
+                          <tr key={row.id_guru} className="hover:bg-slate-50/50 transition-all duration-150">
+                            <td className="py-3.5 px-6 font-mono font-bold text-gray-500">{row.id_guru}</td>
+                            <td className="py-3.5 px-6 font-bold text-gray-900">{row.nama_guru}</td>
+                            <td className="py-3.5 px-6 text-center font-bold text-gray-800">{row.total} Sesi</td>
+                            <td className="py-3.5 px-6 text-center">
+                              <span className="bg-emerald-50 text-emerald-800 font-bold px-2 py-1 rounded-lg border border-emerald-100">{row.tepat}</span>
+                            </td>
+                            <td className="py-3.5 px-6 text-center">
+                              <span className="bg-amber-50 text-amber-800 font-bold px-2 py-1 rounded-lg border border-amber-100">{row.terlambat}</span>
+                            </td>
+                            <td className="py-3.5 px-6 text-center">
+                              <span className="bg-indigo-50 text-indigo-800 font-bold px-2 py-1 rounded-lg border border-indigo-100">{row.izinSakit}</span>
+                            </td>
+                            <td className="py-3.5 px-6 text-right font-extrabold text-sm">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {isHighRisk && <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" title="Kehadiran mengajar di bawah 75%!" />}
+                                <span className={isHighRisk ? "text-rose-600" : "text-emerald-600"}>
+                                  {row.persentase}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Rekap Mengajar Pagination Controls */}
+              {totalPagesMengajarRekap > 1 && (
+                <div className="flex items-center justify-between border-t border-gray-100 bg-white px-6 py-4 print:hidden">
+                  <div className="flex flex-1 justify-between sm:hidden">
+                    <button
+                      disabled={currentPageRekap === 1}
+                      onClick={() => setCurrentPageRekap(p => Math.max(p - 1, 1))}
+                      className={`relative inline-flex items-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-700 ${
+                        currentPageRekap === 1 ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      Sebelumnya
+                    </button>
+                    <button
+                      disabled={currentPageRekap === totalPagesMengajarRekap}
+                      onClick={() => setCurrentPageRekap(p => Math.min(p + 1, totalPagesMengajarRekap))}
+                      className={`relative ml-3 inline-flex items-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-700 ${
+                        currentPageRekap === totalPagesMengajarRekap ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      Selanjutnya
+                    </button>
+                  </div>
+                  <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs text-gray-500 font-semibold">
+                        Menampilkan <span className="font-bold text-gray-950">{startIndexRekap + 1}</span> sampai{" "}
+                        <span className="font-bold text-gray-950">
+                          {Math.min(startIndexRekap + itemsPerPage, filteredRekapMengajarRows.length)}
+                        </span>{" "}
+                        dari <span className="font-bold text-gray-950">{filteredRekapMengajarRows.length}</span> data
+                      </p>
+                    </div>
+                    <div>
+                      <nav className="isolate inline-flex -space-x-px rounded-xl gap-1" aria-label="Pagination">
+                        <button
+                          onClick={() => setCurrentPageRekap(p => Math.max(p - 1, 1))}
+                          disabled={currentPageRekap === 1}
+                          className={`relative inline-flex items-center rounded-lg px-2.5 py-1.5 text-gray-400 hover:bg-gray-50 ${
+                            currentPageRekap === 1 ? "opacity-40 cursor-not-allowed" : ""
+                          }`}
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        
+                        {Array.from({ length: totalPagesMengajarRekap }, (_, i) => i + 1).map((page) => (
+                          <button
+                            key={page}
+                            onClick={() => setCurrentPageRekap(page)}
+                            className={`relative inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-bold transition-all duration-150 ${
+                              currentPageRekap === page
+                                ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/10"
+                                : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        ))}
+
+                        <button
+                          onClick={() => setCurrentPageRekap(p => Math.min(p + 1, totalPagesMengajarRekap))}
+                          disabled={currentPageRekap === totalPagesMengajarRekap}
+                          className={`relative inline-flex items-center rounded-lg px-2.5 py-1.5 text-gray-400 hover:bg-gray-50 ${
+                            currentPageRekap === totalPagesMengajarRekap ? "opacity-40 cursor-not-allowed" : ""
+                          }`}
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </nav>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
         ) : (
           viewMode === "detail" ? (
             /* DETAIL LOG VIEW MODE */
