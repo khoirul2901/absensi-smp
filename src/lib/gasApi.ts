@@ -298,6 +298,14 @@ export function callMock(action: string, args: any[] = []): any {
       return { success: true, data };
     }
 
+    case "getDataGuru": {
+      return { success: true, data: getStorage("data_guru") };
+    }
+
+    case "getDataSiswa": {
+      return { success: true, data: getStorage("data_siswa") };
+    }
+
     case "tambahDataMaster": {
       const [kategori, dataObj] = args;
       const key = kategori === "Siswa" ? "data_siswa" : "data_guru";
