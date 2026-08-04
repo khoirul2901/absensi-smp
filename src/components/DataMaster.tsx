@@ -73,9 +73,11 @@ export default function DataMaster() {
   useEffect(() => {
     async function loadClasses() {
       const res = await callGas("getKelasSemua");
-      if (Array.isArray(res)) {
-        setClassList(res);
-      }
+      const list = Array.isArray(res)
+        ? res
+        : (res && res.success && Array.isArray(res.data) ? res.data : []);
+      const parsed = list.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
+      setClassList(parsed);
     }
     loadClasses();
   }, []);
