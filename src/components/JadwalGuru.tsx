@@ -294,7 +294,7 @@ export default function JadwalGuru({ session }: { session?: any }) {
   const handleSaveJamSlot = async (e: FormEvent) => {
     e.preventDefault();
     const payload = {
-      id_jam: editJamId || `JP-${jamForm.jam_ke}`,
+      id_jam: editJamId || `JP-${Date.now()}`,
       jam_ke: Number(jamForm.jam_ke),
       nama_jam: jamForm.nama_jam || `Jam ke-${jamForm.jam_ke}`,
       jam_mulai: jamForm.jam_mulai,
@@ -304,13 +304,22 @@ export default function JadwalGuru({ session }: { session?: any }) {
 
     try {
       setLoading(true);
-      const res = await callGas("simpanJamPelajaran", [payload]);
-      if (res && res.success) {
+      let res = await callGas("simpanJamPelajaran", [payload]);
+      // Fallback if GAS backend has action named tambahJamPelajaran or editJamPelajaran
+      if (!res || !res.success) {
+        if (editJamId) {
+          res = await callGas("editJamPelajaran", [editJamId, payload]);
+        } else {
+          res = await callGas("tambahJamPelajaran", [payload]);
+        }
+      }
+
+      if (res && res.success !== false) {
         setShowJamModal(false);
-        alert(res.message || "Slot jam pelajaran disimpan!");
+        alert(res.message || "Slot jam pelajaran berhasil disimpan!");
         fetchAllData();
       } else {
-        alert(res?.message || "Gagal menyimpan jam pelajaran.");
+        alert(res?.message || "Gagal menyimpan slot jam pelajaran.");
         setLoading(false);
       }
     } catch (err: any) {
