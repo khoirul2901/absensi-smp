@@ -145,14 +145,19 @@ export default function Laporan() {
   useEffect(() => {
     async function loadGuru() {
       try {
-        const res = await callGas("getDataGuru");
-        const list = Array.isArray(res)
-          ? res
-          : (res && res.success && Array.isArray(res.data) ? res.data : []);
+        let res = await callGas("getDataMaster", ["Guru"]);
+        let list = (res && res.success && Array.isArray(res.data)) ? res.data : [];
+        if (!list || list.length === 0) {
+          res = await callGas("getDataGuru");
+          list = Array.isArray(res)
+            ? res
+            : (res && res.success && Array.isArray(res.data) ? res.data : []);
+        }
         const parsed = list.map((item: any) => ({
           id_guru: item.id_guru || item.id || "",
           nama_guru: item.nama_guru || item.nama || item.name || String(item)
-        })).filter(g => g.nama_guru);
+        })).filter((g: any) => g.nama_guru);
+        
         setGuruList(parsed);
       } catch (e) {
         console.error("Gagal memuat data guru:", e);
@@ -881,17 +886,27 @@ export default function Laporan() {
     document.body.removeChild(link);
   };
 
-  // Filter local rows on search query
+  // Filter local rows on search query & selected guru
   const filteredDetailLogs = detailLogs.filter(row => {
     const name = (row.nama_siswa || row.nama_guru || "").toLowerCase();
     const id = (row.id_siswa || row.id_guru || "-").toLowerCase();
-    return name.includes(searchQuery.toLowerCase()) || id.includes(searchQuery.toLowerCase());
+    const matchesQuery = name.includes(searchQuery.toLowerCase()) || id.includes(searchQuery.toLowerCase());
+    if (kategori === "Guru" && selectedGuru && selectedGuru !== "Semua") {
+      const val = selectedGuru.toLowerCase();
+      return matchesQuery && (name === val || id === val);
+    }
+    return matchesQuery;
   });
 
   const filteredRekapRows = rekapRows.filter(row => {
     const name = row.nama.toLowerCase();
     const id = row.id.toLowerCase();
-    return name.includes(searchQuery.toLowerCase()) || id.includes(searchQuery.toLowerCase());
+    const matchesQuery = name.includes(searchQuery.toLowerCase()) || id.includes(searchQuery.toLowerCase());
+    if (kategori === "Guru" && selectedGuru && selectedGuru !== "Semua") {
+      const val = selectedGuru.toLowerCase();
+      return matchesQuery && (name === val || id === val);
+    }
+    return matchesQuery;
   });
 
   const filteredMengajarLogs = mengajarLogs.filter(row => {
@@ -900,14 +915,24 @@ export default function Laporan() {
     const mapel = (row.mapel || "").toLowerCase();
     const kelas = (row.kelas || "").toLowerCase();
     const query = searchQuery.toLowerCase();
-    return name.includes(query) || id.includes(query) || mapel.includes(query) || kelas.includes(query);
+    const matchesQuery = name.includes(query) || id.includes(query) || mapel.includes(query) || kelas.includes(query);
+    if (selectedGuru && selectedGuru !== "Semua") {
+      const val = selectedGuru.toLowerCase();
+      return matchesQuery && (name === val || id === val);
+    }
+    return matchesQuery;
   });
 
   const filteredRekapMengajarRows = rekapMengajarRows.filter(row => {
     const name = row.nama_guru.toLowerCase();
     const id = row.id_guru.toLowerCase();
     const query = searchQuery.toLowerCase();
-    return name.includes(query) || id.includes(query);
+    const matchesQuery = name.includes(query) || id.includes(query);
+    if (selectedGuru && selectedGuru !== "Semua") {
+      const val = selectedGuru.toLowerCase();
+      return matchesQuery && (name === val || id === val);
+    }
+    return matchesQuery;
   });
 
   // Paginated data calculations
