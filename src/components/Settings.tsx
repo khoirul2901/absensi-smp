@@ -219,19 +219,32 @@ export default function Settings() {
 
       // Load holidays
       const liburRes = await callGas("getHariLiburSemua");
-      if (Array.isArray(liburRes)) {
-        setLiburList(liburRes);
-      }
+      const libList = Array.isArray(liburRes)
+        ? liburRes
+        : (liburRes?.data && Array.isArray(liburRes.data) ? liburRes.data : []);
+      setLiburList(libList);
 
       // Load classes
-      const kelasRes = await callGas("getKelasSemua");
-      if (Array.isArray(kelasRes)) {
-        setKelasList(kelasRes);
-      }
+      await fetchKelasList();
     } catch (e: any) {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchKelasList = async () => {
+    try {
+      const kelasRes = await callGas("getKelasSemua");
+      const kList = Array.isArray(kelasRes)
+        ? kelasRes
+        : (kelasRes?.data && Array.isArray(kelasRes.data) ? kelasRes.data : []);
+      const parsed = kList.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
+      setKelasList(parsed);
+      return parsed;
+    } catch (err) {
+      console.error("Gagal memuat kelas:", err);
+      return [];
     }
   };
 
@@ -273,7 +286,10 @@ export default function Settings() {
         setNewLiburKet("");
         // Reload holidays
         const liburRes = await callGas("getHariLiburSemua");
-        if (Array.isArray(liburRes)) setLiburList(liburRes);
+        const libList = Array.isArray(liburRes)
+          ? liburRes
+          : (liburRes?.data && Array.isArray(liburRes.data) ? liburRes.data : []);
+        setLiburList(libList);
       } else {
         alert(res?.message || "Gagal menambah hari libur");
       }
@@ -293,7 +309,10 @@ export default function Settings() {
       if (res && res.success) {
         // Reload holidays
         const liburRes = await callGas("getHariLiburSemua");
-        if (Array.isArray(liburRes)) setLiburList(liburRes);
+        const libList = Array.isArray(liburRes)
+          ? liburRes
+          : (liburRes?.data && Array.isArray(liburRes.data) ? liburRes.data : []);
+        setLiburList(libList);
       } else {
         alert(res?.message || "Gagal menghapus hari libur");
       }
@@ -313,8 +332,7 @@ export default function Settings() {
       const res = await callGas("tambahKelas", [newKelasName.trim()]);
       if (res && res.success) {
         setNewKelasName("");
-        const kRes = await callGas("getKelasSemua");
-        if (Array.isArray(kRes)) setKelasList(kRes);
+        await fetchKelasList();
       } else {
         alert(res?.message || "Gagal menambah kelas");
       }
@@ -335,8 +353,7 @@ export default function Settings() {
       if (res && res.success) {
         setEditKelasLama(null);
         setEditKelasBaru("");
-        const kRes = await callGas("getKelasSemua");
-        if (Array.isArray(kRes)) setKelasList(kRes);
+        await fetchKelasList();
       } else {
         alert(res?.message || "Gagal memperbarui kelas");
       }
@@ -354,8 +371,7 @@ export default function Settings() {
       setLoading(true);
       const res = await callGas("hapusKelas", [name]);
       if (res && res.success) {
-        const kRes = await callGas("getKelasSemua");
-        if (Array.isArray(kRes)) setKelasList(kRes);
+        await fetchKelasList();
       } else {
         alert(res?.message || "Gagal menghapus kelas");
       }
