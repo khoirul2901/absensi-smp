@@ -924,6 +924,34 @@ function initSheets() {
   getOrCreateSheet("Users", ["username", "password", "role", "target_id"]);
 }
 
+function formatTanggalYMD(val) {
+  if (!val) return "";
+  if (val instanceof Date) {
+    try {
+      return Utilities.formatDate(val, Session.getScriptTimeZone() || "GMT+7", "yyyy-MM-dd");
+    } catch (e) {
+      const year = val.getFullYear();
+      const month = String(val.getMonth() + 1).padStart(2, "0");
+      const day = String(val.getDate()).padStart(2, "0");
+      return year + "-" + month + "-" + day;
+    }
+  }
+  const str = String(val).trim();
+  if (!str) return "";
+  if (str.indexOf("T") !== -1) return str.split("T")[0];
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.substring(0, 10);
+  try {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return year + "-" + month + "-" + day;
+    }
+  } catch (e) {}
+  return str;
+}
+
 function getSheetDataObj(sheetPrimaryName, aliases) {
   const sheet = findSheetByName([sheetPrimaryName].concat(aliases || []));
   if (!sheet) return { success: true, data: [] };
@@ -935,10 +963,16 @@ function getSheetDataObj(sheetPrimaryName, aliases) {
     let row = {};
     let empty = true;
     for (let j = 0; j < rawHeaders.length; j++) {
-      const val = data[i][j];
+      let val = data[i][j];
       if (val !== "" && val !== null && val !== undefined) empty = false;
       const key = rawHeaders[j];
-      if (key) row[key] = val;
+      if (key) {
+        if (key.toLowerCase() === "tanggal" || key.toLowerCase().indexOf("tanggal") !== -1) {
+          row[key] = formatTanggalYMD(val);
+        } else {
+          row[key] = val;
+        }
+      }
     }
     if (!empty) rows.push(row);
   }
@@ -1316,11 +1350,12 @@ function getLiveAbsenHariIni(kategori, tanggal, filterKelas) {
 function getLaporanFilter(kategori, kelas, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta) {
   const isSiswa = kategori === "Siswa";
   const sheetName = isSiswa ? "PresensiSiswa" : "PresensiGuru";
-  const res = getSheetDataObj(sheetName, ["Presensi"]);
+  const aliases = isSiswa ? ["DataPresensiSiswa", "Presensi_Siswa", "LaporanSiswa", "Laporan_Siswa", "Presensi"] : ["DataPresensiGuru", "Presensi_Guru", "LaporanGuru", "Laporan_Guru", "Presensi"];
+  const res = getSheetDataObj(sheetName, aliases);
   const data = res.data || [];
 
   const filtered = data.filter(row => {
-    const rowTgl = String(row.tanggal || "").split("T")[0];
+    const rowTgl = formatTanggalYMD(row.tanggal);
     if (!rowTgl) return false;
     if (jenisFilter === "rentang" && tanggalMulai && tanggalSelesai) {
       if (rowTgl < tanggalMulai || rowTgl > tanggalSelesai) return false;
@@ -1328,7 +1363,9 @@ function getLaporanFilter(kategori, kelas, jenisFilter, tanggalMulai, tanggalSel
       if (rowTgl.indexOf(bulanMinta) !== 0) return false;
     }
     if (isSiswa && kelas && kelas !== "Semua") {
-      if (String(row.kelas_jurusan || row.kelas || "").indexOf(kelas) === -1) return false;
+      const kJur = String(row.kelas_jurusan || row.kelas || "").replace(/[\s-]+/g, " ").toLowerCase();
+      const cleanKelas = String(kelas).replace(/[\s-]+/g, " ").toLowerCase();
+      if (kJur.indexOf(cleanKelas) === -1 && cleanKelas.indexOf(kJur) === -1) return false;
     }
     return true;
   });
@@ -1341,7 +1378,11 @@ function hitungRekapPersentase(kategori, kelas, jenisFilter, tanggalMulai, tangg
   let masterData = masterRes.data || [];
 
   if (isSiswa && kelas && kelas !== "Semua") {
-    masterData = masterData.filter(m => (m.kelas + " " + m.jurusan).indexOf(kelas) !== -1);
+    const cleanKelas = String(kelas).replace(/[\s-]+/g, " ").toLowerCase();
+    masterData = masterData.filter(m => {
+      const kJur = (String(m.kelas || "") + " " + String(m.jurusan || "")).replace(/[\s-]+/g, " ").toLowerCase();
+      return kJur.indexOf(cleanKelas) !== -1 || cleanKelas.indexOf(kJur) !== -1;
+    });
   }
 
   const rptRes = getLaporanFilter(kategori, kelas, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta);
@@ -1350,9 +1391,15 @@ function hitungRekapPersentase(kategori, kelas, jenisFilter, tanggalMulai, tangg
   const nameKey = isSiswa ? "nama_siswa" : "nama_guru";
 
   const rekap = masterData.map(m => {
-    const idVal = m[idKey];
-    const namaVal = m[nameKey];
-    const userRpts = rptData.filter(r => String(r[idKey]) === String(idVal) || String(r.id_target) === String(idVal));
+    const idVal = String(m[idKey] || "").trim();
+    const namaVal = String(m[nameKey] || "").trim();
+    const userRpts = rptData.filter(r => {
+      const rId = String(r[idKey] || r.id_target || r.id_siswa || r.id_guru || "").trim();
+      const rNama = String(r.nama_siswa || r.nama_guru || r.nama || "").trim();
+      if (idVal && rId && rId === idVal) return true;
+      if (namaVal && rNama && rNama.toLowerCase() === namaVal.toLowerCase()) return true;
+      return false;
+    });
 
     let hadir = 0, sakit = 0, izin = 0, alfa = 0;
     const jamMasuks = [], jamPulangs = [];
@@ -1382,8 +1429,10 @@ function getDashboardMetrics() {
   const siswaData = (getDataMaster("Siswa").data) || [];
   const guruData = (getDataMaster("Guru").data) || [];
   const tgl = new Date().toISOString().split("T")[0];
-  const rptSiswa = (getSheetDataObj("PresensiSiswa").data) || [];
-  const rptGuru = (getSheetDataObj("PresensiGuru").data) || [];
+  const aliasesSiswa = ["DataPresensiSiswa", "Presensi_Siswa", "LaporanSiswa", "Laporan_Siswa", "Presensi"];
+  const aliasesGuru = ["DataPresensiGuru", "Presensi_Guru", "LaporanGuru", "Laporan_Guru", "Presensi"];
+  const rptSiswa = (getSheetDataObj("PresensiSiswa", aliasesSiswa).data) || [];
+  const rptGuru = (getSheetDataObj("PresensiGuru", aliasesGuru).data) || [];
 
   function calcStats(masterList, rptList) {
     let hadirMasuk = 0, hadirPulang = 0, totalTepat = 0, rawAlfa = 0;
