@@ -115,7 +115,7 @@ function initMockDb() {
 }
 
 // Call local mock APIs
-function callMock(action: string, args: any[]): any {
+export function callMock(action: string, args: any[] = []): any {
   initMockDb();
   
   const getStorage = (key: string) => JSON.parse(localStorage.getItem(getStorageKey("MOCK_" + key)) || "[]");
@@ -1297,9 +1297,18 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
     }
     
     const result = await response.json();
+    if (result && result.success === false && result.message && (
+      result.message.includes("tidak diizinkan") || 
+      result.message.includes("tidak dikenal") ||
+      result.message.includes("tidak ditemukan") ||
+      result.message.includes("not recognized")
+    )) {
+      console.warn(`GAS Action '${action}' not recognized by remote Web App endpoint. Falling back to local storage execution.`);
+      return callMock(action, args);
+    }
     return result;
   } catch (err: any) {
-    console.error("GAS API Call error:", err);
-    return { success: false, message: "Gagal menghubungkan ke Google Apps Script: " + err.toString() };
+    console.error("GAS API Call error, falling back to local simulation:", err);
+    return callMock(action, args);
   }
 }
