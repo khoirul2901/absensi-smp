@@ -712,7 +712,7 @@ export default function Settings() {
                 </tr>
               ) : (
                 liburList.map((lbl, idx) => {
-                  const tglStr = typeof lbl.tanggal === "string" ? lbl.tanggal : new Date(lbl.tanggal).toISOString().split("T")[0];
+                  const tglStr = typeof lbl.tanggal === "string" ? lbl.tanggal : (lbl.tanggal && !isNaN(new Date(lbl.tanggal).getTime()) ? new Date(lbl.tanggal).toISOString().split("T")[0] : String(lbl.tanggal || "-"));
                   return (
                     <tr key={idx} className="hover:bg-slate-50/50">
                       <td className="py-2.5 px-4 font-bold text-gray-500">{tglStr}</td>
@@ -764,25 +764,38 @@ export default function Settings() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Code className="w-5 h-5 text-amber-400" />
-            <h3 className="font-extrabold text-white text-sm">Kode Backend Google Apps Script (Kode.gs)</h3>
+            <h3 className="font-extrabold text-white text-sm">Kode Backend Google Apps Script Terbaru (Kode.gs)</h3>
           </div>
           <button
             onClick={() => {
               const codeText = `/**
  * Google Apps Script Backend (Kode.gs) - Sistem Informasi Presensi Sekolah (SIAS)
- * Tempelkan kode ini di Ekstensi -> Apps Script di Spreadsheet Google Anda
+ * Tempelkan seluruh kode ini pada Google Apps Script Anda (Ekstensi -> Apps Script)
+ * Lalu klik "Terapkan" -> "Penerapan Baru" (Web App -> Siapa Saja)
  */
+
+function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "ok",
+    message: "Google Apps Script Backend SIAS Berjalan Aktif"
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
     const action = data.action;
     const args = data.args || [];
     
+    // Inisialisasi/buat otomatis sheet & header jika belum ada
+    initSheets();
+
     let result = { success: false, message: "Action tidak dikenali" };
 
     switch (action) {
+      // --- SLOT JAM PELAJARAN ---
       case "getJamPelajaran":
-        result = getJamPelajaran();
+        result = getSheetData("JamPelajaran");
         break;
       case "simpanJamPelajaran":
       case "tambahJamPelajaran":
@@ -790,58 +803,79 @@ function doPost(e) {
         result = simpanJamPelajaran(args[0], args[1]);
         break;
       case "hapusJamPelajaran":
-        result = hapusJamPelajaran(args[0]);
+        result = hapusRowByColumn("JamPelajaran", "id_jam", args[0]);
         break;
+
+      // --- JADWAL PELAJARAN (MATRIKS MAPEL) ---
       case "getJadwalPelajaranSemua":
-        result = getJadwalPelajaranSemua();
+        result = getSheetData("JadwalPelajaran");
         break;
       case "tambahJadwalPelajaran":
-        result = tambahJadwalPelajaran(args[0]);
-        break;
       case "editJadwalPelajaran":
-        result = editJadwalPelajaran(args[0], args[1]);
+        result = simpanJadwalPelajaran(args[0], args[1]);
         break;
       case "hapusJadwalPelajaran":
-        result = hapusJadwalPelajaran(args[0]);
+        result = hapusRowByColumn("JadwalPelajaran", "id_jadwal", args[0]);
         break;
+
+      // --- ABSENSI MENGAJAR GURU (PER JAM) ---
       case "getAbsensiMengajarGuru":
-        result = getAbsensiMengajarGuru();
+        result = getSheetData("AbsensiMengajar");
         break;
       case "simpanAbsensiMengajarGuru":
         result = simpanAbsensiMengajarGuru(args[0]);
         break;
       case "hapusAbsensiMengajarGuru":
-        result = hapusAbsensiMengajarGuru(args[0]);
+        result = hapusRowByColumn("AbsensiMengajar", "id_log_mengajar", args[0]);
         break;
-      case "getPengaturanSemua":
-        result = getPengaturanSemua();
-        break;
-      case "simpanKonfigurasiJam":
-        result = simpanKonfigurasiJam(args[0], args[1], args[2]);
-        break;
-      case "getHariLiburSemua":
-        result = getHariLiburSemua();
-        break;
-      case "tambahHariLibur":
-        result = tambahHariLibur(args[0], args[1]);
-        break;
-      case "hapusHariLibur":
-        result = hapusHariLibur(args[0]);
-        break;
+
+      // --- DATA KELAS ---
       case "getKelasSemua":
-        result = getKelasSemua();
+        result = getSheetData("Kelas");
         break;
       case "tambahKelas":
-        result = tambahKelas(args[0]);
-        break;
       case "editKelas":
-        result = editKelas(args[0], args[1]);
+        result = simpanKelas(args[0], args[1]);
         break;
       case "hapusKelas":
-        result = hapusKelas(args[0]);
+        result = hapusRowByColumn("Kelas", "nama_kelas", args[0]);
         break;
+
+      // --- HARI LIBUR ---
+      case "getHariLiburSemua":
+        result = getSheetData("HariLibur");
+        break;
+      case "tambahHariLibur":
+        result = simpanHariLibur(args[0], args[1]);
+        break;
+      case "hapusHariLibur":
+        result = hapusRowByColumn("HariLibur", "tanggal", args[0]);
+        break;
+
+      // --- PENGATURAN OPERASIONAL ---
+      case "getPengaturanSemua":
+        result = getPengaturan();
+        break;
+      case "simpanKonfigurasiJam":
+        result = simpanPengaturan(args[0], args[1], args[2]);
+        break;
+
+      // --- SISWA, GURU & PRESENSI HARIAN ---
+      case "getSiswa":
+        result = getSheetData("Siswa");
+        break;
+      case "getGuru":
+        result = getSheetData("Guru");
+        break;
+      case "getAbsensi":
+        result = getSheetData("Presensi");
+        break;
+      case "simpanPresensi":
+        result = simpanPresensiHarian(args[0]);
+        break;
+
       default:
-        result = { success: false, message: "Action " + action + " tidak ditemukan" };
+        result = { success: false, message: "Action '" + action + "' tidak dikenali." };
     }
 
     return ContentService.createTextOutput(JSON.stringify(result))
@@ -850,6 +884,220 @@ function doPost(e) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, message: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+// ==========================================
+// HELPER FUNCTIONS GOOGLE SHEETS
+// ==========================================
+
+function getSpreadsheet() {
+  return SpreadsheetApp.getActiveSpreadsheet();
+}
+
+function initSheets() {
+  const ss = getSpreadsheet();
+  const sheets = [
+    { name: "JamPelajaran", headers: ["id_jam", "jam_ke", "nama_jam", "jam_mulai", "jam_selesai", "tipe"] },
+    { name: "JadwalPelajaran", headers: ["id_jadwal", "hari", "kelas", "jam_ke", "id_jam", "jam_mulai", "jam_selesai", "mapel", "id_guru", "nama_guru", "ruangan"] },
+    { name: "AbsensiMengajar", headers: ["id_log_mengajar", "tanggal", "waktu_absen", "hari", "id_guru", "nama_guru", "kelas", "mapel", "jam_ke", "jam_mulai_jadwal", "jam_selesai_jadwal", "status", "catatan_materi"] },
+    { name: "Kelas", headers: ["id_kelas", "nama_kelas", "wali_kelas"] },
+    { name: "HariLibur", headers: ["tanggal", "keterangan"] },
+    { name: "Pengaturan", headers: ["key", "value"] },
+    { name: "Presensi", headers: ["id_presensi", "nama", "role", "nis_nip", "status", "waktu_absen", "tanggal", "kelas"] }
+  ];
+
+  sheets.forEach(s => {
+    let sheet = ss.getSheetByName(s.name);
+    if (!sheet) {
+      sheet = ss.insertSheet(s.name);
+      sheet.appendRow(s.headers);
+      sheet.getRange(1, 1, 1, s.headers.length).setFontWeight("bold").setBackground("#f3f4f6");
+    }
+  });
+}
+
+function getSheetData(sheetName) {
+  const sheet = getSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) return { success: true, data: [] };
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return { success: true, data: [] };
+  
+  const headers = data[0];
+  const rows = [];
+  for (let i = 1; i < data.length; i++) {
+    let row = {};
+    for (let j = 0; j < headers.length; j++) {
+      row[headers[j]] = data[i][j];
+    }
+    rows.push(row);
+  }
+  return { success: true, data: rows };
+}
+
+function simpanJamPelajaran(param1, param2) {
+  const payload = (typeof param1 === 'object' && param1 !== null) ? param1 : param2;
+  if (!payload) return { success: false, message: "Payload tidak valid" };
+
+  const sheet = getSpreadsheet().getSheetByName("JamPelajaran");
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idJam = payload.id_jam || ("JP-" + Date.now());
+  
+  const idColIdx = headers.indexOf("id_jam");
+  let foundRowIdx = -1;
+  
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idColIdx]) === String(idJam)) {
+      foundRowIdx = i + 1;
+      break;
+    }
+  }
+
+  const newRow = [
+    idJam,
+    payload.jam_ke || 1,
+    payload.nama_jam || ("Jam ke-" + (payload.jam_ke || 1)),
+    payload.jam_mulai || "07:00",
+    payload.jam_selesai || "07:45",
+    payload.tipe || "Pelajaran"
+  ];
+
+  if (foundRowIdx > 0) {
+    sheet.getRange(foundRowIdx, 1, 1, newRow.length).setValues([newRow]);
+  } else {
+    sheet.appendRow(newRow);
+  }
+
+  return { success: true, message: "Slot Jam Pelajaran berhasil disimpan!" };
+}
+
+function simpanJadwalPelajaran(param1, param2) {
+  const payload = (typeof param1 === 'object' && param1 !== null) ? param1 : param2;
+  const sheet = getSpreadsheet().getSheetByName("JadwalPelajaran");
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  
+  const idJadwal = payload.id_jadwal || ("JPEL-" + Math.floor(Math.random() * 100000));
+  const idColIdx = headers.indexOf("id_jadwal");
+  let foundRowIdx = -1;
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idColIdx]) === String(idJadwal)) {
+      foundRowIdx = i + 1;
+      break;
+    }
+  }
+
+  const newRow = [
+    idJadwal,
+    payload.hari || "Senin",
+    payload.kelas || "",
+    payload.jam_ke || 1,
+    payload.id_jam || ("JP-" + payload.jam_ke),
+    payload.jam_mulai || "-",
+    payload.jam_selesai || "-",
+    payload.mapel || "",
+    payload.id_guru || "",
+    payload.nama_guru || "",
+    payload.ruangan || "Kelas Utama"
+  ];
+
+  if (foundRowIdx > 0) {
+    sheet.getRange(foundRowIdx, 1, 1, newRow.length).setValues([newRow]);
+  } else {
+    sheet.appendRow(newRow);
+  }
+
+  return { success: true, message: "Jadwal Pelajaran berhasil disimpan!" };
+}
+
+function simpanAbsensiMengajarGuru(payload) {
+  const sheet = getSpreadsheet().getSheetByName("AbsensiMengajar");
+  const idLog = "LOG-MENG-" + Date.now();
+  const newRow = [
+    idLog,
+    payload.tanggal || new Date().toISOString().split("T")[0],
+    payload.waktu_absen || new Date().toTimeString().slice(0, 5),
+    payload.hari || "Senin",
+    payload.id_guru || "",
+    payload.nama_guru || "",
+    payload.kelas || "",
+    payload.mapel || "",
+    payload.jam_ke || 1,
+    payload.jam_mulai_jadwal || "-",
+    payload.jam_selesai_jadwal || "-",
+    payload.status || "Hadir Tepat Waktu",
+    payload.catatan_materi || "-"
+  ];
+  sheet.appendRow(newRow);
+  return { success: true, message: "Absensi mengajar guru berhasil dicatat!" };
+}
+
+function simpanKelas(param1, param2) {
+  const namaKelas = (typeof param1 === 'string') ? param1 : (param1.nama_kelas || param2);
+  const sheet = getSpreadsheet().getSheetByName("Kelas");
+  sheet.appendRow(["KLS-" + Date.now(), namaKelas, "Wali Kelas"]);
+  return { success: true, message: "Kelas berhasil ditambahkan!" };
+}
+
+function simpanHariLibur(param1, param2) {
+  const tgl = (typeof param1 === 'string') ? param1 : param1.tanggal;
+  const ket = param2 || (typeof param1 === 'object' ? param1.keterangan : "Libur");
+  const sheet = getSpreadsheet().getSheetByName("HariLibur");
+  sheet.appendRow([tgl, ket]);
+  return { success: true, message: "Hari libur berhasil disimpan!" };
+}
+
+function getPengaturan() {
+  const sheet = getSpreadsheet().getSheetByName("Pengaturan");
+  if (!sheet) return { jam_masuk_mulai: "06:00", jam_masuk_batas: "07:15", jam_pulang_mulai: "15:30" };
+  const data = sheet.getDataRange().getValues();
+  let cfg = {};
+  for (let i = 1; i < data.length; i++) {
+    cfg[data[i][0]] = data[i][1];
+  }
+  return cfg;
+}
+
+function simpanPengaturan(jMulai, jBatas, jPulang) {
+  const sheet = getSpreadsheet().getSheetByName("Pengaturan");
+  sheet.clearContents();
+  sheet.appendRow(["key", "value"]);
+  sheet.appendRow(["jam_masuk_mulai", jMulai]);
+  sheet.appendRow(["jam_masuk_batas", jBatas]);
+  sheet.appendRow(["jam_pulang_mulai", jPulang]);
+  return { success: true, message: "Pengaturan operasional berhasil disimpan!" };
+}
+
+function simpanPresensiHarian(payload) {
+  const sheet = getSpreadsheet().getSheetByName("Presensi");
+  sheet.appendRow([
+    "PRES-" + Date.now(),
+    payload.nama || "",
+    payload.role || "Siswa",
+    payload.nis_nip || "",
+    payload.status || "Hadir Tepat Waktu",
+    payload.waktu_absen || new Date().toTimeString().slice(0, 5),
+    payload.tanggal || new Date().toISOString().split("T")[0],
+    payload.kelas || "-"
+  ]);
+  return { success: true, message: "Presensi berhasil dicatat!" };
+}
+
+function hapusRowByColumn(sheetName, colHeader, value) {
+  const sheet = getSpreadsheet().getSheetByName(sheetName);
+  if (!sheet) return { success: true };
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const colIdx = headers.indexOf(colHeader);
+  if (colIdx === -1) return { success: true };
+
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][colIdx]) === String(value)) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+  return { success: true, message: "Data berhasil dihapus dari Spreadsheet!" };
 }`;
               navigator.clipboard.writeText(codeText);
               setIsScriptCopied(true);
@@ -858,40 +1106,40 @@ function doPost(e) {
             className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-sm"
           >
             {isScriptCopied ? <Check className="w-4 h-4 text-emerald-950" /> : <Copy className="w-4 h-4" />}
-            {isScriptCopied ? "Berhasil Disalin!" : "Salin Kode.gs ke Clipboard"}
+            {isScriptCopied ? "Berhasil Disalin!" : "Salin Kode.gs Terbaru ke Clipboard"}
           </button>
         </div>
 
         <p className="text-xs text-slate-300 leading-relaxed font-medium">
-          Jika Anda menggunakan database Google Sheets langsung, pastikan Web App Google Apps Script Anda memuat seluruh handler tindakan terbaru (seperti <code className="text-amber-300 font-bold bg-slate-800 px-1 py-0.5 rounded">simpanJamPelajaran</code>, <code className="text-amber-300 font-bold bg-slate-800 px-1 py-0.5 rounded">tambahJadwalPelajaran</code>, <code className="text-amber-300 font-bold bg-slate-800 px-1 py-0.5 rounded">simpanAbsensiMengajarGuru</code>). Klik tombol di atas untuk menyalin handler dasar ke clipboard.
+          Jika Anda menghubungkan SIAS ke Google Sheets, pastikan Web App Google Apps Script Anda memuat seluruh handler tindakan jadwal & presensi terbaru (<code className="text-amber-300 font-bold bg-slate-800 px-1 py-0.5 rounded">JamPelajaran</code>, <code className="text-amber-300 font-bold bg-slate-800 px-1 py-0.5 rounded">JadwalPelajaran</code>, <code className="text-amber-300 font-bold bg-slate-800 px-1 py-0.5 rounded">AbsensiMengajar</code>). Klik tombol di atas untuk menyalin kode lengkap backend Google Apps Script yang sudah disesuaikan.
         </p>
 
         <button
           onClick={() => setShowScriptCode(!showScriptCode)}
           className="text-xs text-amber-400 font-bold underline hover:text-amber-300 flex items-center gap-1"
         >
-          {showScriptCode ? "Sembunyikan Cuplikan Kode.gs" : "Tampilkan Cuplikan Kode.gs Backend"}
+          {showScriptCode ? "Sembunyikan Cuplikan Kode.gs" : "Tampilkan Ringkasan Kode.gs Backend"}
         </button>
 
         {showScriptCode && (
           <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 font-mono text-[11px] text-amber-200 overflow-x-auto max-h-60 leading-relaxed">
             <pre>{`/**
- * Google Apps Script Backend (Kode.gs) - SIAS
- * Handler doPost untuk simpanJamPelajaran & Jadwal Pelajaran
+ * Google Apps Script Backend (Kode.gs) - Database Google Sheets SIAS
+ * Mendukung JamPelajaran, JadwalPelajaran, AbsensiMengajar Guru, HariLibur, Kelas, etc.
  */
 function doPost(e) {
   const data = JSON.parse(e.postData.contents);
-  const action = data.action;
-  const args = data.args || [];
+  initSheets(); // Pembuatan otomatis tab JamPelajaran, JadwalPelajaran, AbsensiMengajar
   
-  if (action === "simpanJamPelajaran" || action === "tambahJamPelajaran") {
-    return simpanJamPelajaran(args[0]);
-  } else if (action === "getJamPelajaran") {
-    return getJamPelajaran();
-  } else if (action === "hapusJamPelajaran") {
-    return hapusJamPelajaran(args[0]);
+  switch (data.action) {
+    case "getJamPelajaran": return getSheetData("JamPelajaran");
+    case "simpanJamPelajaran": return simpanJamPelajaran(data.args[0]);
+    case "getJadwalPelajaranSemua": return getSheetData("JadwalPelajaran");
+    case "tambahJadwalPelajaran": return simpanJadwalPelajaran(data.args[0]);
+    case "getAbsensiMengajarGuru": return getSheetData("AbsensiMengajar");
+    case "simpanAbsensiMengajarGuru": return simpanAbsensiMengajarGuru(data.args[0]);
+    // ...
   }
-  // ... handler action lainnya ...
 }`}</pre>
           </div>
         )}
