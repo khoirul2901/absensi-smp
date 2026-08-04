@@ -85,7 +85,13 @@ function initMockDb() {
     ]));
   }
   if (!localStorage.getItem(getKey("data_kelas"))) {
-    localStorage.setItem(getKey("data_kelas"), JSON.stringify(["X RPL 1", "X RPL 2", "XI RPL 1", "XI RPL 2", "XII RPL 1"]));
+    localStorage.setItem(getKey("data_kelas"), JSON.stringify([
+      { nama_kelas: "X RPL 1", wali_kelas: "Bahrul Ulum, S.Kom" },
+      { nama_kelas: "X RPL 2", wali_kelas: "-" },
+      { nama_kelas: "XI RPL 1", wali_kelas: "Eka Rahmawati, S.Pd" },
+      { nama_kelas: "XI RPL 2", wali_kelas: "-" },
+      { nama_kelas: "XII RPL 1", wali_kelas: "-" }
+    ]));
   }
   if (!localStorage.getItem(getKey("jam_pelajaran"))) {
     localStorage.setItem(getKey("jam_pelajaran"), JSON.stringify([
@@ -230,15 +236,24 @@ export function callMock(action: string, args: any[] = []): any {
     }
 
     case "getKelasSemua": {
-      const data = getStorage("data_kelas");
-      return { success: true, data: Array.isArray(data) ? data : [] };
+      let data = getStorage("data_kelas");
+      if (!Array.isArray(data)) data = [];
+      const normalized = data.map((item: any) => {
+        if (typeof item === "string") {
+          return { nama_kelas: item, wali_kelas: "-" };
+        }
+        return item;
+      });
+      return { success: true, data: normalized };
     }
 
     case "tambahKelas": {
-      const [namaKelas] = args;
-      const kelas = getStorage("data_kelas");
-      if (!kelas.includes(namaKelas)) {
-        kelas.push(namaKelas);
+      const [namaKelas, waliKelas] = args;
+      let kelas = getStorage("data_kelas");
+      if (!Array.isArray(kelas)) kelas = [];
+      const exists = kelas.some((k: any) => (typeof k === "string" ? k : k.nama_kelas) === namaKelas);
+      if (!exists) {
+        kelas.push({ nama_kelas: namaKelas, wali_kelas: waliKelas || "-" });
         setStorage("data_kelas", kelas);
       }
       return { success: true, message: "Kelas ditambahkan (SIMULASI)." };
@@ -247,19 +262,26 @@ export function callMock(action: string, args: any[] = []): any {
     case "hapusKelas": {
       const [namaKelas] = args;
       let kelas = getStorage("data_kelas");
-      kelas = kelas.filter((k: any) => k !== namaKelas);
-      setStorage("data_kelas", kelas);
+      if (Array.isArray(kelas)) {
+        kelas = kelas.filter((k: any) => (typeof k === "string" ? k : k.nama_kelas) !== namaKelas);
+        setStorage("data_kelas", kelas);
+      }
       return { success: true, message: "Kelas dihapus (SIMULASI)." };
     }
 
     case "editKelas": {
-      const [kelasLama, kelasBaru] = args;
-      const kelas = getStorage("data_kelas");
-      const idx = kelas.indexOf(kelasLama);
-      if (idx !== -1) {
-        kelas[idx] = kelasBaru;
-        setStorage("data_kelas", kelas);
-        return { success: true, message: "Kelas diperbarui (SIMULASI)." };
+      const [kelasLama, kelasBaru, waliKelasBaru] = args;
+      let kelas = getStorage("data_kelas");
+      if (Array.isArray(kelas)) {
+        const idx = kelas.findIndex((k: any) => (typeof k === "string" ? k : k.nama_kelas) === kelasLama);
+        if (idx !== -1) {
+          kelas[idx] = {
+            nama_kelas: kelasBaru,
+            wali_kelas: waliKelasBaru !== undefined ? waliKelasBaru : (typeof kelas[idx] === "object" ? kelas[idx].wali_kelas : "-")
+          };
+          setStorage("data_kelas", kelas);
+          return { success: true, message: "Kelas diperbarui (SIMULASI)." };
+        }
       }
       return { success: false, message: "Kelas lama tidak ditemukan." };
     }
