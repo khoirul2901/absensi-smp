@@ -952,7 +952,7 @@ export function callMock(action: string, args: any[] = []): any {
       
       for (let i = 5; i >= 0; i--) {
         const d = new Date();
-        d.setDate(d.setDate(d.getDate() - i));
+        d.setDate(d.getDate() - i);
         const dateStr = d.toISOString().split("T")[0];
         const dayLabel = d.toLocaleDateString("id-ID", { month: "short", day: "numeric" });
         chartLabels.push(dayLabel);
