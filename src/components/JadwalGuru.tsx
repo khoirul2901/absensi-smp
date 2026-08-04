@@ -10,55 +10,136 @@ import {
   Users,
   ChevronDown,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  BookOpen,
+  GraduationCap,
+  Layers,
+  Building,
+  CheckCircle2,
+  FileText,
+  Sparkles,
+  Check,
+  X,
+  Filter,
+  Eye
 } from "lucide-react";
-import { callGas } from "../lib/gasApi";
+import { callGas, getStorageKey } from "../lib/gasApi";
+import { ScheduleLessonItem, JamPelajaranItem, AbsensiMengajarItem, TeacherItem } from "../types";
 
-interface ScheduleItem {
-  id_jadwal: string;
-  id_guru: string;
-  nama_guru: string;
-  hari: string;
-  jam_masuk_mulai: string;
-  jam_masuk_batas: string;
-  jam_pulang_mulai: string;
-}
-
-interface TeacherItem {
+interface ExtendedTeacherItem {
   id_guru: string;
   nama_guru: string;
   nip_nuptk: string;
 }
 
-const HARI_LIST = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
+const HARI_LIST = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 
-export default function JadwalGuru() {
-  const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
-  const [teachers, setTeachers] = useState<TeacherItem[]>([]);
+const DEFAULT_MAPEL_LIST = [
+  "Matematika",
+  "Bahasa Indonesia",
+  "Bahasa Inggris",
+  "Pemrograman Web & Perangkat Bergerak",
+  "Basis Data",
+  "Pemrograman Berorientasi Objek",
+  "Informatika / KKPI",
+  "Pendidikan Agama",
+  "Pancasila / PKn",
+  "PJOK / Olahraga",
+  "Fisika",
+  "Kimia",
+  "Biologi",
+  "Sejarah Indonesia",
+  "Seni Budaya",
+  "Kewirausahaan (PKK)"
+];
+
+export default function JadwalGuru({ session }: { session?: any }) {
+  const [activeTab, setActiveTab] = useState<"jadwal_pelajaran" | "absensi_mengajar" | "pengaturan_jam" | "jadwal_khusus">("jadwal_pelajaran");
+
+  // User session & role check
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  useEffect(() => {
+    const saved = localStorage.getItem(getStorageKey("SIAS_SESSION"));
+    if (saved) {
+      try {
+        setCurrentUser(JSON.parse(saved));
+      } catch (e) {}
+    }
+  }, []);
+
+  const activeRole = session?.role || currentUser?.role;
+  const isGuru = activeRole === "Guru";
+
+  // Filter for Tab 2 (Presensi Mengajar Guru) - Only today & Filter Jam
+  const [filterJamMengajar, setFilterJamMengajar] = useState<string>("Semua");
+
+  // Main Data States
+  const [lessonSchedules, setLessonSchedules] = useState<ScheduleLessonItem[]>([]);
+  const [jamSlots, setJamSlots] = useState<JamPelajaranItem[]>([]);
+  const [teachers, setTeachers] = useState<ExtendedTeacherItem[]>([]);
+  const [classList, setClassList] = useState<string[]>([]);
+  const [absensiLogs, setAbsensiLogs] = useState<AbsensiMengajarItem[]>([]);
+
+  // Flex schedules (legacy special entry/exit limit per teacher)
+  const [flexSchedules, setFlexSchedules] = useState<any[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [globalSettings, setGlobalSettings] = useState({
-    jam_masuk_mulai: "06:00",
-    jam_masuk_batas: "07:15",
-    jam_pulang_mulai: "15:30"
-  });
 
-  // Filter/Search states
-  const [searchQuery, setSearchQuery] = useState("");
+  // Filters for Schedule Matrix/Table
   const [selectedHariFilter, setSelectedHariFilter] = useState("Semua");
+  const [selectedKelasFilter, setSelectedKelasFilter] = useState("Semua");
+  const [selectedGuruFilter, setSelectedGuruFilter] = useState("Semua");
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // Pagination state
+  // Pagination for Schedule Table
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, selectedHariFilter]);
+  // Modal: Add/Edit Schedule Lesson
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [editScheduleId, setEditScheduleId] = useState<string | null>(null);
+  const [scheduleForm, setScheduleForm] = useState({
+    hari: "Senin",
+    kelas: "X RPL 1",
+    jam_ke: 1,
+    id_jam: "",
+    mapel: "Matematika",
+    id_guru: "",
+    ruangan: "Kelas Utama"
+  });
 
-  // Modal states
-  const [showFormModal, setShowFormModal] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
+  // Modal: Add/Edit Jam Slot
+  const [showJamModal, setShowJamModal] = useState(false);
+  const [editJamId, setEditJamId] = useState<string | null>(null);
+  const [jamForm, setJamForm] = useState({
+    jam_ke: 1,
+    nama_jam: "Jam ke-1",
+    jam_mulai: "07:00",
+    jam_selesai: "07:45",
+    tipe: "Pelajaran" as "Pelajaran" | "Istirahat" | "Upacara"
+  });
+
+  // Modal: Teacher Class Attendance Form
+  const [showAbsensiModal, setShowAbsensiModal] = useState(false);
+  const [absensiForm, setAbsensiForm] = useState({
+    tanggal: new Date().toISOString().split("T")[0],
+    waktu_absen: new Date().toTimeString().slice(0, 5),
+    hari: "Senin",
+    id_guru: "",
+    kelas: "XI RPL 1",
+    mapel: "Matematika",
+    jam_ke: 1,
+    jam_mulai_jadwal: "07:00",
+    jam_selesai_jadwal: "07:45",
+    status: "Hadir Tepat Waktu" as "Hadir Tepat Waktu" | "Terlambat Masuk Kelas" | "Izin" | "Sakit" | "Tugas Luar",
+    catatan_materi: ""
+  });
+
+  // Legacy Modal: Flex teacher limits
+  const [showFlexModal, setShowFlexModal] = useState(false);
+  const [flexForm, setFlexForm] = useState({
+    id_jadwal: "",
     id_guru: "",
     hari: "Senin",
     jam_masuk_mulai: "06:00",
@@ -66,118 +147,125 @@ export default function JadwalGuru() {
     jam_pulang_mulai: "15:30"
   });
 
-  const fetchData = async () => {
+  const fetchAllData = async () => {
     setLoading(true);
     setError(null);
     try {
-      // 1. Fetch all schedules
-      const resSchedules = await callGas("getJadwalGuruSemua");
-      if (resSchedules && resSchedules.success) {
-        setSchedules(resSchedules.data || []);
-      } else {
-        setError(resSchedules?.message || "Gagal memuat jadwal guru.");
+      // 1. Fetch Jam Pelajaran Slots
+      const resJam = await callGas("getJamPelajaran");
+      if (resJam && resJam.success) {
+        setJamSlots(resJam.data || []);
       }
 
-      // 2. Fetch all teachers for selection
+      // 2. Fetch Lesson Schedules
+      const resSchedules = await callGas("getJadwalPelajaranSemua");
+      if (resSchedules && resSchedules.success) {
+        setLessonSchedules(resSchedules.data || []);
+      }
+
+      // 3. Fetch Teachers Master Data
       const resTeachers = await callGas("getDataMaster", ["Guru"]);
       if (resTeachers && resTeachers.success) {
-        setTeachers(resTeachers.data || []);
+        const tData = resTeachers.data || [];
+        setTeachers(tData);
+        if (tData.length > 0 && !scheduleForm.id_guru) {
+          setScheduleForm(prev => ({ ...prev, id_guru: tData[0].id_guru }));
+          setAbsensiForm(prev => ({ ...prev, id_guru: tData[0].id_guru }));
+        }
       }
 
-      // 3. Fetch global operating hour settings
-      const resConfig = await callGas("getPengaturanSemua");
-      if (resConfig && resConfig.success !== false) {
-        setGlobalSettings({
-          jam_masuk_mulai: resConfig.jam_masuk_mulai || "06:00",
-          jam_masuk_batas: resConfig.jam_masuk_batas || "07:15",
-          jam_pulang_mulai: resConfig.jam_pulang_mulai || "15:30"
-        });
+      // 4. Fetch Classes Master Data
+      const resKelas = await callGas("getKelasSemua");
+      if (resKelas && Array.isArray(resKelas)) {
+        setClassList(resKelas);
+        if (resKelas.length > 0) {
+          setScheduleForm(prev => ({ ...prev, kelas: resKelas[0] }));
+        }
+      }
+
+      // 5. Fetch Absensi Mengajar Guru
+      const resAbs = await callGas("getAbsensiMengajarGuru");
+      if (resAbs && resAbs.success) {
+        setAbsensiLogs(resAbs.data || []);
+      }
+
+      // 6. Fetch Flex Special Schedules
+      const resFlex = await callGas("getJadwalGuruSemua");
+      if (resFlex && resFlex.success) {
+        setFlexSchedules(resFlex.data || []);
       }
     } catch (err: any) {
-      setError("Kesalahan koneksi: " + err.toString());
+      setError("Gagal memuat data: " + err.toString());
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    fetchAllData();
   }, []);
 
-  const openAdd = () => {
-    setEditId(null);
-    setFormData({
-      id_guru: teachers[0]?.id_guru || "",
-      hari: "Senin",
-      jam_masuk_mulai: globalSettings.jam_masuk_mulai,
-      jam_masuk_batas: globalSettings.jam_masuk_batas,
-      jam_pulang_mulai: globalSettings.jam_pulang_mulai
-    });
-    setShowFormModal(true);
+  // Set today's day name in Indonesian
+  const getHariIniStr = () => {
+    const dayIndex = new Date().getDay();
+    const days = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    return days[dayIndex];
   };
 
-  const openEdit = (item: ScheduleItem) => {
-    setEditId(item.id_jadwal);
-    setFormData({
-      id_guru: item.id_guru,
-      hari: item.hari,
-      jam_masuk_mulai: item.jam_masuk_mulai,
-      jam_masuk_batas: item.jam_masuk_batas,
-      jam_pulang_mulai: item.jam_pulang_mulai
-    });
-    setShowFormModal(true);
+  // Find active lesson slot based on current time
+  const getActiveSlotNow = () => {
+    const nowStr = new Date().toTimeString().slice(0, 5); // HH:mm
+    return jamSlots.find(s => nowStr >= s.jam_mulai && nowStr <= s.jam_selesai);
   };
 
-  const handleDelete = async (idJadwal: string, namaGuru: string, hari: string) => {
-    if (confirm(`Apakah Anda yakin ingin menghapus jadwal ${namaGuru} untuk hari ${hari}?`)) {
-      try {
-        const res = await callGas("hapusJadwalGuru", [idJadwal]);
-        if (res && res.success) {
-          alert(res.message || "Jadwal berhasil dihapus.");
-          fetchData();
-        } else {
-          alert(res?.message || "Gagal menghapus jadwal.");
-        }
-      } catch (err: any) {
-        alert("Gagal menghubungi server: " + err.toString());
-      }
-    }
+  // Auto-fill jam slot time when jam_ke changes in Schedule Form
+  const handleScheduleJamKeChange = (jamKeNum: number) => {
+    const slot = jamSlots.find(j => j.jam_ke === jamKeNum);
+    setScheduleForm(prev => ({
+      ...prev,
+      jam_ke: jamKeNum,
+      id_jam: slot ? slot.id_jam : ""
+    }));
   };
 
-  const handleFormSubmit = async (e: FormEvent) => {
+  // Save Lesson Schedule (Add/Edit)
+  const handleSaveSchedule = async (e: FormEvent) => {
     e.preventDefault();
-    if (!formData.id_guru) {
-      alert("Silakan pilih guru terlebih dahulu!");
+    if (!scheduleForm.id_guru) {
+      alert("Silakan pilih guru pengampu terlebih dahulu!");
       return;
     }
-
-    const selectedTeacher = teachers.find(t => t.id_guru === formData.id_guru);
-    const namaGuru = selectedTeacher ? selectedTeacher.nama_guru : "";
+    const selectedTeacher = teachers.find(t => t.id_guru === scheduleForm.id_guru);
+    const slot = jamSlots.find(j => j.jam_ke === Number(scheduleForm.jam_ke));
 
     const payload = {
-      id_guru: formData.id_guru,
-      nama_guru: namaGuru,
-      hari: formData.hari,
-      jam_masuk_mulai: formData.jam_masuk_mulai,
-      jam_masuk_batas: formData.jam_masuk_batas,
-      jam_pulang_mulai: formData.jam_pulang_mulai
+      hari: scheduleForm.hari,
+      kelas: scheduleForm.kelas,
+      jam_ke: Number(scheduleForm.jam_ke),
+      id_jam: slot ? slot.id_jam : `JP-${scheduleForm.jam_ke}`,
+      jam_mulai: slot ? slot.jam_mulai : "07:00",
+      jam_selesai: slot ? slot.jam_selesai : "07:45",
+      mapel: scheduleForm.mapel,
+      id_guru: scheduleForm.id_guru,
+      nama_guru: selectedTeacher ? selectedTeacher.nama_guru : "",
+      ruangan: scheduleForm.ruangan || "Kelas Utama"
     };
 
     try {
       setLoading(true);
       let res;
-      if (editId) {
-        res = await callGas("editJadwalGuru", [editId, payload]);
+      if (editScheduleId) {
+        res = await callGas("editJadwalPelajaran", [editScheduleId, payload]);
       } else {
-        res = await callGas("tambahJadwalGuru", [payload]);
+        res = await callGas("tambahJadwalPelajaran", [payload]);
       }
 
       if (res && res.success) {
-        setShowFormModal(false);
-        alert(res.message || "Jadwal berhasil disimpan!");
-        fetchData();
+        setShowScheduleModal(false);
+        alert(res.message || "Jadwal pelajaran berhasil disimpan!");
+        fetchAllData();
       } else {
-        alert(res?.message || "Gagal menyimpan jadwal.");
+        alert(res?.message || "Gagal menyimpan jadwal pelajaran.");
         setLoading(false);
       }
     } catch (err: any) {
@@ -186,347 +274,1368 @@ export default function JadwalGuru() {
     }
   };
 
-  // Filter schedules list based on search and selected day
-  const filteredSchedules = schedules.filter((item) => {
-    const matchSearch = item.nama_guru.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                        item.hari.toLowerCase().includes(searchQuery.toLowerCase());
+  const handleDeleteSchedule = async (idJadwal: string, mapel: string, kelas: string) => {
+    if (confirm(`Hapus jadwal pelajaran ${mapel} di kelas ${kelas}?`)) {
+      try {
+        const res = await callGas("hapusJadwalPelajaran", [idJadwal]);
+        if (res && res.success) {
+          alert("Jadwal pelajaran berhasil dihapus.");
+          fetchAllData();
+        } else {
+          alert(res?.message || "Gagal menghapus.");
+        }
+      } catch (err: any) {
+        alert("Kesalahan: " + err.toString());
+      }
+    }
+  };
+
+  // Save Jam Pelajaran Slot
+  const handleSaveJamSlot = async (e: FormEvent) => {
+    e.preventDefault();
+    const payload = {
+      id_jam: editJamId || `JP-${jamForm.jam_ke}`,
+      jam_ke: Number(jamForm.jam_ke),
+      nama_jam: jamForm.nama_jam || `Jam ke-${jamForm.jam_ke}`,
+      jam_mulai: jamForm.jam_mulai,
+      jam_selesai: jamForm.jam_selesai,
+      tipe: jamForm.tipe
+    };
+
+    try {
+      setLoading(true);
+      const res = await callGas("simpanJamPelajaran", [payload]);
+      if (res && res.success) {
+        setShowJamModal(false);
+        alert(res.message || "Slot jam pelajaran disimpan!");
+        fetchAllData();
+      } else {
+        alert(res?.message || "Gagal menyimpan jam pelajaran.");
+        setLoading(false);
+      }
+    } catch (err: any) {
+      alert("Error: " + err.toString());
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteJamSlot = async (idJam: string, namaJam: string) => {
+    if (confirm(`Hapus slot ${namaJam}?`)) {
+      try {
+        const res = await callGas("hapusJamPelajaran", [idJam]);
+        if (res && res.success) {
+          alert("Slot jam pelajaran dihapus.");
+          fetchAllData();
+        }
+      } catch (err: any) {
+        alert("Error: " + err.toString());
+      }
+    }
+  };
+
+  // Handle Save Absensi Mengajar Guru (Teacher Class Attendance)
+  const handleSaveAbsensiMengajar = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!absensiForm.id_guru) {
+      alert("Pilih guru terlebih dahulu!");
+      return;
+    }
+    const selectedTeacher = teachers.find(t => t.id_guru === absensiForm.id_guru);
+
+    const payload = {
+      tanggal: absensiForm.tanggal,
+      waktu_absen: absensiForm.waktu_absen,
+      hari: absensiForm.hari,
+      id_guru: absensiForm.id_guru,
+      nama_guru: selectedTeacher ? selectedTeacher.nama_guru : "Guru",
+      kelas: absensiForm.kelas,
+      mapel: absensiForm.mapel,
+      jam_ke: Number(absensiForm.jam_ke),
+      jam_mulai_jadwal: absensiForm.jam_mulai_jadwal,
+      jam_selesai_jadwal: absensiForm.jam_selesai_jadwal,
+      status: absensiForm.status,
+      catatan_materi: absensiForm.catatan_materi || "-"
+    };
+
+    try {
+      setLoading(true);
+      const res = await callGas("simpanAbsensiMengajarGuru", [payload]);
+      if (res && res.success) {
+        setShowAbsensiModal(false);
+        alert(res.message || "Presensi mengajar berhasil dicatat!");
+        fetchAllData();
+      } else {
+        alert(res?.message || "Gagal mencatat presensi.");
+        setLoading(false);
+      }
+    } catch (err: any) {
+      alert("Error: " + err.toString());
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteAbsensiMengajar = async (idLog: string) => {
+    if (confirm("Hapus catatan presensi mengajar ini?")) {
+      try {
+        const res = await callGas("hapusAbsensiMengajarGuru", [idLog]);
+        if (res && res.success) {
+          alert("Riwayat presensi mengajar berhasil dihapus.");
+          fetchAllData();
+        }
+      } catch (err: any) {
+        alert("Error: " + err.toString());
+      }
+    }
+  };
+
+  // Quick action: Open Absensi Modal prefilled from a schedule item
+  const openAbsensiFromSchedule = (sch: ScheduleLessonItem) => {
+    const todayStr = new Date().toISOString().split("T")[0];
+    const timeNow = new Date().toTimeString().slice(0, 5);
+    const slot = jamSlots.find(j => j.jam_ke === sch.jam_ke);
+    const jamMulai = slot ? slot.jam_mulai : (sch.jam_mulai || "07:00");
+    const jamSelesai = slot ? slot.jam_selesai : (sch.jam_selesai || "07:45");
+
+    // Check if late (more than 5 mins after start time)
+    let autoStatus: "Hadir Tepat Waktu" | "Terlambat Masuk Kelas" = "Hadir Tepat Waktu";
+    if (jamMulai && jamMulai !== "-") {
+      const [hM, mM] = jamMulai.split(":").map(Number);
+      const [hN, mN] = timeNow.split(":").map(Number);
+      const startMin = hM * 60 + mM;
+      const nowMin = hN * 60 + mN;
+      if (nowMin > startMin + 5) {
+        autoStatus = "Terlambat Masuk Kelas";
+      }
+    }
+
+    setAbsensiForm({
+      tanggal: todayStr,
+      waktu_absen: timeNow,
+      hari: sch.hari,
+      id_guru: sch.id_guru,
+      kelas: sch.kelas,
+      mapel: sch.mapel,
+      jam_ke: sch.jam_ke,
+      jam_mulai_jadwal: jamMulai,
+      jam_selesai_jadwal: jamSelesai,
+      status: autoStatus,
+      catatan_materi: ""
+    });
+    setShowAbsensiModal(true);
+  };
+
+  // Filtered schedule list
+  const filteredSchedules = lessonSchedules.filter(item => {
     const matchHari = selectedHariFilter === "Semua" || item.hari === selectedHariFilter;
-    return matchSearch && matchHari;
+    const matchKelas = selectedKelasFilter === "Semua" || item.kelas === selectedKelasFilter;
+    const matchGuru = selectedGuruFilter === "Semua" || item.id_guru === selectedGuruFilter;
+    const matchSearch = item.mapel.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                        item.nama_guru.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        item.kelas.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchHari && matchKelas && matchGuru && matchSearch;
   });
 
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedSchedules = filteredSchedules.slice(startIndex, startIndex + itemsPerPage);
   const totalPages = Math.ceil(filteredSchedules.length / itemsPerPage);
 
+  const activeSlot = getActiveSlotNow();
+  const todayHari = getHariIniStr();
+
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-extrabold text-gray-900 tracking-tight flex items-center gap-2">
-            <Calendar className="w-6 h-6 text-amber-500" />
-            Jadwal Khusus Guru
-          </h2>
-          <p className="text-xs text-gray-500 font-medium">Atur jam masuk dan pulang guru secara fleksibel berdasarkan hari</p>
+    <div className="space-y-6 animate-fade-in">
+      {/* Header Banner */}
+      <div className="bg-gradient-to-r from-amber-600 via-amber-500 to-orange-500 rounded-3xl p-6 text-white shadow-md relative overflow-hidden">
+        <div className="absolute -right-6 -bottom-6 opacity-15 pointer-events-none">
+          <Calendar className="w-56 h-56" />
         </div>
-
-        <button 
-          onClick={openAdd}
-          disabled={teachers.length === 0}
-          className="bg-amber-600 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl hover:bg-amber-700 disabled:opacity-50 transition-all duration-150 shadow-sm flex items-center justify-center gap-1.5 self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          Tambah Jadwal Fleksibel
-        </button>
-      </div>
-
-      {/* Filter and Search controls */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-grow">
-          <input 
-            type="text"
-            placeholder="Cari nama guru..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2 pl-9 pr-4 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-amber-500"
-          />
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-        </div>
-
-        <select 
-          value={selectedHariFilter}
-          onChange={(e) => setSelectedHariFilter(e.target.value)}
-          className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs font-semibold text-gray-700 focus:outline-none focus:border-amber-500"
-        >
-          <option value="Semua">Semua Hari</option>
-          {HARI_LIST.map((h, idx) => (
-            <option key={idx} value={h}>{h}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Main Table */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        {loading && schedules.length === 0 ? (
-          <div className="p-12 text-center text-gray-400 font-medium">Memuat jadwal guru...</div>
-        ) : error ? (
-          <div className="p-12 text-center text-rose-500 font-medium">{error}</div>
-        ) : filteredSchedules.length === 0 ? (
-          <div className="p-12 text-center text-gray-400 font-medium">
-            <p className="font-bold text-gray-500 mb-1">Belum ada jadwal khusus guru</p>
-            <p className="text-[11px] text-gray-400">Guru yang tidak terdaftar di sini akan otomatis mengikuti jam operasional default sekolah.</p>
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50/70 border-b border-gray-100 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                  <th className="py-3.5 px-6">ID Jadwal</th>
-                  <th className="py-3.5 px-6">Nama Guru</th>
-                  <th className="py-3.5 px-6">Hari</th>
-                  <th className="py-3.5 px-6">Jam Masuk Mulai</th>
-                  <th className="py-3.5 px-6">Batas Masuk</th>
-                  <th className="py-3.5 px-6">Jam Pulang Mulai</th>
-                  <th className="py-3.5 px-6 text-center">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50 text-xs text-gray-700">
-                {paginatedSchedules.map((item) => (
-                  <tr key={item.id_jadwal} className="hover:bg-amber-50/20 transition-all duration-150">
-                    <td className="py-3.5 px-6 font-mono font-bold text-gray-400">{item.id_jadwal}</td>
-                    <td className="py-3.5 px-6 font-bold text-gray-900">{item.nama_guru}</td>
-                    <td className="py-3.5 px-6">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-100">
-                        {item.hari}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-6 font-semibold text-gray-600 flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5 text-gray-400" />
-                      {item.jam_masuk_mulai}
-                    </td>
-                    <td className="py-3.5 px-6 font-semibold text-rose-600">{item.jam_masuk_batas}</td>
-                    <td className="py-3.5 px-6 font-semibold text-emerald-600">{item.jam_pulang_mulai}</td>
-                    <td className="py-3.5 px-6 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button 
-                          onClick={() => openEdit(item)}
-                          className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-all duration-150"
-                          title="Edit Jadwal"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(item.id_jadwal, item.nama_guru, item.hari)}
-                          className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-all duration-150"
-                          title="Hapus Jadwal"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-[11px] font-bold mb-2">
+              <Sparkles className="w-3.5 h-3.5" />
+              Sistem Jadwal & Presensi Mengajar Integrasi
+            </div>
+            <h2 className="text-2xl font-black tracking-tight">Jadwal Pelajaran & Presensi Guru</h2>
+            <p className="text-amber-100 text-xs mt-1 font-medium max-w-xl">
+              Kelola jadwal pelajaran lengkap per kelas & jam pelajaran. Catat presensi masuk kelas guru secara real-time setiap masuk jam pelajaran.
+            </p>
           </div>
 
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-gray-100 bg-white px-6 py-4">
-              <div className="flex flex-1 justify-between sm:hidden">
-                <button
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-                  className={`relative inline-flex items-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-700 ${
-                    currentPage === 1 ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"
-                  }`}
-                >
-                  Sebelumnya
-                </button>
-                <button
-                  disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
-                  className={`relative ml-3 inline-flex items-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-700 ${
-                    currentPage === totalPages ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"
-                  }`}
-                >
-                  Selanjutnya
-                </button>
-              </div>
-              <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-xs text-gray-500 font-semibold">
-                    Menampilkan <span className="font-bold text-gray-950">{startIndex + 1}</span> sampai{" "}
-                    <span className="font-bold text-gray-950">
-                      {Math.min(startIndex + itemsPerPage, filteredSchedules.length)}
-                    </span>{" "}
-                    dari <span className="font-bold text-gray-950">{filteredSchedules.length}</span> data
-                  </p>
-                </div>
-                <div>
-                  <nav className="isolate inline-flex -space-x-px rounded-xl gap-1" aria-label="Pagination">
-                    <button
-                      onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-                      disabled={currentPage === 1}
-                      className={`relative inline-flex items-center rounded-lg px-2.5 py-1.5 text-gray-400 hover:bg-gray-50 ${
-                        currentPage === 1 ? "opacity-40 cursor-not-allowed" : ""
-                      }`}
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
-                      if (
-                        totalPages > 7 &&
-                        page !== 1 &&
-                        page !== totalPages &&
-                        Math.abs(page - currentPage) > 1
-                      ) {
-                        if (page === 2 || page === totalPages - 1) {
-                          return <span key={page} className="relative inline-flex items-center px-2 py-1 text-xs font-semibold text-gray-400">...</span>;
-                        }
-                        return null;
-                      }
+          {!isGuru && (
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => {
+                  setEditScheduleId(null);
+                  setScheduleForm({
+                    hari: todayHari !== "Minggu" ? todayHari : "Senin",
+                    kelas: classList[0] || "X RPL 1",
+                    jam_ke: 1,
+                    id_jam: jamSlots[0]?.id_jam || "",
+                    mapel: DEFAULT_MAPEL_LIST[0],
+                    id_guru: teachers[0]?.id_guru || "",
+                    ruangan: "Kelas Utama"
+                  });
+                  setShowScheduleModal(true);
+                }}
+                className="bg-white text-amber-900 font-extrabold text-xs px-4 py-2.5 rounded-xl hover:bg-amber-50 transition-all shadow-sm flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" />
+                + Jadwal Pelajaran Baru
+              </button>
 
-                      return (
-                        <button
-                          key={page}
-                          onClick={() => setCurrentPage(page)}
-                          className={`relative inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-bold transition-all duration-150 ${
-                            currentPage === page
-                              ? "bg-amber-600 text-white shadow-sm shadow-amber-600/10"
-                              : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
-                          }`}
-                        >
-                          {page}
-                        </button>
-                      );
-                    })}
-
-                    <button
-                      onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
-                      disabled={currentPage === totalPages}
-                      className={`relative inline-flex items-center rounded-lg px-2.5 py-1.5 text-gray-400 hover:bg-gray-50 ${
-                        currentPage === totalPages ? "opacity-40 cursor-not-allowed" : ""
-                      }`}
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </nav>
-                </div>
-              </div>
+              <button
+                onClick={() => {
+                  const todayStr = new Date().toISOString().split("T")[0];
+                  const timeNow = new Date().toTimeString().slice(0, 5);
+                  setAbsensiForm({
+                    tanggal: todayStr,
+                    waktu_absen: timeNow,
+                    hari: todayHari !== "Minggu" ? todayHari : "Senin",
+                    id_guru: teachers[0]?.id_guru || "",
+                    kelas: classList[0] || "X RPL 1",
+                    mapel: DEFAULT_MAPEL_LIST[0],
+                    jam_ke: 1,
+                    jam_mulai_jadwal: "07:00",
+                    jam_selesai_jadwal: "07:45",
+                    status: "Hadir Tepat Waktu",
+                    catatan_materi: ""
+                  });
+                  setShowAbsensiModal(true);
+                }}
+                className="bg-amber-900/40 border border-white/30 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl hover:bg-amber-900/60 transition-all shadow-sm flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Presensi Masuk Pelajaran
+              </button>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Main Tab Switcher */}
+      <div className="flex border-b border-gray-200 overflow-x-auto no-scrollbar gap-2">
+        <button
+          onClick={() => setActiveTab("jadwal_pelajaran")}
+          className={`pb-3 px-4 text-xs font-bold border-b-2 whitespace-nowrap transition-all flex items-center gap-2 ${
+            activeTab === "jadwal_pelajaran"
+              ? "border-amber-600 text-amber-700 bg-amber-50/50 rounded-t-xl"
+              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          Jadwal Pelajaran Kelas
+          <span className="ml-1 bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-extrabold">
+            {lessonSchedules.length}
+          </span>
+        </button>
+
+        {!isGuru && (
+          <>
+            <button
+              onClick={() => setActiveTab("absensi_mengajar")}
+              className={`pb-3 px-4 text-xs font-bold border-b-2 whitespace-nowrap transition-all flex items-center gap-2 ${
+                activeTab === "absensi_mengajar"
+                  ? "border-amber-600 text-amber-700 bg-amber-50/50 rounded-t-xl"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              Presensi Mengajar Guru (Hari Ini)
+              <span className="ml-1 bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-[10px] font-extrabold">
+                {absensiLogs.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("pengaturan_jam")}
+              className={`pb-3 px-4 text-xs font-bold border-b-2 whitespace-nowrap transition-all flex items-center gap-2 ${
+                activeTab === "pengaturan_jam"
+                  ? "border-amber-600 text-amber-700 bg-amber-50/50 rounded-t-xl"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              <Clock className="w-4 h-4" />
+              Pengaturan Jam Pelajaran ({jamSlots.length} Slot)
+            </button>
+
+            <button
+              onClick={() => setActiveTab("jadwal_khusus")}
+              className={`pb-3 px-4 text-xs font-bold border-b-2 whitespace-nowrap transition-all flex items-center gap-2 ${
+                activeTab === "jadwal_khusus"
+                  ? "border-amber-600 text-amber-700 bg-amber-50/50 rounded-t-xl"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              Jadwal Fleksibel Guru (Khusus)
+            </button>
           </>
         )}
       </div>
 
-      {/* FORM MODAL (Add/Edit) */}
-      {showFormModal && (
+      {/* TAB 1: JADWAL PELAJARAN */}
+      {activeTab === "jadwal_pelajaran" && (
+        <div className="space-y-6">
+          {/* Filters Bar */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col md:flex-row gap-3 items-center justify-between">
+            <div className="flex flex-wrap gap-2.5 w-full md:w-auto">
+              {/* Day Filter */}
+              <select
+                value={selectedHariFilter}
+                onChange={(e) => {
+                  setSelectedHariFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:border-amber-500"
+              >
+                <option value="Semua">Semua Hari</option>
+                {HARI_LIST.map((h) => (
+                  <option key={h} value={h}>{h}</option>
+                ))}
+              </select>
+
+              {/* Class Filter */}
+              <select
+                value={selectedKelasFilter}
+                onChange={(e) => {
+                  setSelectedKelasFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:border-amber-500"
+              >
+                <option value="Semua">Semua Kelas</option>
+                {classList.map((k) => (
+                  <option key={k} value={k}>{k}</option>
+                ))}
+              </select>
+
+              {/* Teacher Filter */}
+              <select
+                value={selectedGuruFilter}
+                onChange={(e) => {
+                  setSelectedGuruFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 focus:outline-none focus:border-amber-500"
+              >
+                <option value="Semua">Semua Guru Pengampu</option>
+                {teachers.map((t) => (
+                  <option key={t.id_guru} value={t.id_guru}>{t.nama_guru}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative w-full md:w-64">
+              <input
+                type="text"
+                placeholder="Cari mapel, guru, kelas..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2 pl-9 pr-4 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-amber-500"
+              />
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+            </div>
+          </div>
+
+          {/* Schedule Table / List */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            {loading && lessonSchedules.length === 0 ? (
+              <div className="p-12 text-center text-gray-400 font-medium">Memuat jadwal pelajaran...</div>
+            ) : filteredSchedules.length === 0 ? (
+              <div className="p-12 text-center text-gray-400 font-medium">
+                <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="font-bold text-gray-600">Belum ada jadwal pelajaran untuk kriteria ini</p>
+                <p className="text-xs text-gray-400 mt-1">Klik tombol "+ Jadwal Pelajaran Baru" di atas untuk menambahkan jadwal kelas.</p>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50/80 border-b border-gray-100 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                        <th className="py-3.5 px-5">Hari</th>
+                        <th className="py-3.5 px-5">Jam Ke</th>
+                        <th className="py-3.5 px-5">Waktu</th>
+                        <th className="py-3.5 px-5">Kelas</th>
+                        <th className="py-3.5 px-5">Mata Pelajaran</th>
+                        <th className="py-3.5 px-5">Guru Pengampu</th>
+                        <th className="py-3.5 px-5">Ruangan</th>
+                        <th className="py-3.5 px-5 text-center">Presensi / Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 text-xs text-gray-700">
+                      {paginatedSchedules.map((item) => {
+                        const slot = jamSlots.find(j => j.jam_ke === item.jam_ke);
+                        const jamMulai = slot ? slot.jam_mulai : (item.jam_mulai || "-");
+                        const jamSelesai = slot ? slot.jam_selesai : (item.jam_selesai || "-");
+
+                        return (
+                          <tr key={item.id_jadwal} className="hover:bg-amber-50/20 transition-all duration-150">
+                            <td className="py-3.5 px-5 font-bold">
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-amber-50 text-amber-800 border border-amber-100">
+                                {item.hari}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-5 font-mono font-bold text-gray-900">
+                              Jam {item.jam_ke}
+                            </td>
+                            <td className="py-3.5 px-5 font-mono text-gray-600">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-700 bg-gray-50 px-2 py-0.5 rounded-md border border-gray-200">
+                                <Clock className="w-3 h-3 text-amber-500 shrink-0" />
+                                {jamMulai} - {jamSelesai}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-5 font-bold text-blue-900">
+                              <span className="bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full text-[10px] font-black border border-blue-100">
+                                {item.kelas}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-5 font-extrabold text-gray-900">
+                              {item.mapel}
+                            </td>
+                            <td className="py-3.5 px-5 font-medium text-gray-700">
+                              <div className="flex items-center gap-1.5">
+                                <GraduationCap className="w-4 h-4 text-emerald-600 shrink-0" />
+                                <span>{item.nama_guru}</span>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-5 text-gray-500 font-mono text-[11px]">
+                              {item.ruangan || "Kelas Utama"}
+                            </td>
+                            <td className="py-3.5 px-5 text-center">
+                              {!isGuru ? (
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => openAbsensiFromSchedule(item)}
+                                    className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-[10px] px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 border border-emerald-200"
+                                    title="Catat Presensi Masuk Guru"
+                                  >
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    Absen Masuk
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setEditScheduleId(item.id_jadwal);
+                                      setScheduleForm({
+                                        hari: item.hari,
+                                        kelas: item.kelas,
+                                        jam_ke: item.jam_ke,
+                                        id_jam: item.id_jam || "",
+                                        mapel: item.mapel,
+                                        id_guru: item.id_guru,
+                                        ruangan: item.ruangan || "Kelas Utama"
+                                      });
+                                      setShowScheduleModal(true);
+                                    }}
+                                    className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
+                                    title="Edit Jadwal"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteSchedule(item.id_jadwal, item.mapel, item.kelas)}
+                                    className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                                    title="Hapus Jadwal"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 font-bold text-[10px] px-2.5 py-1 rounded-lg border border-amber-200">
+                                  <BookOpen className="w-3 h-3 text-amber-600" /> Jadwal Masuk
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between border-t border-gray-100 bg-white px-6 py-4">
+                    <p className="text-xs text-gray-500 font-semibold">
+                      Menampilkan <span className="font-bold text-gray-950">{startIndex + 1}</span> -{" "}
+                      <span className="font-bold text-gray-950">
+                        {Math.min(startIndex + itemsPerPage, filteredSchedules.length)}
+                      </span>{" "}
+                      dari <span className="font-bold text-gray-950">{filteredSchedules.length}</span> jadwal
+                    </p>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                        disabled={currentPage === 1}
+                        className="px-3 py-1 text-xs font-bold rounded-lg border border-gray-200 disabled:opacity-40"
+                      >
+                        Prev
+                      </button>
+                      <span className="px-3 py-1 text-xs font-bold text-gray-600">
+                        {currentPage} / {totalPages}
+                      </span>
+                      <button
+                        onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                        className="px-3 py-1 text-xs font-bold rounded-lg border border-gray-200 disabled:opacity-40"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: PRESENSI MENGAJAR GURU */}
+      {activeTab === "absensi_mengajar" && (
+        <div className="space-y-6">
+          {/* Active Period / Quick Logger Banner */}
+          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                <Clock className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-extrabold text-emerald-950 flex items-center gap-2">
+                  <span>Waktu Pembelajaran Aktif</span>
+                  <span className="bg-emerald-200 text-emerald-900 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+                    Hari {todayHari}
+                  </span>
+                </h3>
+                <p className="text-xs text-emerald-800 font-medium mt-0.5">
+                  {activeSlot ? (
+                    <span>Sedang berlangsung: <strong>{activeSlot.nama_jam} ({activeSlot.jam_mulai} - {activeSlot.jam_selesai})</strong></span>
+                  ) : (
+                    <span>Di luar jam pelajaran utama. Pengisian presensi tetap bisa dilakukan secara manual.</span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                const todayStr = new Date().toISOString().split("T")[0];
+                const timeNow = new Date().toTimeString().slice(0, 5);
+                setAbsensiForm({
+                  tanggal: todayStr,
+                  waktu_absen: timeNow,
+                  hari: todayHari !== "Minggu" ? todayHari : "Senin",
+                  id_guru: teachers[0]?.id_guru || "",
+                  kelas: classList[0] || "X RPL 1",
+                  mapel: DEFAULT_MAPEL_LIST[0],
+                  jam_ke: activeSlot ? activeSlot.jam_ke : 1,
+                  jam_mulai_jadwal: activeSlot ? activeSlot.jam_mulai : "07:00",
+                  jam_selesai_jadwal: activeSlot ? activeSlot.jam_selesai : "07:45",
+                  status: "Hadir Tepat Waktu",
+                  catatan_materi: ""
+                });
+                setShowAbsensiModal(true);
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-sm transition-all shrink-0 flex items-center gap-1.5"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              Catat Presensi Mengajar Sekarang
+            </button>
+          </div>
+
+          {/* History Log Table */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-extrabold text-gray-900 text-sm flex items-center gap-2">
+                  <span>Laporan Presensi Mengajar Guru Hari Ini</span>
+                  <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
+                    {new Date().toISOString().split("T")[0]}
+                  </span>
+                </h3>
+                <p className="text-xs text-gray-500 font-medium">Log kehadiran guru di setiap sesi kelas khusus hari ini dengan filter jam</p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-gray-500 shrink-0">Filter Jam:</label>
+                <select
+                  value={filterJamMengajar}
+                  onChange={(e) => setFilterJamMengajar(e.target.value)}
+                  className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-bold text-gray-700 focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="Semua">Semua Jam Pelajaran</option>
+                  {jamSlots.map((s) => (
+                    <option key={s.id_jam} value={s.jam_ke}>
+                      Jam ke-{s.jam_ke} ({s.jam_mulai} - {s.jam_selesai})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {(() => {
+              const todayStr = new Date().toISOString().split("T")[0];
+              const filteredTodayLogs = absensiLogs.filter(log => {
+                const isToday = log.tanggal === todayStr;
+                const matchJam = filterJamMengajar === "Semua" || Number(filterJamMengajar) === log.jam_ke;
+                return isToday && matchJam;
+              });
+
+              if (filteredTodayLogs.length === 0) {
+                return (
+                  <div className="p-12 text-center text-gray-400 font-medium">
+                    <FileText className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+                    <p className="font-bold text-gray-600">Belum ada catatan presensi mengajar hari ini</p>
+                    <p className="text-xs text-gray-400 mt-1">Presensi guru setiap masuk jam pelajaran hari ini akan tercatat di sini.</p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-100 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                        <th className="py-3.5 px-5">Tanggal & Waktu</th>
+                        <th className="py-3.5 px-5">Guru Pengampu</th>
+                        <th className="py-3.5 px-5">Kelas & Mapel</th>
+                        <th className="py-3.5 px-5">Jam Ke</th>
+                        <th className="py-3.5 px-5">Status Presensi</th>
+                        <th className="py-3.5 px-5">Jurnal / Catatan Materi</th>
+                        <th className="py-3.5 px-5 text-center">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50 text-xs text-gray-700">
+                      {filteredTodayLogs.map((log) => (
+                        <tr key={log.id_log_mengajar} className="hover:bg-amber-50/20 transition-all">
+                          <td className="py-3.5 px-5 font-mono">
+                            <div className="font-bold text-gray-900">{log.tanggal}</div>
+                            <div className="text-[10px] text-gray-500 flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-amber-500" />
+                              {log.waktu_absen} WIB ({log.hari})
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-5 font-bold text-gray-900">
+                            {log.nama_guru}
+                          </td>
+                          <td className="py-3.5 px-5">
+                            <div className="font-extrabold text-indigo-950">{log.mapel}</div>
+                            <div className="text-[11px] font-bold text-blue-600">Kelas: {log.kelas}</div>
+                          </td>
+                          <td className="py-3.5 px-5 font-mono font-bold">
+                            Jam {log.jam_ke}
+                            <div className="text-[10px] text-gray-400">{log.jam_mulai_jadwal} - {log.jam_selesai_jadwal}</div>
+                          </td>
+                          <td className="py-3.5 px-5 font-bold">
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-extrabold border ${
+                              log.status === "Hadir Tepat Waktu"
+                                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                : log.status === "Terlambat Masuk Kelas"
+                                ? "bg-rose-50 text-rose-800 border-rose-200"
+                                : "bg-amber-50 text-amber-800 border-amber-200"
+                            }`}>
+                              {log.status}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-5 text-gray-600 max-w-xs truncate">
+                            {log.catatan_materi || "-"}
+                          </td>
+                          <td className="py-3.5 px-5 text-center">
+                            <button
+                              onClick={() => handleDeleteAbsensiMengajar(log.id_log_mengajar)}
+                              className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                              title="Hapus Log"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: PENGATURAN JAM PELAJARAN */}
+      {activeTab === "pengaturan_jam" && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div>
+              <h3 className="font-extrabold text-gray-900 text-sm flex items-center gap-2">
+                <Clock className="w-5 h-5 text-amber-500" />
+                Pengaturan Slot Jam Pelajaran Sekolah
+              </h3>
+              <p className="text-xs text-gray-500 font-medium mt-0.5">
+                Atur durasi dan rentang jam ke-1, ke-2, jam istirahat, hingga jam ke-N yang berlaku untuk seluruh kelas.
+              </p>
+            </div>
+
+            <button
+              onClick={() => {
+                setEditJamId(null);
+                setJamForm({
+                  jam_ke: jamSlots.length + 1,
+                  nama_jam: `Jam ke-${jamSlots.length + 1}`,
+                  jam_mulai: "07:00",
+                  jam_selesai: "07:45",
+                  tipe: "Pelajaran"
+                });
+                setShowJamModal(true);
+              }}
+              className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-1.5 shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              + Tambah Slot Jam Pelajaran
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {jamSlots.map((slot) => (
+              <div key={slot.id_jam} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 relative hover:border-amber-200 transition-all">
+                <div className="flex justify-between items-start mb-2">
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                    slot.tipe === "Pelajaran" ? "bg-amber-100 text-amber-900 border border-amber-200" : "bg-purple-100 text-purple-900 border border-purple-200"
+                  }`}>
+                    {slot.tipe}
+                  </span>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => {
+                        setEditJamId(slot.id_jam);
+                        setJamForm({
+                          jam_ke: slot.jam_ke,
+                          nama_jam: slot.nama_jam,
+                          jam_mulai: slot.jam_mulai,
+                          jam_selesai: slot.jam_selesai,
+                          tipe: slot.tipe
+                        });
+                        setShowJamModal(true);
+                      }}
+                      className="p-1 text-gray-400 hover:text-amber-600"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteJamSlot(slot.id_jam, slot.nama_jam)}
+                      className="p-1 text-gray-400 hover:text-rose-600"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <h4 className="font-extrabold text-gray-900 text-sm">{slot.nama_jam}</h4>
+                <div className="mt-2 text-xs font-mono font-bold text-gray-600 flex items-center gap-1.5 bg-gray-50 p-2 rounded-xl">
+                  <Clock className="w-4 h-4 text-amber-500" />
+                  <span>{slot.jam_mulai} WIB - {slot.jam_selesai} WIB</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: JADWAL KHUSUS GURU (FLEKSIBEL OPERASIONAL HARIAN) */}
+      {activeTab === "jadwal_khusus" && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div>
+              <h3 className="font-extrabold text-gray-900 text-sm flex items-center gap-2">
+                <Users className="w-5 h-5 text-amber-500" />
+                Jadwal Operasional Harian Khusus Guru
+              </h3>
+              <p className="text-xs text-gray-500 font-medium mt-0.5">
+                Pengaturan batas jam datang & jam pulang harian guru (apabila ada guru yang jam kerja fleksibel di luar default sekolah).
+              </p>
+            </div>
+
+            <button
+              onClick={() => {
+                setFlexForm({
+                  id_jadwal: "",
+                  id_guru: teachers[0]?.id_guru || "",
+                  hari: "Senin",
+                  jam_masuk_mulai: "06:00",
+                  jam_masuk_batas: "07:15",
+                  jam_pulang_mulai: "15:30"
+                });
+                setShowFlexModal(true);
+              }}
+              className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-1.5 shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              + Tambah Batas Fleksibel Guru
+            </button>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            {flexSchedules.length === 0 ? (
+              <div className="p-12 text-center text-gray-400 font-medium">
+                Belum ada batasan jadwal fleksibel harian khusus guru. Semua guru mengikuti jam operasional default sekolah.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 font-bold text-gray-500 uppercase">
+                      <th className="py-3 px-5">Nama Guru</th>
+                      <th className="py-3 px-5">Hari</th>
+                      <th className="py-3 px-5">Jam Masuk Mulai</th>
+                      <th className="py-3 px-5">Batas Terlambat</th>
+                      <th className="py-3 px-5">Jam Pulang Mulai</th>
+                      <th className="py-3 px-5 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {flexSchedules.map((item) => (
+                      <tr key={item.id_jadwal} className="hover:bg-amber-50/20">
+                        <td className="py-3 px-5 font-bold text-gray-900">{item.nama_guru}</td>
+                        <td className="py-3 px-5 font-bold text-amber-800">{item.hari}</td>
+                        <td className="py-3 px-5 font-mono">{item.jam_masuk_mulai}</td>
+                        <td className="py-3 px-5 font-mono text-rose-600 font-bold">{item.jam_masuk_batas}</td>
+                        <td className="py-3 px-5 font-mono text-emerald-600 font-bold">{item.jam_pulang_mulai}</td>
+                        <td className="py-3 px-5 text-center">
+                          <button
+                            onClick={async () => {
+                              if (confirm("Hapus jadwal fleksibel harian guru ini?")) {
+                                await callGas("hapusJadwalGuru", [item.id_jadwal]);
+                                fetchAllData();
+                              }
+                            }}
+                            className="p-1 text-rose-600 hover:bg-rose-50 rounded-lg"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 1: ADD / EDIT LESSON SCHEDULE */}
+      {showScheduleModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl max-w-md w-full overflow-hidden">
-            <div className="p-6 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
-              <h3 className="font-extrabold text-gray-900 text-sm tracking-tight flex items-center gap-1.5">
-                <Calendar className="w-4.5 h-4.5 text-amber-500" />
-                {editId ? "Ubah Jadwal Khusus Guru" : "Tambah Jadwal Khusus Baru"}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl max-w-lg w-full overflow-hidden">
+            <div className="p-5 bg-amber-500 text-white flex justify-between items-center">
+              <h3 className="font-extrabold text-sm tracking-tight flex items-center gap-2">
+                <BookOpen className="w-4.5 h-4.5" />
+                {editScheduleId ? "Edit Jadwal Pelajaran" : "Tambah Jadwal Pelajaran Baru"}
               </h3>
               <button 
-                onClick={() => setShowFormModal(false)} 
-                className="text-gray-400 hover:text-gray-600 text-lg font-bold"
+                onClick={() => setShowScheduleModal(false)}
+                className="text-white/80 hover:text-white text-lg font-bold"
               >
                 ×
               </button>
             </div>
 
-            <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-500">Pilih Guru</label>
-                <div className="relative">
-                  <select 
-                    value={formData.id_guru}
-                    onChange={(e) => setFormData({ ...formData, id_guru: e.target.value })}
+            <form onSubmit={handleSaveSchedule} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-600">Hari</label>
+                  <select
+                    value={scheduleForm.hari}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, hari: e.target.value })}
                     required
-                    disabled={!!editId}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold appearance-none pr-10 focus:outline-none focus:border-amber-500"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
                   >
-                    <option value="" disabled>-- Pilih Guru --</option>
-                    {teachers.map((t) => (
-                      <option key={t.id_guru} value={t.id_guru}>
-                        {t.nama_guru} ({t.nip_nuptk || "NIP Kosong"})
-                      </option>
+                    {HARI_LIST.map((h) => (
+                      <option key={h} value={h}>{h}</option>
                     ))}
                   </select>
-                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-3.5 pointer-events-none" />
                 </div>
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-500">Hari Berlaku</label>
-                <div className="relative">
-                  <select 
-                    value={formData.hari}
-                    onChange={(e) => setFormData({ ...formData, hari: e.target.value })}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-600">Kelas Target</label>
+                  <select
+                    value={scheduleForm.kelas}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, kelas: e.target.value })}
                     required
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold appearance-none pr-10 focus:outline-none focus:border-amber-500"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
                   >
-                    {HARI_LIST.map((h, idx) => (
-                      <option key={idx} value={h}>{h}</option>
+                    {classList.map((k) => (
+                      <option key={k} value={k}>{k}</option>
                     ))}
                   </select>
-                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-3.5 pointer-events-none" />
                 </div>
               </div>
 
-              {/* Reset to global settings button */}
-              <div className="flex justify-between items-center bg-amber-50/50 border border-amber-100 rounded-xl px-3.5 py-2 animate-fade-in">
-                <span className="text-[10px] text-amber-800 font-bold flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-amber-500" />
-                  Gunakan jam operasional default sekolah?
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormData({
-                      ...formData,
-                      jam_masuk_mulai: globalSettings.jam_masuk_mulai,
-                      jam_masuk_batas: globalSettings.jam_masuk_batas,
-                      jam_pulang_mulai: globalSettings.jam_pulang_mulai
-                    });
-                  }}
-                  className="text-amber-700 hover:text-amber-800 font-extrabold text-[10px] bg-white border border-amber-200 px-2.5 py-1 rounded-lg hover:bg-amber-50 transition-all duration-150 shadow-sm"
-                >
-                  Set Otomatis
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-500">Jam Masuk Mulai</label>
-                  <input 
-                    type="time"
-                    value={formData.jam_masuk_mulai}
-                    onChange={(e) => setFormData({ ...formData, jam_masuk_mulai: e.target.value })}
-                    required
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 focus:outline-none focus:border-amber-500 font-mono"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-500">Batas Absen Masuk</label>
-                  <input 
-                    type="time"
-                    value={formData.jam_masuk_batas}
-                    onChange={(e) => setFormData({ ...formData, jam_masuk_batas: e.target.value })}
-                    required
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 focus:outline-none focus:border-amber-500 font-mono text-rose-600 font-bold"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-500">Jam Pulang Mulai</label>
-                <input 
-                  type="time"
-                  value={formData.jam_pulang_mulai}
-                  onChange={(e) => setFormData({ ...formData, jam_pulang_mulai: e.target.value })}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-600">Jam Pelajaran (Slot)</label>
+                <select
+                  value={scheduleForm.jam_ke}
+                  onChange={(e) => handleScheduleJamKeChange(Number(e.target.value))}
                   required
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 focus:outline-none focus:border-amber-500 font-mono text-emerald-600 font-bold"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
+                >
+                  {jamSlots.map((slot) => (
+                    <option key={slot.id_jam} value={slot.jam_ke}>
+                      {slot.nama_jam} ({slot.jam_mulai} - {slot.jam_selesai}) - {slot.tipe}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-600">Mata Pelajaran</label>
+                <input
+                  type="text"
+                  list="mapel-suggestions"
+                  placeholder="Ketik atau pilih nama mata pelajaran"
+                  value={scheduleForm.mapel}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, mapel: e.target.value })}
+                  required
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-900 font-bold focus:outline-none focus:border-amber-500"
+                />
+                <datalist id="mapel-suggestions">
+                  {DEFAULT_MAPEL_LIST.map((m, idx) => (
+                    <option key={idx} value={m} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-600">Guru Pengampu</label>
+                <select
+                  value={scheduleForm.id_guru}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, id_guru: e.target.value })}
+                  required
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
+                >
+                  <option value="" disabled>-- Pilih Guru --</option>
+                  {teachers.map((t) => (
+                    <option key={t.id_guru} value={t.id_guru}>
+                      {t.nama_guru} ({t.nip_nuptk || "No NIP"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-600">Ruangan / Lab</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Lab Komputer 1, R. Class"
+                  value={scheduleForm.ruangan}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, ruangan: e.target.value })}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 focus:outline-none focus:border-amber-500 font-medium"
                 />
               </div>
 
-              <div className="pt-2 flex justify-end gap-2.5">
-                <button 
+              <div className="pt-3 flex justify-end gap-2">
+                <button
                   type="button"
-                  onClick={() => setShowFormModal(false)}
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold px-4 py-2.5 rounded-xl transition-all"
+                  onClick={() => setShowScheduleModal(false)}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl"
                 >
                   Batal
                 </button>
-                <button 
+                <button
                   type="submit"
-                  className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl transition-all shadow-sm"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-sm"
                 >
-                  Simpan Jadwal
+                  Simpan Jadwal Pelajaran
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: ADD / EDIT JAM SLOT */}
+      {showJamModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl max-w-md w-full overflow-hidden">
+            <div className="p-5 bg-amber-600 text-white flex justify-between items-center">
+              <h3 className="font-extrabold text-sm tracking-tight flex items-center gap-2">
+                <Clock className="w-4.5 h-4.5" />
+                {editJamId ? "Edit Slot Jam Pelajaran" : "Tambah Slot Jam Pelajaran"}
+              </h3>
+              <button 
+                onClick={() => setShowJamModal(false)}
+                className="text-white/80 hover:text-white text-lg font-bold"
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveJamSlot} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-600">Jam Ke-</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="20"
+                    value={jamForm.jam_ke}
+                    onChange={(e) => setJamForm({ ...jamForm, jam_ke: Number(e.target.value) })}
+                    required
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-600">Tipe Slot</label>
+                  <select
+                    value={jamForm.tipe}
+                    onChange={(e) => setJamForm({ ...jamForm, tipe: e.target.value as any })}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="Pelajaran">Pelajaran</option>
+                    <option value="Istirahat">Istirahat</option>
+                    <option value="Upacara">Upacara</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-600">Nama Slot / Keterangan</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Jam ke-1, Istirahat Pertama"
+                  value={jamForm.nama_jam}
+                  onChange={(e) => setJamForm({ ...jamForm, nama_jam: e.target.value })}
+                  required
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-600">Jam Mulai</label>
+                  <input
+                    type="time"
+                    value={jamForm.jam_mulai}
+                    onChange={(e) => setJamForm({ ...jamForm, jam_mulai: e.target.value })}
+                    required
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-mono font-bold focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-600">Jam Selesai</label>
+                  <input
+                    type="time"
+                    value={jamForm.jam_selesai}
+                    onChange={(e) => setJamForm({ ...jamForm, jam_selesai: e.target.value })}
+                    required
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-mono font-bold focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowJamModal(false)}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-sm"
+                >
+                  Simpan Slot
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: TEACHER CLASS ATTENDANCE FORM */}
+      {showAbsensiModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl max-w-lg w-full overflow-hidden">
+            <div className="p-5 bg-emerald-600 text-white flex justify-between items-center">
+              <h3 className="font-extrabold text-sm tracking-tight flex items-center gap-2">
+                <CheckCircle2 className="w-4.5 h-4.5" />
+                Catat Presensi Masuk Pelajaran Guru
+              </h3>
+              <button 
+                onClick={() => setShowAbsensiModal(false)}
+                className="text-white/80 hover:text-white text-lg font-bold"
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAbsensiMengajar} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-600">Tanggal Presensi</label>
+                  <input
+                    type="date"
+                    value={absensiForm.tanggal}
+                    onChange={(e) => setAbsensiForm({ ...absensiForm, tanggal: e.target.value })}
+                    required
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-600">Waktu Masuk (Jam:Menit)</label>
+                  <input
+                    type="time"
+                    value={absensiForm.waktu_absen}
+                    onChange={(e) => setAbsensiForm({ ...absensiForm, waktu_absen: e.target.value })}
+                    required
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-mono font-bold focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-600">Guru Pengampu</label>
+                <select
+                  value={absensiForm.id_guru}
+                  onChange={(e) => setAbsensiForm({ ...absensiForm, id_guru: e.target.value })}
+                  required
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="" disabled>-- Pilih Guru --</option>
+                  {teachers.map((t) => (
+                    <option key={t.id_guru} value={t.id_guru}>
+                      {t.nama_guru}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-600">Kelas</label>
+                  <select
+                    value={absensiForm.kelas}
+                    onChange={(e) => setAbsensiForm({ ...absensiForm, kelas: e.target.value })}
+                    required
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-emerald-500"
+                  >
+                    {classList.map((k) => (
+                      <option key={k} value={k}>{k}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-600">Jam Pelajaran Ke-</label>
+                  <select
+                    value={absensiForm.jam_ke}
+                    onChange={(e) => {
+                      const jNum = Number(e.target.value);
+                      const slot = jamSlots.find(j => j.jam_ke === jNum);
+                      setAbsensiForm({
+                        ...absensiForm,
+                        jam_ke: jNum,
+                        jam_mulai_jadwal: slot ? slot.jam_mulai : "07:00",
+                        jam_selesai_jadwal: slot ? slot.jam_selesai : "07:45"
+                      });
+                    }}
+                    required
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-emerald-500"
+                  >
+                    {jamSlots.map((slot) => (
+                      <option key={slot.id_jam} value={slot.jam_ke}>
+                        Jam {slot.jam_ke} ({slot.jam_mulai} - {slot.jam_selesai})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-600">Mata Pelajaran</label>
+                <input
+                  type="text"
+                  list="mapel-list-2"
+                  value={absensiForm.mapel}
+                  onChange={(e) => setAbsensiForm({ ...absensiForm, mapel: e.target.value })}
+                  required
+                  placeholder="Nama mata pelajaran"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-900 font-bold focus:outline-none focus:border-emerald-500"
+                />
+                <datalist id="mapel-list-2">
+                  {DEFAULT_MAPEL_LIST.map((m, idx) => (
+                    <option key={idx} value={m} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-600">Status Kehadiran Masuk Kelas</label>
+                <select
+                  value={absensiForm.status}
+                  onChange={(e) => setAbsensiForm({ ...absensiForm, status: e.target.value as any })}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-900 font-extrabold focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="Hadir Tepat Waktu">Hadir Tepat Waktu</option>
+                  <option value="Terlambat Masuk Kelas">Terlambat Masuk Kelas</option>
+                  <option value="Izin">Izin</option>
+                  <option value="Sakit">Sakit</option>
+                  <option value="Tugas Luar">Tugas Luar / Dinas</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-600">Jurnal / Catatan Pembelajaran</label>
+                <textarea
+                  rows={2}
+                  placeholder="Materi yang diajarkan, catatan ketertiban kelas, atau rangkuman jam ke-N..."
+                  value={absensiForm.catatan_materi}
+                  onChange={(e) => setAbsensiForm({ ...absensiForm, catatan_materi: e.target.value })}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAbsensiModal(false)}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-sm"
+                >
+                  Simpan Presensi Mengajar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: FLEX TEACHER LIMITS FORM (LEGACY) */}
+      {showFlexModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl max-w-md w-full overflow-hidden">
+            <div className="p-5 bg-amber-600 text-white flex justify-between items-center">
+              <h3 className="font-extrabold text-sm tracking-tight flex items-center gap-2">
+                <Users className="w-4.5 h-4.5" />
+                Tambah Jam Fleksibel Harian Guru
+              </h3>
+              <button 
+                onClick={() => setShowFlexModal(false)}
+                className="text-white/80 hover:text-white text-lg font-bold"
+              >
+                ×
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const teacher = teachers.find(t => t.id_guru === flexForm.id_guru);
+                const payload = {
+                  id_guru: flexForm.id_guru,
+                  nama_guru: teacher ? teacher.nama_guru : "",
+                  hari: flexForm.hari,
+                  jam_masuk_mulai: flexForm.jam_masuk_mulai,
+                  jam_masuk_batas: flexForm.jam_masuk_batas,
+                  jam_pulang_mulai: flexForm.jam_pulang_mulai
+                };
+                const res = await callGas("tambahJadwalGuru", [payload]);
+                if (res && res.success) {
+                  setShowFlexModal(false);
+                  alert("Jadwal fleksibel guru disimpan.");
+                  fetchAllData();
+                } else {
+                  alert(res?.message || "Gagal menyimpan.");
+                }
+              }}
+              className="p-6 space-y-4"
+            >
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-600">Pilih Guru</label>
+                <select
+                  value={flexForm.id_guru}
+                  onChange={(e) => setFlexForm({ ...flexForm, id_guru: e.target.value })}
+                  required
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
+                >
+                  {teachers.map((t) => (
+                    <option key={t.id_guru} value={t.id_guru}>{t.nama_guru}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-600">Hari</label>
+                <select
+                  value={flexForm.hari}
+                  onChange={(e) => setFlexForm({ ...flexForm, hari: e.target.value })}
+                  required
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
+                >
+                  {HARI_LIST.map((h) => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-600">Jam Masuk Mulai</label>
+                  <input
+                    type="time"
+                    value={flexForm.jam_masuk_mulai}
+                    onChange={(e) => setFlexForm({ ...flexForm, jam_masuk_mulai: e.target.value })}
+                    required
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-mono focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-600">Batas Masuk</label>
+                  <input
+                    type="time"
+                    value={flexForm.jam_masuk_batas}
+                    onChange={(e) => setFlexForm({ ...flexForm, jam_masuk_batas: e.target.value })}
+                    required
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-mono text-rose-600 font-bold focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-600">Jam Pulang Mulai</label>
+                <input
+                  type="time"
+                  value={flexForm.jam_pulang_mulai}
+                  onChange={(e) => setFlexForm({ ...flexForm, jam_pulang_mulai: e.target.value })}
+                  required
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-mono text-emerald-600 font-bold focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowFlexModal(false)}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 font-bold text-xs rounded-xl"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-sm"
+                >
+                  Simpan Jadwal Fleksibel
                 </button>
               </div>
             </form>
