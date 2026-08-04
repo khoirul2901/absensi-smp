@@ -53,6 +53,13 @@ export interface LiveAbsen {
   status_masuk: string;
   jam_pulang: string;
   status_pulang: string;
+  ket?: string;
+}
+
+export interface TeacherItem {
+  id_guru: string;
+  nama_guru: string;
+  nip_nuptk: string;
 }
 
 export interface LaporanRow {
@@ -103,3 +110,43 @@ export interface DashboardMetrics {
   chartLabels: string[];
   chartData: number[];
 }
+
+export interface JamPelajaranItem {
+  id_jam: string;
+  jam_ke: number;
+  nama_jam: string;
+  jam_mulai: string;
+  jam_selesai: string;
+  tipe: "Pelajaran" | "Istirahat" | "Upacara";
+}
+
+export interface ScheduleLessonItem {
+  id_jadwal: string;
+  hari: string;
+  id_jam: string;
+  jam_ke: number;
+  jam_mulai?: string;
+  jam_selesai?: string;
+  kelas: string;
+  mapel: string;
+  id_guru: string;
+  nama_guru: string;
+  ruangan?: string;
+}
+
+export interface AbsensiMengajarItem {
+  id_log_mengajar: string;
+  tanggal: string;
+  waktu_absen: string;
+  hari: string;
+  id_guru: string;
+  nama_guru: string;
+  kelas: string;
+  mapel: string;
+  jam_ke: number;
+  jam_mulai_jadwal: string;
+  jam_selesai_jadwal: string;
+  status: "Hadir Tepat Waktu" | "Terlambat Masuk Kelas" | "Izin" | "Sakit" | "Tugas Luar";
+  catatan_materi?: string;
+}
+
