@@ -62,7 +62,9 @@ export default function Laporan() {
   const [tanggalSelesai, setTanggalSelesai] = useState("");
   const [bulanMinta, setBulanMinta] = useState("");
   const [selectedKelas, setSelectedKelas] = useState("Semua");
+  const [selectedGuru, setSelectedGuru] = useState("Semua");
   const [classList, setClassList] = useState<string[]>([]);
+  const [guruList, setGuruList] = useState<{ id_guru: string; nama_guru: string }[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Loaded Data States
@@ -113,7 +115,7 @@ export default function Laporan() {
   useEffect(() => {
     setCurrentPageDetail(1);
     setCurrentPageRekap(1);
-  }, [kategori, viewMode, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta, selectedKelas, searchQuery]);
+  }, [kategori, viewMode, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta, selectedKelas, selectedGuru, searchQuery]);
 
   // Set default current month & dates
   useEffect(() => {
@@ -137,6 +139,26 @@ export default function Laporan() {
       setClassList(parsed);
     }
     loadClasses();
+  }, []);
+
+  // Load Teachers List
+  useEffect(() => {
+    async function loadGuru() {
+      try {
+        const res = await callGas("getDataGuru");
+        const list = Array.isArray(res)
+          ? res
+          : (res && res.success && Array.isArray(res.data) ? res.data : []);
+        const parsed = list.map((item: any) => ({
+          id_guru: item.id_guru || item.id || "",
+          nama_guru: item.nama_guru || item.nama || item.name || String(item)
+        })).filter(g => g.nama_guru);
+        setGuruList(parsed);
+      } catch (e) {
+        console.error("Gagal memuat data guru:", e);
+      }
+    }
+    loadGuru();
   }, []);
 
   // Execute query trigger
@@ -169,7 +191,15 @@ export default function Laporan() {
             matchClass = String(item.kelas || "").toLowerCase() === selectedKelas.toLowerCase();
           }
 
-          return matchDate && matchClass;
+          let matchGuru = true;
+          if (selectedGuru && selectedGuru !== "Semua") {
+            const val = selectedGuru.toLowerCase();
+            const idG = String(item.id_guru || "").toLowerCase();
+            const namaG = String(item.nama_guru || "").toLowerCase();
+            matchGuru = idG === val || namaG === val;
+          }
+
+          return matchDate && matchClass && matchGuru;
         });
 
         setMengajarLogs(filtered);
@@ -274,7 +304,7 @@ export default function Laporan() {
     if (bulanMinta || (tanggalMulai && tanggalSelesai)) {
       handleQuery();
     }
-  }, [kategori, viewMode, jenisFilter, selectedKelas, tanggalMulai, tanggalSelesai, bulanMinta]);
+  }, [kategori, viewMode, jenisFilter, selectedKelas, selectedGuru, tanggalMulai, tanggalSelesai, bulanMinta]);
 
   // Load master entities for edit dropdown
   const loadMasterForEdit = async (cat: "Siswa" | "Guru") => {
@@ -935,7 +965,7 @@ export default function Laporan() {
 
       {/* Navigation Filter Panel (Hidden on print) */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6 print:hidden">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           
           {/* View Mode Toggle */}
           <div className="space-y-1.5">
@@ -1040,6 +1070,32 @@ export default function Laporan() {
               </div>
             )}
           </div>
+
+          {/* Teacher Filter */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-gray-500 flex items-center gap-1">
+              <Users className="w-3.5 h-3.5" />
+              Saringan Guru
+            </label>
+            {kategori === "Guru" || kategori === "Mengajar" ? (
+              <select 
+                value={selectedGuru}
+                onChange={(e) => setSelectedGuru(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-semibold focus:outline-none"
+              >
+                <option value="Semua">Semua Guru</option>
+                {guruList.map((g, idx) => (
+                  <option key={idx} value={g.id_guru || g.nama_guru}>
+                    {g.nama_guru} {g.id_guru ? `(${g.id_guru})` : ""}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="bg-gray-100 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-400 font-semibold text-center select-none">
+                Tidak berlaku untuk Siswa
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Search input in panel */}
@@ -1092,6 +1148,7 @@ export default function Laporan() {
         <p className="text-xs text-slate-500 font-semibold">
           {jenisFilter === "bulan" ? `Periode Bulan: ${bulanMinta}` : `Periode Tanggal: ${tanggalMulai} s.d ${tanggalSelesai}`}
           {(kategori === "Siswa" || kategori === "Mengajar") && ` | Kelas: ${selectedKelas}`}
+          {(kategori === "Guru" || kategori === "Mengajar") && ` | Guru: ${selectedGuru}`}
         </p>
       </div>
 
