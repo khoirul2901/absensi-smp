@@ -129,6 +129,39 @@ export default function App() {
   };
 
   const isGuru = session?.role === "Guru";
+  const [isWaliKelas, setIsWaliKelas] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (session && session.role === "Guru") {
+      Promise.all([
+        callGas("getKelasSemua"),
+        callGas("getDataMaster", ["Guru"])
+      ]).then(([resKelas, resGuru]) => {
+        const kelasData = Array.isArray(resKelas) ? resKelas : (resKelas?.data || []);
+        const guruData = Array.isArray(resGuru) ? resGuru : (resGuru?.data || []);
+        
+        const currentGuru = guruData.find((g: any) => 
+          g.id_guru === session.target_id || 
+          g.nama_guru?.toLowerCase() === session.username?.toLowerCase() ||
+          session.username?.toLowerCase().includes(g.nama_guru?.toLowerCase())
+        );
+        
+        const namaGuruLoggedIn = currentGuru?.nama_guru || session.username || "";
+        const targetIdLoggedIn = currentGuru?.id_guru || session.target_id || "";
+        
+        const matchedWali = kelasData.some((k: any) => {
+          const wk = typeof k === 'object' ? (k.wali_kelas || "") : "";
+          if (!wk || wk === "-") return false;
+          return wk.toLowerCase().includes(namaGuruLoggedIn.toLowerCase()) || 
+                 (targetIdLoggedIn && wk.toLowerCase().includes(targetIdLoggedIn.toLowerCase()));
+        });
+        
+        setIsWaliKelas(matchedWali);
+      }).catch(err => console.error("Error checking wali kelas:", err));
+    } else {
+      setIsWaliKelas(false);
+    }
+  }, [session]);
 
   // Render sub-views dynamically
   const renderView = () => {
@@ -143,6 +176,7 @@ export default function App() {
       case "jadwal_guru":
         return <JadwalGuru session={session} />;
       case "laporan":
+        if (isGuru && !isWaliKelas) return <Dashboard />;
         return <Laporan />;
       case "settings":
         if (session?.role === "TU") return <Dashboard />;
@@ -163,7 +197,10 @@ export default function App() {
 
   const navItems = allNavItems.filter((item) => {
     if (isGuru) {
-      return item.id === "dashboard" || item.id === "absensi" || item.id === "jadwal_guru" || item.id === "laporan" || item.id === "settings";
+      if (item.id === "laporan") {
+        return isWaliKelas;
+      }
+      return item.id === "dashboard" || item.id === "absensi" || item.id === "jadwal_guru" || item.id === "settings";
     }
     if (session?.role === "TU") {
       return item.id !== "settings";
