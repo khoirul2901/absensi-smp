@@ -257,11 +257,11 @@ export default function AbsensiScanner({ session }: { session?: any }) {
     fetchClasses();
   }, []);
 
-  // Load live logs based on selected date and category
-  const loadLiveLogs = async (targetDate = filterTanggal) => {
+  // Load live logs based on selected date, category, and class filter
+  const loadLiveLogs = async (targetDate = filterTanggal, currentKelas = filterKelas) => {
     setIsLoadingLogs(true);
     try {
-      const res = await callGas("getLiveAbsenHariIni", [kategori, targetDate, "Semua"]);
+      const res = await callGas("getLiveAbsenHariIni", [kategori, targetDate, currentKelas]);
       if (res && res.success) {
         setRecentLogs(res.data);
       }
@@ -304,8 +304,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
   };
 
   useEffect(() => {
-    loadLiveLogs();
-  }, [kategori, filterTanggal]);
+    loadLiveLogs(filterTanggal, filterKelas);
+  }, [kategori, filterTanggal, filterKelas]);
 
   useEffect(() => {
     if (attendanceType === "mengajar") {
@@ -2059,13 +2059,15 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                                     "{existingLog.catatan_materi}"
                                   </p>
                                 )}
-                                <button
-                                  type="button"
-                                  onClick={() => openModalForSchedule(sched, existingLog)}
-                                  className="w-full text-center text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-white border border-emerald-300 py-1.5 rounded-lg hover:bg-emerald-50 transition-all cursor-pointer flex items-center justify-center gap-1"
-                                >
-                                  <Edit3 className="w-3 h-3" /> Edit Presensi / Materi
-                                </button>
+                                {!isGuru && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openModalForSchedule(sched, existingLog)}
+                                    className="w-full text-center text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-white border border-emerald-300 py-1.5 rounded-lg hover:bg-emerald-50 transition-all cursor-pointer flex items-center justify-center gap-1"
+                                  >
+                                    <Edit3 className="w-3 h-3" /> Edit Presensi / Materi
+                                  </button>
+                                )}
                               </div>
                             ) : (
                               <button
@@ -2108,13 +2110,13 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                         <th className="p-3">Jam Ke</th>
                         <th className="p-3">Status</th>
                         <th className="p-3">Materi / Catatan</th>
-                        <th className="p-3 text-center">Aksi</th>
+                        {!isGuru && <th className="p-3 text-center">Aksi</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-gray-700 font-medium">
                       {absensiMengajarLogs.filter(l => String(l.tanggal || "").split("T")[0] === filterTanggal).length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="p-8 text-center text-gray-400">
+                          <td colSpan={isGuru ? 6 : 7} className="p-8 text-center text-gray-400">
                             Belum ada riwayat presensi mengajar untuk tanggal {filterTanggal}.
                           </td>
                         </tr>
@@ -2144,16 +2146,18 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                                 </span>
                               </td>
                               <td className="p-3 text-gray-600 max-w-xs truncate">{log.catatan_materi || "-"}</td>
-                              <td className="p-3 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => log.id_log && handleDeleteMengajar(log.id_log)}
-                                  className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
-                                  title="Hapus catatan"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </td>
+                              {!isGuru && (
+                                <td className="p-3 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => log.id_log && handleDeleteMengajar(log.id_log)}
+                                    className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
+                                    title="Hapus catatan"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </td>
+                              )}
                             </tr>
                           ))
                       )}
