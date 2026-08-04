@@ -1100,18 +1100,24 @@ function callMock(action: string, args: any[]): any {
       return { success: true, data: getStorage("jam_pelajaran") };
     }
 
-    case "simpanJamPelajaran": {
-      const [jamObj] = args;
+    case "simpanJamPelajaran":
+    case "tambahJamPelajaran":
+    case "editJamPelajaran": {
+      const [jamObj, optionalPayload] = args;
+      const actualObj = (typeof jamObj === "object" && jamObj !== null) ? jamObj : optionalPayload;
+      if (!actualObj) return { success: false, message: "Data slot jam pelajaran tidak valid." };
+
       const list = getStorage("jam_pelajaran");
-      const idJam = jamObj.id_jam || "JP-" + Date.now();
-      const existingIdx = list.findIndex((j: any) => j.id_jam === idJam || j.jam_ke === jamObj.jam_ke);
+      const idJam = actualObj.id_jam || "JP-" + Date.now();
+      
+      const existingIdx = list.findIndex((j: any) => j.id_jam === idJam);
       const newObj = {
         id_jam: idJam,
-        jam_ke: Number(jamObj.jam_ke || 0),
-        nama_jam: jamObj.nama_jam || `Jam ke-${jamObj.jam_ke}`,
-        jam_mulai: jamObj.jam_mulai || "07:00",
-        jam_selesai: jamObj.jam_selesai || "07:45",
-        tipe: jamObj.tipe || "Pelajaran"
+        jam_ke: Number(actualObj.jam_ke || 0),
+        nama_jam: actualObj.nama_jam || `Jam ke-${actualObj.jam_ke}`,
+        jam_mulai: actualObj.jam_mulai || "07:00",
+        jam_selesai: actualObj.jam_selesai || "07:45",
+        tipe: actualObj.tipe || "Pelajaran"
       };
 
       if (existingIdx !== -1) {
@@ -1119,10 +1125,9 @@ function callMock(action: string, args: any[]): any {
       } else {
         list.push(newObj);
       }
-      // sort by jam_ke or time
-      list.sort((a: any, b: any) => a.jam_mulai.localeCompare(b.jam_mulai));
+      list.sort((a: any, b: any) => (a.jam_mulai || "").localeCompare(b.jam_mulai || ""));
       setStorage("jam_pelajaran", list);
-      return { success: true, message: "Jam pelajaran berhasil disimpan (SIMULASI)." };
+      return { success: true, message: "Slot jam pelajaran berhasil disimpan!" };
     }
 
     case "hapusJamPelajaran": {
@@ -1130,7 +1135,7 @@ function callMock(action: string, args: any[]): any {
       let list = getStorage("jam_pelajaran");
       list = list.filter((j: any) => j.id_jam !== idJam);
       setStorage("jam_pelajaran", list);
-      return { success: true, message: "Jam pelajaran berhasil dihapus (SIMULASI)." };
+      return { success: true, message: "Slot jam pelajaran berhasil dihapus." };
     }
 
     // Jadwal Pelajaran (Subject Schedule Matrix)
