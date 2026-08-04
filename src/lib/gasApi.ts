@@ -230,7 +230,8 @@ export function callMock(action: string, args: any[] = []): any {
     }
 
     case "getKelasSemua": {
-      return getStorage("data_kelas");
+      const data = getStorage("data_kelas");
+      return { success: true, data: Array.isArray(data) ? data : [] };
     }
 
     case "tambahKelas": {
