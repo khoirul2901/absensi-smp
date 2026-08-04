@@ -924,31 +924,77 @@ function initSheets() {
   getOrCreateSheet("Users", ["username", "password", "role", "target_id"]);
 }
 
-function formatTanggalYMD(val) {
-  if (!val) return "";
+function formatJamHM(val) {
+  if (!val || val === "-") return "-";
   if (val instanceof Date) {
     try {
-      return Utilities.formatDate(val, Session.getScriptTimeZone() || "GMT+7", "yyyy-MM-dd");
-    } catch (e) {
-      const year = val.getFullYear();
-      const month = String(val.getMonth() + 1).padStart(2, "0");
-      const day = String(val.getDate()).padStart(2, "0");
-      return year + "-" + month + "-" + day;
-    }
+      return Utilities.formatDate(val, Session.getScriptTimeZone() || "GMT+7", "HH:mm");
+    } catch (e) {}
   }
   const str = String(val).trim();
+  if (!str) return "-";
+  if (str.indexOf("T") !== -1 || str.indexOf("1899") !== -1 || str.indexOf("1900") !== -1) {
+    try {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        return Utilities.formatDate(d, Session.getScriptTimeZone() || "GMT+7", "HH:mm");
+      }
+    } catch (e) {}
+  }
+  if (/^\d{1,2}:\d{2}/.test(str)) {
+    return str.substring(0, 5);
+  }
+  return str;
+}
+
+function formatTanggalYMD(val) {
+  if (!val || val === "-") return "";
+  const tz = Session.getScriptTimeZone() || "GMT+7";
+  const todayStr = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
+
+  if (val instanceof Date) {
+    try {
+      if (val.getFullYear() <= 1900) {
+        return todayStr;
+      }
+      return Utilities.formatDate(val, tz, "yyyy-MM-dd");
+    } catch (e) {
+      return todayStr;
+    }
+  }
+
+  const str = String(val).trim();
   if (!str) return "";
-  if (str.indexOf("T") !== -1) return str.split("T")[0];
-  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.substring(0, 10);
+
+  if (str.indexOf("1899") !== -1 || str.indexOf("1900") !== -1) {
+    return todayStr;
+  }
+
+  if (str.indexOf("T") !== -1) {
+    const parts = str.split("T");
+    if (parts[0].indexOf("1899") !== -1 || parts[0].indexOf("1900") !== -1) {
+      return todayStr;
+    }
+    return parts[0];
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    if (str.startsWith("1899") || str.startsWith("1900")) {
+      return todayStr;
+    }
+    return str.substring(0, 10);
+  }
+
   try {
     const d = new Date(str);
     if (!isNaN(d.getTime())) {
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return year + "-" + month + "-" + day;
+      if (d.getFullYear() <= 1900) {
+        return todayStr;
+      }
+      return Utilities.formatDate(d, tz, "yyyy-MM-dd");
     }
   } catch (e) {}
+
   return str;
 }
 
@@ -967,8 +1013,23 @@ function getSheetDataObj(sheetPrimaryName, aliases) {
       if (val !== "" && val !== null && val !== undefined) empty = false;
       const key = rawHeaders[j];
       if (key) {
-        if (key.toLowerCase() === "tanggal" || key.toLowerCase().indexOf("tanggal") !== -1) {
+        const keyLower = key.toLowerCase();
+        if (keyLower === "tanggal" || keyLower.indexOf("tanggal") !== -1) {
           row[key] = formatTanggalYMD(val);
+        } else if (keyLower.indexOf("jam") !== -1 || keyLower.indexOf("waktu") !== -1) {
+          row[key] = formatJamHM(val);
+        } else if (val instanceof Date) {
+          if (val.getFullYear() <= 1900) {
+            row[key] = formatJamHM(val);
+          } else {
+            row[key] = Utilities.formatDate(val, Session.getScriptTimeZone() || "GMT+7", "yyyy-MM-dd HH:mm:ss");
+          }
+        } else if (typeof val === "string" && (val.indexOf("1899") !== -1 || val.indexOf("1900") !== -1)) {
+          if (keyLower.indexOf("jam") !== -1 || keyLower.indexOf("waktu") !== -1) {
+            row[key] = formatJamHM(val);
+          } else {
+            row[key] = formatTanggalYMD(val);
+          }
         } else {
           row[key] = val;
         }
