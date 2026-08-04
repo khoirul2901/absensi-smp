@@ -153,32 +153,34 @@ export default function JadwalGuru({ session }: { session?: any }) {
     try {
       // 1. Fetch Jam Pelajaran Slots
       const resJam = await callGas("getJamPelajaran");
-      if (resJam && resJam.success) {
-        setJamSlots(resJam.data || []);
-      }
+      const jamData = Array.isArray(resJam)
+        ? resJam
+        : (resJam && Array.isArray(resJam.data) ? resJam.data : (resJam?.data || []));
+      setJamSlots(jamData);
 
       // 2. Fetch Lesson Schedules
       const resSchedules = await callGas("getJadwalPelajaranSemua");
-      if (resSchedules && resSchedules.success) {
-        setLessonSchedules(resSchedules.data || []);
-      }
+      const schedData = Array.isArray(resSchedules)
+        ? resSchedules
+        : (resSchedules && Array.isArray(resSchedules.data) ? resSchedules.data : (resSchedules?.data || []));
+      setLessonSchedules(schedData);
 
       // 3. Fetch Teachers Master Data
       const resTeachers = await callGas("getDataMaster", ["Guru"]);
-      if (resTeachers && resTeachers.success) {
-        const tData = resTeachers.data || [];
-        setTeachers(tData);
-        if (tData.length > 0 && !scheduleForm.id_guru) {
-          setScheduleForm(prev => ({ ...prev, id_guru: tData[0].id_guru }));
-          setAbsensiForm(prev => ({ ...prev, id_guru: tData[0].id_guru }));
-        }
+      const tData = Array.isArray(resTeachers)
+        ? resTeachers
+        : (resTeachers && Array.isArray(resTeachers.data) ? resTeachers.data : (resTeachers?.data || []));
+      setTeachers(tData);
+      if (tData.length > 0 && !scheduleForm.id_guru) {
+        setScheduleForm(prev => ({ ...prev, id_guru: tData[0].id_guru }));
+        setAbsensiForm(prev => ({ ...prev, id_guru: tData[0].id_guru }));
       }
 
       // 4. Fetch Classes Master Data
       const resKelas = await callGas("getKelasSemua");
       const kList = Array.isArray(resKelas)
         ? resKelas
-        : (resKelas && resKelas.success && Array.isArray(resKelas.data) ? resKelas.data : []);
+        : (resKelas && Array.isArray(resKelas.data) ? resKelas.data : (resKelas?.data || []));
       const parsedKelas = kList.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
       setClassList(parsedKelas);
       if (parsedKelas.length > 0) {
@@ -187,15 +189,17 @@ export default function JadwalGuru({ session }: { session?: any }) {
 
       // 5. Fetch Absensi Mengajar Guru
       const resAbs = await callGas("getAbsensiMengajarGuru");
-      if (resAbs && resAbs.success) {
-        setAbsensiLogs(resAbs.data || []);
-      }
+      const absData = Array.isArray(resAbs)
+        ? resAbs
+        : (resAbs && Array.isArray(resAbs.data) ? resAbs.data : (resAbs?.data || []));
+      setAbsensiLogs(absData);
 
       // 6. Fetch Flex Special Schedules
       const resFlex = await callGas("getJadwalGuruSemua");
-      if (resFlex && resFlex.success) {
-        setFlexSchedules(resFlex.data || []);
-      }
+      const flexData = Array.isArray(resFlex)
+        ? resFlex
+        : (resFlex && Array.isArray(resFlex.data) ? resFlex.data : (resFlex?.data || []));
+      setFlexSchedules(flexData);
     } catch (err: any) {
       setError("Gagal memuat data: " + err.toString());
     } finally {
@@ -895,10 +899,17 @@ export default function JadwalGuru({ session }: { session?: any }) {
             </div>
 
             {(() => {
-              const todayStr = new Date().toISOString().split("T")[0];
+              const d = new Date();
+              const localYear = d.getFullYear();
+              const localMonth = String(d.getMonth() + 1).padStart(2, "0");
+              const localDay = String(d.getDate()).padStart(2, "0");
+              const todayLocalStr = `${localYear}-${localMonth}-${localDay}`;
+              const todayIsoStr = d.toISOString().split("T")[0];
+
               const filteredTodayLogs = absensiLogs.filter(log => {
-                const isToday = log.tanggal === todayStr;
-                const matchJam = filterJamMengajar === "Semua" || Number(filterJamMengajar) === log.jam_ke;
+                const logTgl = String(log.tanggal || "").split("T")[0].trim();
+                const isToday = !logTgl || logTgl === todayLocalStr || logTgl === todayIsoStr;
+                const matchJam = filterJamMengajar === "Semua" || Number(filterJamMengajar) === Number(log.jam_ke);
                 return isToday && matchJam;
               });
 
