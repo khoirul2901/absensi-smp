@@ -176,11 +176,13 @@ export default function JadwalGuru({ session }: { session?: any }) {
 
       // 4. Fetch Classes Master Data
       const resKelas = await callGas("getKelasSemua");
-      if (resKelas && Array.isArray(resKelas)) {
-        setClassList(resKelas);
-        if (resKelas.length > 0) {
-          setScheduleForm(prev => ({ ...prev, kelas: resKelas[0] }));
-        }
+      const kList = Array.isArray(resKelas)
+        ? resKelas
+        : (resKelas && resKelas.success && Array.isArray(resKelas.data) ? resKelas.data : []);
+      const parsedKelas = kList.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
+      setClassList(parsedKelas);
+      if (parsedKelas.length > 0) {
+        setScheduleForm(prev => ({ ...prev, kelas: prev.kelas || parsedKelas[0] }));
       }
 
       // 5. Fetch Absensi Mengajar Guru
