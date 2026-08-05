@@ -2070,14 +2070,21 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                                 )}
                               </div>
                             ) : (
-                              <button
-                                type="button"
-                                onClick={() => openModalForSchedule(sched)}
-                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2 rounded-xl transition-all shadow-sm shadow-emerald-600/20 cursor-pointer flex items-center justify-center gap-1.5"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                                <span>Presensi Mengajar</span>
-                              </button>
+                              !isGuru ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openModalForSchedule(sched)}
+                                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2 rounded-xl transition-all shadow-sm shadow-emerald-600/20 cursor-pointer flex items-center justify-center gap-1.5"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  <span>Presensi Mengajar</span>
+                                </button>
+                              ) : (
+                                <div className="w-full text-center text-[11px] font-semibold text-slate-400 bg-slate-50 py-2 rounded-xl border border-slate-200/60 flex items-center justify-center gap-1.5">
+                                  <Clock className="w-3.5 h-3.5" />
+                                  <span>Belum Presensi (Otomatis via Scan)</span>
+                                </div>
+                              )
                             )}
                           </div>
                         );
