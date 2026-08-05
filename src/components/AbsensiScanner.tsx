@@ -449,25 +449,54 @@ export default function AbsensiScanner({ session }: { session?: any }) {
 
     setIsSubmittingMengajar(true);
     try {
-      const payload = { ...mengajarForm };
-      const res = await callGas("simpanAbsensiMengajarGuru", [payload]);
-      if (res && res.success) {
-        setScanStatus({
-          type: "success",
-          msg: res.message || `Presensi mengajar ${mengajarForm.nama_guru} berhasil dicatat!`,
-          targetName: mengajarForm.nama_guru,
-          details: `Kelas ${mengajarForm.kelas} • ${mengajarForm.mapel} • Jam Ke-${mengajarForm.jam_ke}`
-        });
-        playBeep(true);
-        triggerFlash("success");
-        if (speechEnabled) speakText("Presensi mengajar tersimpan.");
+      const activeDay = mengajarForm.hari || selectedDay;
+      const matchingSchedules = lessonSchedules.filter(s =>
+        (s.hari || "").toLowerCase() === activeDay.toLowerCase() &&
+        (s.id_guru === mengajarForm.id_guru || (s.nama_guru && s.nama_guru.toLowerCase().includes(mengajarForm.nama_guru.toLowerCase()))) &&
+        s.kelas.toLowerCase() === mengajarForm.kelas.toLowerCase() &&
+        s.mapel.toLowerCase() === mengajarForm.mapel.toLowerCase()
+      );
 
-        setShowMengajarModal(false);
-        setSelectedScheduleForAbsen(null);
-        await fetchMengajarData();
+      let savedCount = 0;
+
+      if (matchingSchedules.length > 1) {
+        // Automatically save attendance for ALL hours in the multi-jam block (1x Scan)
+        for (const schedItem of matchingSchedules) {
+          const itemPayload = {
+            ...mengajarForm,
+            jam_ke: Number(schedItem.jam_ke),
+            jam_mulai_jadwal: schedItem.jam_mulai || mengajarForm.jam_mulai_jadwal,
+            jam_selesai_jadwal: schedItem.jam_selesai || mengajarForm.jam_selesai_jadwal
+          };
+          const res = await callGas("simpanAbsensiMengajarGuru", [itemPayload]);
+          if (res && res.success !== false) savedCount++;
+        }
       } else {
-        alert(res?.message || "Gagal menyimpan presensi mengajar.");
+        const payload = { ...mengajarForm };
+        const res = await callGas("simpanAbsensiMengajarGuru", [payload]);
+        if (res && res.success !== false) savedCount = 1;
       }
+
+      const jamNumbers = matchingSchedules.map(s => Number(s.jam_ke)).sort((a, b) => a - b);
+      const minJam = jamNumbers.length > 0 ? jamNumbers[0] : mengajarForm.jam_ke;
+      const maxJam = jamNumbers.length > 0 ? jamNumbers[jamNumbers.length - 1] : mengajarForm.jam_ke;
+      const jamLabel = savedCount > 1
+        ? `Blok ${savedCount} Jam Pelajaran (Jam ke-${minJam} s/d Jam ke-${maxJam})`
+        : `Jam Ke-${mengajarForm.jam_ke}`;
+
+      setScanStatus({
+        type: "success",
+        msg: `Presensi Mengajar 1x Scan ${mengajarForm.nama_guru} Berhasil!`,
+        targetName: mengajarForm.nama_guru,
+        details: `Kelas ${mengajarForm.kelas} • ${mengajarForm.mapel} • ${jamLabel}`
+      });
+      playBeep(true);
+      triggerFlash("success");
+      if (speechEnabled) speakText("Presensi mengajar tersimpan.");
+
+      setShowMengajarModal(false);
+      setSelectedScheduleForAbsen(null);
+      await fetchMengajarData();
     } catch (err: any) {
       alert("Terjadi kesalahan: " + err.toString());
     } finally {
