@@ -251,11 +251,17 @@ export function callMock(action: string, args: any[] = []): any {
       const [namaKelas, waliKelas] = args;
       let kelas = getStorage("data_kelas");
       if (!Array.isArray(kelas)) kelas = [];
-      const exists = kelas.some((k: any) => (typeof k === "string" ? k : k.nama_kelas) === namaKelas);
-      if (!exists) {
+      const idx = kelas.findIndex((k: any) => (typeof k === "string" ? k : k.nama_kelas) === namaKelas);
+      if (idx === -1) {
         kelas.push({ nama_kelas: namaKelas, wali_kelas: waliKelas || "-" });
-        setStorage("data_kelas", kelas);
+      } else {
+        if (typeof kelas[idx] === "string") {
+          kelas[idx] = { nama_kelas: namaKelas, wali_kelas: waliKelas || "-" };
+        } else {
+          kelas[idx].wali_kelas = waliKelas || "-";
+        }
       }
+      setStorage("data_kelas", kelas);
       return { success: true, message: "Kelas ditambahkan (SIMULASI)." };
     }
 
@@ -284,6 +290,24 @@ export function callMock(action: string, args: any[] = []): any {
         }
       }
       return { success: false, message: "Kelas lama tidak ditemukan." };
+    }
+
+    case "simpanWaliKelas": {
+      const [namaKelas, waliKelas] = args;
+      let kelas = getStorage("data_kelas");
+      if (!Array.isArray(kelas)) kelas = [];
+      const idx = kelas.findIndex((k: any) => (typeof k === "string" ? k : k.nama_kelas) === namaKelas);
+      if (idx !== -1) {
+        if (typeof kelas[idx] === "string") {
+          kelas[idx] = { nama_kelas: kelas[idx], wali_kelas: waliKelas || "-" };
+        } else {
+          kelas[idx].wali_kelas = waliKelas || "-";
+        }
+      } else {
+        kelas.push({ nama_kelas: namaKelas, wali_kelas: waliKelas || "-" });
+      }
+      setStorage("data_kelas", kelas);
+      return { success: true, message: `Wali kelas untuk ${namaKelas} berhasil disimpan!` };
     }
 
     case "getDataMaster": {
@@ -808,7 +832,11 @@ export function callMock(action: string, args: any[] = []): any {
       const [kategori, tanggal, filterKelas] = args;
       const tgl = tanggal || new Date().toISOString().split("T")[0];
       const masterKey = kategori === "Siswa" ? "data_siswa" : "data_guru";
-      const master = getStorage(masterKey);
+      let master = getStorage(masterKey);
+      if (!Array.isArray(master) || master.length === 0) {
+        initMockDb();
+        master = getStorage(masterKey);
+      }
       
       const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
       const reports = getStorage(reportsKey);
@@ -817,13 +845,32 @@ export function callMock(action: string, args: any[] = []): any {
       const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
       
       const result = master.map((m: any) => {
-        const idTarget = m[idKey];
+        const idTarget = m[idKey] || m.id || m.nisn || m.nip_nuptk || "";
+        const namaTarget = m[nameKey] || m.nama || m.name || "Tanpa Nama";
+        
+        let kelasStr = "-";
+        if (kategori === "Siswa") {
+          const kVal = String(m.kelas || "").trim();
+          const jVal = String(m.jurusan || "").trim();
+          if (m.kelas_jurusan) {
+            kelasStr = m.kelas_jurusan;
+          } else if (kVal) {
+            if (jVal && jVal !== "-" && !kVal.toLowerCase().includes(jVal.toLowerCase())) {
+              kelasStr = `${kVal} ${jVal}`;
+            } else {
+              kelasStr = kVal;
+            }
+          } else if (jVal) {
+            kelasStr = jVal;
+          }
+        }
+
         const rep = reports.find((r: any) => r.tanggal === tgl && (r[idKey] === idTarget || r.id_siswa === idTarget || r.id_guru === idTarget || r.id_target === idTarget)) || {};
         
         return {
           id_target: idTarget,
-          nama_target: m[nameKey],
-          kelas_jurusan: kategori === "Siswa" ? `${m.kelas} ${m.jurusan}` : "-",
+          nama_target: namaTarget,
+          kelas_jurusan: kelasStr,
           tanggal: tgl,
           jam_masuk: rep.jam_masuk || "-",
           status_masuk: rep.status_masuk || "-",
@@ -835,7 +882,9 @@ export function callMock(action: string, args: any[] = []): any {
       
       const filtered = result.filter((item: any) => {
         if (kategori === "Siswa" && filterKelas && filterKelas !== "Semua") {
-          return item.kelas_jurusan.includes(filterKelas);
+          const kTarget = String(item.kelas_jurusan || "").toLowerCase().replace(/\s+/g, "");
+          const kFilter = String(filterKelas).toLowerCase().replace(/\s+/g, "");
+          return kTarget.includes(kFilter) || kFilter.includes(kTarget);
         }
         return true;
       });
