@@ -8,16 +8,24 @@ export const GAS_URL_STORAGE_KEY = "SIAS_GAS_URL";
 export const GAS_TOKEN_STORAGE_KEY = "SIAS_GAS_TOKEN";
 
 export function getGasUrl(): string {
-  // Ganti placeholder di bawah dengan Web App URL Google Apps Script Anda
-  return "https://script.google.com/macros/s/AKfycbzCjuiKC99_2xw6E8KY7wOOHLMrqWo3O6LjsU7LX0XZWMCie9_qXtTB-IyhRXxvUKkz9Q/exec"; // CONTOH - Ganti dengan URL asli
+  try {
+    const saved = localStorage.getItem(GAS_URL_STORAGE_KEY);
+    if (saved && saved.trim()) return saved.trim();
+  } catch (e) {}
+  return "https://script.google.com/macros/s/AKfycbzCjuiKC99_2xw6E8KY7wOOHLMrqWo3O6LjsU7LX0XZWMCie9_qXtTB-IyhRXxvUKkz9Q/exec";
 }
 
 export function setGasUrl(url: string): void {
-  // Nonaktif: pengaturan sekarang di-hardcode di getGasUrl()
+  try {
+    localStorage.setItem(GAS_URL_STORAGE_KEY, url);
+  } catch (e) {}
 }
 
 export function getGasToken(): string {
-  // Ganti nilai di bawah dengan Token Anda, default "sias_token_smkalhikam"
+  try {
+    const saved = localStorage.getItem(GAS_TOKEN_STORAGE_KEY);
+    if (saved && saved.trim()) return saved.trim();
+  } catch (e) {}
   return "sias_token_smkalhikam";
 }
 
@@ -844,6 +852,17 @@ export function callMock(action: string, args: any[] = []): any {
       const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
       const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
       
+      // O(1) Lookup Map for reports
+      const reportMap = new Map<string, any>();
+      if (Array.isArray(reports)) {
+        for (const r of reports) {
+          if (r.tanggal === tgl) {
+            const rId = r[idKey] || r.id_siswa || r.id_guru || r.id_target;
+            if (rId) reportMap.set(String(rId), r);
+          }
+        }
+      }
+      
       const result = master.map((m: any) => {
         const idTarget = m[idKey] || m.id || m.nisn || m.nip_nuptk || "";
         const namaTarget = m[nameKey] || m.nama || m.name || "Tanpa Nama";
@@ -865,7 +884,7 @@ export function callMock(action: string, args: any[] = []): any {
           }
         }
 
-        const rep = reports.find((r: any) => r.tanggal === tgl && (r[idKey] === idTarget || r.id_siswa === idTarget || r.id_guru === idTarget || r.id_target === idTarget)) || {};
+        const rep = reportMap.get(String(idTarget)) || {};
         
         return {
           id_target: idTarget,
@@ -876,6 +895,8 @@ export function callMock(action: string, args: any[] = []): any {
           status_masuk: rep.status_masuk || "-",
           jam_pulang: rep.jam_pulang || "-",
           status_pulang: rep.status_pulang || "-",
+          no_hp_ortu: m.no_hp_ortu || m.no_hp || "-",
+          kategori: kategori,
           ket: rep.ket || "-"
         };
       });
@@ -1370,13 +1391,15 @@ export function callMock(action: string, args: any[] = []): any {
 // Main bridge function to invoke Apps Script Web App actions
 export async function callGas(action: string, args: any[] = []): Promise<any> {
   if (isUsingMock()) {
-    // Artificial latency for authentic experience
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await new Promise((resolve) => setTimeout(resolve, 80));
     return callMock(action, args);
   }
   
   const url = getGasUrl();
   const token = getGasToken();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 6000);
+
   try {
     const response = await fetch(url, {
       method: "POST",
@@ -1385,7 +1408,9 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
         "Content-Type": "text/plain",
       },
       body: JSON.stringify({ action, args, token }),
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
     
     if (!response.ok) {
       throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
@@ -1403,7 +1428,8 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
     }
     return result;
   } catch (err: any) {
-    console.error("GAS API Call error, falling back to local simulation:", err);
+    clearTimeout(timeoutId);
+    console.error("GAS API Call error/timeout, falling back to local simulation:", err);
     return callMock(action, args);
   }
 }
