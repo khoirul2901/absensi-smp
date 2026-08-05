@@ -48,7 +48,7 @@ import {
   Layers
 } from "lucide-react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
-import { callGas, getStorageKey } from "../lib/gasApi";
+import { callGas, getStorageKey, setStorage, getStorage } from "../lib/gasApi";
 import { LiveAbsen, ScheduleLessonItem, AbsensiMengajarItem } from "../types";
 
 const HARI_LIST = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
@@ -261,10 +261,90 @@ export default function AbsensiScanner({ session }: { session?: any }) {
   const loadLiveLogs = async (targetDate = filterTanggal, currentKelas = filterKelas) => {
     setIsLoadingLogs(true);
     try {
+      // 1. Fetch real master data from Google Sheets database
+      let masterData: any[] = [];
+      const masterRes = await callGas("getDataMaster", [kategori]);
+      if (masterRes && masterRes.success && Array.isArray(masterRes.data)) {
+        masterData = masterRes.data;
+      } else if (Array.isArray(masterRes)) {
+        masterData = masterRes;
+      }
+
+      if (masterData.length > 0) {
+        const storageKey = kategori === "Siswa" ? "data_siswa" : "data_guru";
+        setStorage(storageKey, masterData);
+      }
+
+      // 2. Call live attendance action
       const res = await callGas("getLiveAbsenHariIni", [kategori, targetDate, currentKelas]);
-      const list = Array.isArray(res) 
+      let list = Array.isArray(res) 
         ? res 
         : (res && Array.isArray(res.data) ? res.data : (res?.data || []));
+
+      // 3. Fallback merge if live log is empty/missing but master data exists
+      if ((!list || list.length === 0) && masterData.length > 0) {
+        const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
+        const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
+        const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
+        const reports = getStorage(reportsKey) || [];
+
+        const reportMap = new Map<string, any>();
+        if (Array.isArray(reports)) {
+          for (const r of reports) {
+            if (r.tanggal === targetDate) {
+              const rId = r[idKey] || r.id_siswa || r.id_guru || r.id_target;
+              if (rId) reportMap.set(String(rId), r);
+            }
+          }
+        }
+
+        list = masterData.map((m: any) => {
+          const idTarget = m[idKey] || m.id || m.nisn || m.nip_nuptk || "";
+          const namaTarget = m[nameKey] || m.nama || m.name || "Tanpa Nama";
+          
+          let kelasStr = "-";
+          if (kategori === "Siswa") {
+            const kVal = String(m.kelas || "").trim();
+            const jVal = String(m.jurusan || "").trim();
+            if (m.kelas_jurusan) {
+              kelasStr = m.kelas_jurusan;
+            } else if (kVal) {
+              if (jVal && jVal !== "-" && !kVal.toLowerCase().includes(jVal.toLowerCase())) {
+                kelasStr = `${kVal} ${jVal}`;
+              } else {
+                kelasStr = kVal;
+              }
+            } else if (jVal) {
+              kelasStr = jVal;
+            }
+          }
+
+          const rep = reportMap.get(String(idTarget)) || {};
+
+          return {
+            id_target: idTarget,
+            nama_target: namaTarget,
+            kelas_jurusan: kelasStr,
+            tanggal: targetDate,
+            jam_masuk: rep.jam_masuk || "-",
+            status_masuk: rep.status_masuk || "-",
+            jam_pulang: rep.jam_pulang || "-",
+            status_pulang: rep.status_pulang || "-",
+            no_hp_ortu: m.no_hp_ortu || m.no_hp || "-",
+            kategori: kategori,
+            ket: rep.ket || "-"
+          };
+        });
+
+        if (kategori === "Siswa" && currentKelas && currentKelas !== "Semua") {
+          const kFilter = String(currentKelas).toLowerCase().replace(/\s+/g, "");
+          list = list.filter((item: any) => {
+            const kTarget = String(item.kelas_jurusan || "").toLowerCase().replace(/\s+/g, "");
+            return kTarget.includes(kFilter) || kFilter.includes(kTarget);
+          });
+        }
+      }
+
       setRecentLogs(list);
     } catch (e) {
       console.error(e);
