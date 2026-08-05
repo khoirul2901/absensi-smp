@@ -262,9 +262,10 @@ export default function AbsensiScanner({ session }: { session?: any }) {
     setIsLoadingLogs(true);
     try {
       const res = await callGas("getLiveAbsenHariIni", [kategori, targetDate, currentKelas]);
-      if (res && res.success) {
-        setRecentLogs(res.data);
-      }
+      const list = Array.isArray(res) 
+        ? res 
+        : (res && Array.isArray(res.data) ? res.data : (res?.data || []));
+      setRecentLogs(list);
     } catch (e) {
       console.error(e);
     } finally {
