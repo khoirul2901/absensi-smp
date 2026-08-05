@@ -24,7 +24,7 @@ import {
   Copy,
   Check
 } from "lucide-react";
-import { callGas, getGasUrl, getStorageKey, setStorage, getStorage } from "../lib/gasApi";
+import { callGas, getGasUrl, getStorageKey, setStorage, getStorage, extractArrayData } from "../lib/gasApi";
 import { ConfigJam, HariLibur } from "../types";
 
 export default function Settings() {
@@ -186,17 +186,15 @@ export default function Settings() {
       const url = getGasUrl();
       
       let allConfig: any = null;
-      if (url) {
-        const testRes = await callGas("getPengaturanSemua");
-        if (testRes && testRes.success !== false) {
-          setConfigJam(testRes);
-          allConfig = testRes;
-        }
-      } else {
-        // Load mock configs
-        const mockCfg = await callGas("getPengaturanSemua");
-        setConfigJam(mockCfg);
-        allConfig = mockCfg;
+      const testRes = await callGas("getPengaturanSemua");
+      if (testRes && testRes.success !== false) {
+        const cfgObj = (testRes && typeof testRes.data === "object" && !Array.isArray(testRes.data)) ? testRes.data : testRes;
+        setConfigJam({
+          jam_masuk_mulai: cfgObj.jam_masuk_mulai || "06:00",
+          jam_masuk_batas: cfgObj.jam_masuk_batas || "07:15",
+          jam_pulang_mulai: cfgObj.jam_pulang_mulai || "15:30"
+        });
+        allConfig = cfgObj;
       }
 
       // Sync cloud config values to card settings state and localStorage if present
@@ -222,22 +220,16 @@ export default function Settings() {
 
       // Load teachers for Wali Kelas dropdown
       let guruRes = await callGas("getDataMaster", ["Guru"]);
-      let gList = Array.isArray(guruRes)
-        ? guruRes
-        : (guruRes?.data && Array.isArray(guruRes.data) ? guruRes.data : []);
+      let gList = extractArrayData(guruRes);
       if (!gList || gList.length === 0) {
         guruRes = await callGas("getDataGuru");
-        gList = Array.isArray(guruRes)
-          ? guruRes
-          : (guruRes?.data && Array.isArray(guruRes.data) ? guruRes.data : []);
+        gList = extractArrayData(guruRes);
       }
       setGuruList(gList);
 
       // Load holidays
       const liburRes = await callGas("getHariLiburSemua");
-      const libList = Array.isArray(liburRes)
-        ? liburRes
-        : (liburRes?.data && Array.isArray(liburRes.data) ? liburRes.data : []);
+      const libList = extractArrayData(liburRes);
       setLiburList(libList);
 
       // Load classes
