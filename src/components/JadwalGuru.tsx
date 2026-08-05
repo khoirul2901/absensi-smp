@@ -103,6 +103,9 @@ export default function JadwalGuru({ session }: { session?: any }) {
     hari: "Senin",
     kelas: "X RPL 1",
     jam_ke: 1,
+    mode_durasi: "single" as "single" | "multi",
+    jam_ke_mulai: 1,
+    durasi_jam: 2, // 2, 3, 4, 5, 6 jam
     id_jam: "",
     mapel: "Matematika",
     id_guru: "",
@@ -242,24 +245,68 @@ export default function JadwalGuru({ session }: { session?: any }) {
       return;
     }
     const selectedTeacher = teachers.find(t => t.id_guru === scheduleForm.id_guru);
-    const slot = jamSlots.find(j => j.jam_ke === Number(scheduleForm.jam_ke));
-
-    const payload = {
-      hari: scheduleForm.hari,
-      kelas: scheduleForm.kelas,
-      jam_ke: Number(scheduleForm.jam_ke),
-      id_jam: slot ? slot.id_jam : `JP-${scheduleForm.jam_ke}`,
-      jam_mulai: slot ? slot.jam_mulai : "07:00",
-      jam_selesai: slot ? slot.jam_selesai : "07:45",
-      mapel: scheduleForm.mapel,
-      id_guru: scheduleForm.id_guru,
-      nama_guru: selectedTeacher ? selectedTeacher.nama_guru : "",
-      ruangan: scheduleForm.ruangan || "Kelas Utama"
-    };
 
     try {
       setLoading(true);
       let res;
+
+      if (!editScheduleId && scheduleForm.mode_durasi === "multi" && scheduleForm.durasi_jam > 1) {
+        // Multi-hour block creation (e.g. 2, 3, 4, 5, or 6 hours in 1 block)
+        const startJam = Number(scheduleForm.jam_ke_mulai || scheduleForm.jam_ke || 1);
+        const durasi = Number(scheduleForm.durasi_jam || 2);
+        const endJam = startJam + durasi - 1;
+        let createdCount = 0;
+
+        for (let i = 0; i < durasi; i++) {
+          const currentJam = startJam + i;
+          const slot = jamSlots.find(j => j.jam_ke === currentJam);
+
+          const payload = {
+            hari: scheduleForm.hari,
+            kelas: scheduleForm.kelas,
+            jam_ke: currentJam,
+            jam_ke_mulai: startJam,
+            jam_ke_selesai: endJam,
+            is_block: true,
+            total_jam_block: durasi,
+            id_jam: slot ? slot.id_jam : `JP-${currentJam}`,
+            jam_mulai: slot ? slot.jam_mulai : "07:00",
+            jam_selesai: slot ? slot.jam_selesai : "07:45",
+            mapel: scheduleForm.mapel,
+            id_guru: scheduleForm.id_guru,
+            nama_guru: selectedTeacher ? selectedTeacher.nama_guru : "",
+            ruangan: scheduleForm.ruangan || "Kelas Utama"
+          };
+
+          const r = await callGas("tambahJadwalPelajaran", [payload]);
+          if (r && r.success !== false) createdCount++;
+        }
+
+        setShowScheduleModal(false);
+        alert(`Berhasil menambahkan jadwal untuk blok ${createdCount} jam pelajaran sekaligus (Jam ke-${startJam} s/d Jam ke-${endJam})!\n\nGuru cukup melakukan 1x scan QR Code untuk seluruh blok jam ini.`);
+        fetchAllData();
+        return;
+      }
+
+      // Single hour or editing existing schedule item
+      const slot = jamSlots.find(j => j.jam_ke === Number(scheduleForm.jam_ke));
+      const payload = {
+        hari: scheduleForm.hari,
+        kelas: scheduleForm.kelas,
+        jam_ke: Number(scheduleForm.jam_ke),
+        jam_ke_mulai: Number(scheduleForm.jam_ke_mulai || scheduleForm.jam_ke),
+        jam_ke_selesai: Number(scheduleForm.jam_ke),
+        is_block: scheduleForm.mode_durasi === "multi",
+        total_jam_block: scheduleForm.mode_durasi === "multi" ? Number(scheduleForm.durasi_jam) : 1,
+        id_jam: slot ? slot.id_jam : `JP-${scheduleForm.jam_ke}`,
+        jam_mulai: slot ? slot.jam_mulai : "07:00",
+        jam_selesai: slot ? slot.jam_selesai : "07:45",
+        mapel: scheduleForm.mapel,
+        id_guru: scheduleForm.id_guru,
+        nama_guru: selectedTeacher ? selectedTeacher.nama_guru : "",
+        ruangan: scheduleForm.ruangan || "Kelas Utama"
+      };
+
       if (editScheduleId) {
         res = await callGas("editJadwalPelajaran", [editScheduleId, payload]);
       } else {
@@ -995,6 +1042,25 @@ export default function JadwalGuru({ session }: { session?: any }) {
       {/* TAB 3: PENGATURAN JAM PELAJARAN */}
       {activeTab === "pengaturan_jam" && (
         <div className="space-y-6">
+          {/* Feature Highlight: Multi-Jam Block Support */}
+          <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 rounded-2xl p-5 text-white shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <span className="bg-white/20 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                ⚡ Fitur Efisiensi Absensi Mengajar
+              </span>
+              <h4 className="font-extrabold text-base">Pengaturan Jam untuk 2, 3, hingga 4 Jam Pelajaran Langsung (Blok Multi-Jam)</h4>
+              <p className="text-xs text-amber-100 max-w-2xl">
+                Guru yang mengampu 2 hingga 4 jam pelajaran berturut-turut pada mata pelajaran yang sama <strong>cukup melakukan 1x scan QR Code</strong>. Sistem secara otomatis mencatat presensi mengajar untuk seluruh sesi jam di blok tersebut.
+              </p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md p-3 rounded-xl border border-white/20 text-xs shrink-0 font-medium space-y-1">
+              <div className="font-extrabold text-amber-200 text-[11px]">Contoh Penggabungan Blok:</div>
+              <div>• <strong>2 Jam:</strong> Jam 1 s/d 2 (07:00 - 08:30)</div>
+              <div>• <strong>3 Jam:</strong> Jam 1 s/d 3 (07:00 - 09:15)</div>
+              <div>• <strong>4 Jam:</strong> Jam 1 s/d 4 (07:00 - 10:00)</div>
+            </div>
+          </div>
+
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col md:flex-row items-center justify-between gap-4">
             <div>
               <h3 className="font-extrabold text-gray-900 text-sm flex items-center gap-2">
@@ -1201,21 +1267,103 @@ export default function JadwalGuru({ session }: { session?: any }) {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-600">Jam Pelajaran (Slot)</label>
-                <select
-                  value={scheduleForm.jam_ke}
-                  onChange={(e) => handleScheduleJamKeChange(Number(e.target.value))}
-                  required
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
-                >
-                  {jamSlots.map((slot) => (
-                    <option key={slot.id_jam} value={slot.jam_ke}>
-                      {slot.nama_jam} ({slot.jam_mulai} - {slot.jam_selesai}) - {slot.tipe}
-                    </option>
-                  ))}
-                </select>
+              {/* Mode Selection */}
+              <div className="bg-amber-50/80 p-3 rounded-xl border border-amber-200/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-extrabold text-amber-950 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Mode Pengaturan Jam Pelajaran</span>
+                  </label>
+                  <span className="text-[10px] font-black text-amber-800 bg-white px-2 py-0.5 rounded-full border border-amber-300">
+                    Cukup 1x Scan QR
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setScheduleForm({ ...scheduleForm, mode_durasi: "single" })}
+                    className={`py-2 text-xs font-extrabold rounded-lg border transition-all cursor-pointer ${
+                      scheduleForm.mode_durasi === "single"
+                        ? "bg-amber-600 text-white border-amber-600 shadow-sm"
+                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    1 Jam Pelajaran (Single)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScheduleForm({ ...scheduleForm, mode_durasi: "multi" })}
+                    className={`py-2 text-xs font-extrabold rounded-lg border transition-all cursor-pointer ${
+                      scheduleForm.mode_durasi === "multi"
+                        ? "bg-amber-600 text-white border-amber-600 shadow-sm"
+                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    Blok Multi-Jam (2 - 6 Jam)
+                  </button>
+                </div>
               </div>
+
+              {scheduleForm.mode_durasi === "single" ? (
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-600">Jam Pelajaran (Slot)</label>
+                  <select
+                    value={scheduleForm.jam_ke}
+                    onChange={(e) => handleScheduleJamKeChange(Number(e.target.value))}
+                    required
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
+                  >
+                    {jamSlots.map((slot) => (
+                      <option key={slot.id_jam} value={slot.jam_ke}>
+                        {slot.nama_jam} ({slot.jam_mulai} - {slot.jam_selesai}) - {slot.tipe}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="space-y-3 bg-gray-50 p-3.5 rounded-xl border border-gray-200">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-gray-700">Jam Ke- Awal (Mulai)</label>
+                      <select
+                        value={scheduleForm.jam_ke_mulai}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setScheduleForm({ ...scheduleForm, jam_ke_mulai: val, jam_ke: val });
+                        }}
+                        required
+                        className="w-full bg-white border border-gray-200 rounded-xl p-2 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
+                      >
+                        {jamSlots.map((slot) => (
+                          <option key={slot.id_jam} value={slot.jam_ke}>
+                            Jam ke-{slot.jam_ke} ({slot.jam_mulai})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-gray-700">Durasi Blok Jam</label>
+                      <select
+                        value={scheduleForm.durasi_jam}
+                        onChange={(e) => setScheduleForm({ ...scheduleForm, durasi_jam: Number(e.target.value) })}
+                        required
+                        className="w-full bg-white border border-gray-200 rounded-xl p-2 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
+                      >
+                        <option value={2}>2 Jam Pelajaran Langsung (Misal: Jam 1-2)</option>
+                        <option value={3}>3 Jam Pelajaran Langsung (Misal: Jam 1-3)</option>
+                        <option value={4}>4 Jam Pelajaran Langsung (Misal: Jam 1-4)</option>
+                        <option value={5}>5 Jam Pelajaran Langsung (Misal: Jam 1-5)</option>
+                        <option value={6}>6 Jam Pelajaran Langsung (Misal: Jam 1-6)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 bg-amber-100/70 border border-amber-200 rounded-lg text-[11px] text-amber-900 font-medium">
+                    ⚡ <strong>Rentang Blok:</strong> Jam ke-{scheduleForm.jam_ke_mulai} s/d Jam ke-{Number(scheduleForm.jam_ke_mulai) + Number(scheduleForm.durasi_jam) - 1} ({scheduleForm.durasi_jam} Jam Pelajaran). Guru pengampu <strong>cukup 1x scan QR Code</strong> untuk presensi seluruh blok jam ini.
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-1">
                 <label className="text-xs font-bold text-gray-600">Mata Pelajaran</label>
