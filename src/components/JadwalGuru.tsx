@@ -23,7 +23,7 @@ import {
   Filter,
   Eye
 } from "lucide-react";
-import { callGas, callMock, getStorageKey } from "../lib/gasApi";
+import { callGas, callMock, getStorageKey, setStorage } from "../lib/gasApi";
 import { ScheduleLessonItem, JamPelajaranItem, AbsensiMengajarItem, TeacherItem } from "../types";
 
 interface ExtendedTeacherItem {
@@ -160,6 +160,9 @@ export default function JadwalGuru({ session }: { session?: any }) {
         ? resJam
         : (resJam && Array.isArray(resJam.data) ? resJam.data : (resJam?.data || []));
       setJamSlots(jamData);
+      if (Array.isArray(jamData) && jamData.length > 0) {
+        setStorage("jam_pelajaran", jamData);
+      }
 
       // 2. Fetch Lesson Schedules
       const resSchedules = await callGas("getJadwalPelajaranSemua");
@@ -167,6 +170,9 @@ export default function JadwalGuru({ session }: { session?: any }) {
         ? resSchedules
         : (resSchedules && Array.isArray(resSchedules.data) ? resSchedules.data : (resSchedules?.data || []));
       setLessonSchedules(schedData);
+      if (Array.isArray(schedData) && schedData.length > 0) {
+        setStorage("jadwal_pelajaran", schedData);
+      }
 
       // 3. Fetch Teachers Master Data
       const resTeachers = await callGas("getDataMaster", ["Guru"]);
