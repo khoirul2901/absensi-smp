@@ -125,6 +125,10 @@ export interface ScheduleLessonItem {
   hari: string;
   id_jam: string;
   jam_ke: number;
+  jam_ke_mulai?: number;
+  jam_ke_selesai?: number;
+  is_block?: boolean;
+  total_jam_block?: number;
   jam_mulai?: string;
   jam_selesai?: string;
   kelas: string;
