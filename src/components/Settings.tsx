@@ -225,7 +225,14 @@ export default function Settings() {
         guruRes = await callGas("getDataGuru");
         gList = extractArrayData(guruRes);
       }
-      setGuruList(gList);
+      if (!gList || gList.length === 0) {
+        gList = getStorage("data_guru") || [];
+      }
+      const parsedGuru = gList.map((item: any) => ({
+        id_guru: item.id_guru || item.id || "",
+        nama_guru: item.nama_guru || item.nama || item.name || String(item)
+      })).filter((g: any) => g.nama_guru);
+      setGuruList(parsedGuru);
 
       // Load holidays
       const liburRes = await callGas("getHariLiburSemua");
@@ -244,18 +251,32 @@ export default function Settings() {
   const fetchKelasList = async () => {
     try {
       const kelasRes = await callGas("getKelasSemua");
-      const kList = Array.isArray(kelasRes)
-        ? kelasRes
-        : (kelasRes?.data && Array.isArray(kelasRes.data) ? kelasRes.data : []);
+      const kList = extractArrayData(kelasRes);
+      const storedKelas = getStorage("data_kelas") || [];
+
       const parsed = kList.map((item: any) => {
+        let name = "";
+        let wali = "-";
         if (typeof item === 'string') {
-          return { nama_kelas: item, wali_kelas: "-" };
+          name = item;
+        } else {
+          name = item.nama_kelas || item.kelas || String(item);
+          wali = item.wali_kelas || item.wali || item.waliKelas || item.guru_wali || item["Wali Kelas"] || "-";
         }
+
+        if ((!wali || wali === "-") && Array.isArray(storedKelas)) {
+          const matchedLocal = storedKelas.find((sk: any) => (typeof sk === "string" ? sk : (sk.nama_kelas || sk.kelas)) === name);
+          if (matchedLocal && typeof matchedLocal === "object" && matchedLocal.wali_kelas) {
+            wali = matchedLocal.wali_kelas;
+          }
+        }
+
         return {
-          nama_kelas: item.nama_kelas || item.kelas || String(item),
-          wali_kelas: item.wali_kelas || "-"
+          nama_kelas: String(name).trim(),
+          wali_kelas: String(wali).trim()
         };
       }).filter((item: any) => Boolean(item.nama_kelas));
+      
       setKelasList(parsed);
       return parsed;
     } catch (err) {
@@ -403,26 +424,31 @@ export default function Settings() {
   // Quick Wali Kelas update
   const handleQuickWaliKelasChange = async (namaKelas: string, waliKelasBaru: string) => {
     try {
-      setLoading(true);
       const chosenWali = waliKelasBaru || "-";
-      await callGas("simpanWaliKelas", [namaKelas, chosenWali]);
-      await callGas("editKelas", [namaKelas, namaKelas, chosenWali]);
+      
+      // Update UI state immediately
+      setKelasList(prev => prev.map(k => k.nama_kelas === namaKelas ? { ...k, wali_kelas: chosenWali } : k));
 
+      // Update local storage
       let dataKelas = getStorage("data_kelas");
       if (!Array.isArray(dataKelas)) dataKelas = [];
       const idx = dataKelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === namaKelas);
       if (idx !== -1) {
-        dataKelas[idx] = { nama_kelas: namaKelas, wali_kelas: chosenWali };
+        if (typeof dataKelas[idx] === "string") {
+          dataKelas[idx] = { nama_kelas: namaKelas, wali_kelas: chosenWali };
+        } else {
+          dataKelas[idx].wali_kelas = chosenWali;
+        }
       } else {
         dataKelas.push({ nama_kelas: namaKelas, wali_kelas: chosenWali });
       }
       setStorage("data_kelas", dataKelas);
 
-      await fetchKelasList();
+      // Call GAS APIs
+      await callGas("simpanWaliKelas", [namaKelas, chosenWali]);
+      await callGas("editKelas", [namaKelas, namaKelas, chosenWali]);
     } catch (e: any) {
-      await fetchKelasList();
-    } finally {
-      setLoading(false);
+      console.error("Error updating wali kelas:", e);
     }
   };
 
