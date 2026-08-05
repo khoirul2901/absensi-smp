@@ -30,7 +30,7 @@ import {
   BookOpen,
   Users
 } from "lucide-react";
-import { callGas, getStorageKey } from "../lib/gasApi";
+import { callGas, getStorageKey, extractArrayData, formatToIsoDate } from "../lib/gasApi";
 import { LaporanRow, RekapPersentase, AbsensiMengajarItem } from "../types";
 
 export default function Laporan() {
@@ -174,13 +174,11 @@ export default function Laporan() {
       
       if (kategori === "Mengajar") {
         const res = await callGas("getAbsensiMengajarGuru");
-        const rawLogs: AbsensiMengajarItem[] = Array.isArray(res)
-          ? res
-          : (res && res.success && Array.isArray(res.data) ? res.data : []);
+        const rawLogs: AbsensiMengajarItem[] = extractArrayData(res);
 
         const filtered = rawLogs.filter((item) => {
           let matchDate = true;
-          const itemDate = String(item.tanggal || "").split("T")[0];
+          const itemDate = formatToIsoDate(item.tanggal);
           if (jenisFilter === "bulan") {
             if (bulanMinta) {
               matchDate = itemDate.startsWith(bulanMinta);
@@ -201,7 +199,7 @@ export default function Laporan() {
             const val = selectedGuru.toLowerCase();
             const idG = String(item.id_guru || "").toLowerCase();
             const namaG = String(item.nama_guru || "").toLowerCase();
-            matchGuru = idG === val || namaG === val;
+            matchGuru = idG === val || namaG === val || namaG.includes(val) || val.includes(namaG);
           }
 
           return matchDate && matchClass && matchGuru;
@@ -253,13 +251,8 @@ export default function Laporan() {
           tanggalSelesai, 
           bulanMinta
         ]);
-        if (res && res.success) {
-          setDetailLogs(Array.isArray(res.data) ? res.data : []);
-        } else if (Array.isArray(res)) {
-          setDetailLogs(res);
-        } else {
-          setError(res?.message || "Gagal memuat rekap detail");
-        }
+        const list = extractArrayData(res);
+        setDetailLogs(list);
       } else {
         const res = await callGas("hitungRekapPersentase", [
           kategori, 
@@ -269,13 +262,8 @@ export default function Laporan() {
           tanggalSelesai, 
           bulanMinta
         ]);
-        if (res && res.success) {
-          setRekapRows(Array.isArray(res.data) ? res.data : []);
-        } else if (Array.isArray(res)) {
-          setRekapRows(res);
-        } else {
-          setError(res?.message || "Gagal memuat rekap persentase");
-        }
+        const list = extractArrayData(res);
+        setRekapRows(list);
       }
     } catch (err: any) {
       setError(err.toString());
@@ -893,7 +881,7 @@ export default function Laporan() {
     const matchesQuery = name.includes(searchQuery.toLowerCase()) || id.includes(searchQuery.toLowerCase());
     if (kategori === "Guru" && selectedGuru && selectedGuru !== "Semua") {
       const val = selectedGuru.toLowerCase();
-      return matchesQuery && (name === val || id === val);
+      return matchesQuery && (name.includes(val) || val.includes(name) || id === val);
     }
     return matchesQuery;
   });
@@ -904,7 +892,7 @@ export default function Laporan() {
     const matchesQuery = name.includes(searchQuery.toLowerCase()) || id.includes(searchQuery.toLowerCase());
     if (kategori === "Guru" && selectedGuru && selectedGuru !== "Semua") {
       const val = selectedGuru.toLowerCase();
-      return matchesQuery && (name === val || id === val);
+      return matchesQuery && (name.includes(val) || val.includes(name) || id === val);
     }
     return matchesQuery;
   });
@@ -918,7 +906,7 @@ export default function Laporan() {
     const matchesQuery = name.includes(query) || id.includes(query) || mapel.includes(query) || kelas.includes(query);
     if (selectedGuru && selectedGuru !== "Semua") {
       const val = selectedGuru.toLowerCase();
-      return matchesQuery && (name === val || id === val);
+      return matchesQuery && (name.includes(val) || val.includes(name) || id === val);
     }
     return matchesQuery;
   });
@@ -930,7 +918,7 @@ export default function Laporan() {
     const matchesQuery = name.includes(query) || id.includes(query);
     if (selectedGuru && selectedGuru !== "Semua") {
       const val = selectedGuru.toLowerCase();
-      return matchesQuery && (name === val || id === val);
+      return matchesQuery && (name.includes(val) || val.includes(name) || id === val);
     }
     return matchesQuery;
   });
