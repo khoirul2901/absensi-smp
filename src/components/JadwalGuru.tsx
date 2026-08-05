@@ -23,7 +23,7 @@ import {
   Filter,
   Eye
 } from "lucide-react";
-import { callGas, callMock, getStorageKey, setStorage } from "../lib/gasApi";
+import { callGas, callMock, getStorageKey, setStorage, extractArrayData } from "../lib/gasApi";
 import { ScheduleLessonItem, JamPelajaranItem, AbsensiMengajarItem, TeacherItem } from "../types";
 
 interface ExtendedTeacherItem {
@@ -156,40 +156,36 @@ export default function JadwalGuru({ session }: { session?: any }) {
     try {
       // 1. Fetch Jam Pelajaran Slots
       const resJam = await callGas("getJamPelajaran");
-      const jamData = Array.isArray(resJam)
-        ? resJam
-        : (resJam && Array.isArray(resJam.data) ? resJam.data : (resJam?.data || []));
+      const jamData = extractArrayData(resJam);
       setJamSlots(jamData);
-      if (Array.isArray(jamData) && jamData.length > 0) {
+      if (jamData.length > 0) {
         setStorage("jam_pelajaran", jamData);
       }
 
       // 2. Fetch Lesson Schedules
       const resSchedules = await callGas("getJadwalPelajaranSemua");
-      const schedData = Array.isArray(resSchedules)
-        ? resSchedules
-        : (resSchedules && Array.isArray(resSchedules.data) ? resSchedules.data : (resSchedules?.data || []));
+      const schedData = extractArrayData(resSchedules);
       setLessonSchedules(schedData);
-      if (Array.isArray(schedData) && schedData.length > 0) {
+      if (schedData.length > 0) {
         setStorage("jadwal_pelajaran", schedData);
       }
 
       // 3. Fetch Teachers Master Data
       const resTeachers = await callGas("getDataMaster", ["Guru"]);
-      const tData = Array.isArray(resTeachers)
-        ? resTeachers
-        : (resTeachers && Array.isArray(resTeachers.data) ? resTeachers.data : (resTeachers?.data || []));
+      let tData = extractArrayData(resTeachers);
+      if (!tData || tData.length === 0) {
+        const resG = await callGas("getDataGuru");
+        tData = extractArrayData(resG);
+      }
       setTeachers(tData);
       if (tData.length > 0 && !scheduleForm.id_guru) {
-        setScheduleForm(prev => ({ ...prev, id_guru: tData[0].id_guru }));
-        setAbsensiForm(prev => ({ ...prev, id_guru: tData[0].id_guru }));
+        setScheduleForm(prev => ({ ...prev, id_guru: tData[0].id_guru || tData[0].id }));
+        setAbsensiForm(prev => ({ ...prev, id_guru: tData[0].id_guru || tData[0].id }));
       }
 
       // 4. Fetch Classes Master Data
       const resKelas = await callGas("getKelasSemua");
-      const kList = Array.isArray(resKelas)
-        ? resKelas
-        : (resKelas && Array.isArray(resKelas.data) ? resKelas.data : (resKelas?.data || []));
+      const kList = extractArrayData(resKelas);
       const parsedKelas = kList.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
       setClassList(parsedKelas);
       if (parsedKelas.length > 0) {
@@ -198,16 +194,12 @@ export default function JadwalGuru({ session }: { session?: any }) {
 
       // 5. Fetch Absensi Mengajar Guru
       const resAbs = await callGas("getAbsensiMengajarGuru");
-      const absData = Array.isArray(resAbs)
-        ? resAbs
-        : (resAbs && Array.isArray(resAbs.data) ? resAbs.data : (resAbs?.data || []));
+      const absData = extractArrayData(resAbs);
       setAbsensiLogs(absData);
 
       // 6. Fetch Flex Special Schedules
       const resFlex = await callGas("getJadwalGuruSemua");
-      const flexData = Array.isArray(resFlex)
-        ? resFlex
-        : (resFlex && Array.isArray(resFlex.data) ? resFlex.data : (resFlex?.data || []));
+      const flexData = extractArrayData(resFlex);
       setFlexSchedules(flexData);
     } catch (err: any) {
       setError("Gagal memuat data: " + err.toString());
