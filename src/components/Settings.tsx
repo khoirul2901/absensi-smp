@@ -353,18 +353,12 @@ export default function Settings() {
     if (!newKelasName.trim()) return;
     try {
       setLoading(true);
-      let res = await callGas("tambahKelas", [newKelasName.trim(), newWaliKelas]);
-      if (!res || res.success === false) {
-        res = callMock("tambahKelas", [newKelasName.trim(), newWaliKelas]);
-      }
+      await callGas("tambahKelas", [newKelasName.trim(), newWaliKelas]);
       setNewKelasName("");
       setNewWaliKelas("-");
       await fetchKelasList();
     } catch (err: any) {
-      callMock("tambahKelas", [newKelasName.trim(), newWaliKelas]);
-      setNewKelasName("");
-      setNewWaliKelas("-");
-      await fetchKelasList();
+      alert("Terjadi kesalahan: " + err.toString());
     } finally {
       setLoading(false);
     }
@@ -376,20 +370,13 @@ export default function Settings() {
     if (!editKelasLama || !editKelasBaru.trim()) return;
     try {
       setLoading(true);
-      let res = await callGas("editKelas", [editKelasLama, editKelasBaru.trim(), editWaliKelas]);
-      if (!res || res.success === false) {
-        res = callMock("editKelas", [editKelasLama, editKelasBaru.trim(), editWaliKelas]);
-      }
+      await callGas("editKelas", [editKelasLama, editKelasBaru.trim(), editWaliKelas]);
       setEditKelasLama(null);
       setEditKelasBaru("");
       setEditWaliKelas("-");
       await fetchKelasList();
     } catch (err: any) {
-      callMock("editKelas", [editKelasLama, editKelasBaru.trim(), editWaliKelas]);
-      setEditKelasLama(null);
-      setEditKelasBaru("");
-      setEditWaliKelas("-");
-      await fetchKelasList();
+      alert("Terjadi kesalahan: " + err.toString());
     } finally {
       setLoading(false);
     }
@@ -401,14 +388,10 @@ export default function Settings() {
       setLoading(true);
       let res = await callGas("simpanWaliKelas", [namaKelas, waliKelasBaru]);
       if (!res || res.success === false) {
-        res = await callGas("editKelas", [namaKelas, namaKelas, waliKelasBaru]);
-      }
-      if (!res || res.success === false) {
-        res = callMock("simpanWaliKelas", [namaKelas, waliKelasBaru]);
+        await callGas("editKelas", [namaKelas, namaKelas, waliKelasBaru]);
       }
       await fetchKelasList();
     } catch (e: any) {
-      callMock("simpanWaliKelas", [namaKelas, waliKelasBaru]);
       await fetchKelasList();
     } finally {
       setLoading(false);
