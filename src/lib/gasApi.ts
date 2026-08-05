@@ -43,6 +43,43 @@ export function getStorageKey(baseKey: string): string {
   return `${baseKey}_${cleanHash}`;
 }
 
+export function extractArrayData(res: any): any[] {
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+  if (res.data && Array.isArray(res.data)) return res.data;
+  if (res.result && Array.isArray(res.result)) return res.result;
+  if (res.list && Array.isArray(res.list)) return res.list;
+  if (res.items && Array.isArray(res.items)) return res.items;
+  if (res.rows && Array.isArray(res.rows)) return res.rows;
+  if (res.jam_pelajaran && Array.isArray(res.jam_pelajaran)) return res.jam_pelajaran;
+  if (res.jadwal_pelajaran && Array.isArray(res.jadwal_pelajaran)) return res.jadwal_pelajaran;
+  if (res.jadwal_guru && Array.isArray(res.jadwal_guru)) return res.jadwal_guru;
+  if (res.laporan && Array.isArray(res.laporan)) return res.laporan;
+  return [];
+}
+
+export function formatToIsoDate(dStr: any): string {
+  if (!dStr) return "";
+  const s = String(dStr).trim();
+  if (s.includes("T")) return s.split("T")[0];
+  if (s.match(/^\d{4}-\d{2}-\d{2}$/)) return s;
+  if (s.includes("/") || s.includes("-")) {
+    const parts = s.split(/[\/\-]/);
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      } else if (parts[2].length === 4) {
+        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+    }
+  }
+  const dateObj = new Date(dStr);
+  if (!isNaN(dateObj.getTime())) {
+    return dateObj.toISOString().split("T")[0];
+  }
+  return s;
+}
+
 export function setGasToken(token: string): void {
   // Nonaktif: pengaturan sekarang di-hardcode di getGasToken()
 }
@@ -938,10 +975,10 @@ export function callMock(action: string, args: any[] = []): any {
     case "getLaporanFilter": {
       const [kategori, kelas, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta] = args;
       const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
-      const reports = getStorage(reportsKey);
+      const reports = getStorage(reportsKey) || [];
       
       const filtered = reports.filter((row: any) => {
-        const rowTgl = String(row.tanggal || "").split("T")[0];
+        const rowTgl = formatToIsoDate(row.tanggal);
         if (!rowTgl) return false;
 
         // Date filter
@@ -953,8 +990,8 @@ export function callMock(action: string, args: any[] = []): any {
         
         // Class filter
         if (kategori === "Siswa" && kelas && kelas !== "Semua") {
-          const kJur = String(row.kelas_jurusan || row.kelas || "").replace(/[\s-]+/g, " ").toLowerCase();
-          const cleanKelas = String(kelas).replace(/[\s-]+/g, " ").toLowerCase();
+          const kJur = String(row.kelas_jurusan || row.kelas || "").replace(/[\s-]+/g, "").toLowerCase();
+          const cleanKelas = String(kelas).replace(/[\s-]+/g, "").toLowerCase();
           if (!kJur.includes(cleanKelas) && !cleanKelas.includes(kJur)) return false;
         }
         
@@ -966,26 +1003,25 @@ export function callMock(action: string, args: any[] = []): any {
 
     case "hitungRekapPersentase": {
       const [kategori, kelas, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta] = args;
-      const masterRes = callMock("getDataMaster", [kategori]);
-      let masterData = masterRes.data || [];
+      let masterData = getStorage(kategori === "Siswa" ? "data_siswa" : "data_guru") || [];
       
       if (kategori === "Siswa" && kelas && kelas !== "Semua") {
-        const cleanKelas = String(kelas).replace(/[\s-]+/g, " ").toLowerCase();
+        const cleanKelas = String(kelas).replace(/[\s-]+/g, "").toLowerCase();
         masterData = masterData.filter((m: any) => {
-          const kJur = `${m.kelas || ""} ${m.jurusan || ""}`.replace(/[\s-]+/g, " ").toLowerCase();
+          const kJur = `${m.kelas || ""} ${m.jurusan || ""}`.replace(/[\s-]+/g, "").toLowerCase();
           return kJur.includes(cleanKelas) || cleanKelas.includes(kJur);
         });
       }
       
       const rptRes = callMock("getLaporanFilter", [kategori, kelas, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta]);
-      const rptData = rptRes.data || [];
+      const rptData = extractArrayData(rptRes);
       
       const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
       const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
       
       const rekap = masterData.map((m: any) => {
-        const idTarget = String(m[idKey] || "").trim();
-        const nama = String(m[nameKey] || "").trim();
+        const idTarget = String(m[idKey] || m.id || "").trim();
+        const nama = String(m[nameKey] || m.nama || "").trim();
         
         const userRpts = rptData.filter((r: any) => {
           const rId = String(r[idKey] || r.id_target || r.id_siswa || r.id_guru || "").trim();
