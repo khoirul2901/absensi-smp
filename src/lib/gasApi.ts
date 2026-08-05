@@ -55,6 +55,13 @@ export function extractArrayData(res: any): any[] {
   if (res.jadwal_pelajaran && Array.isArray(res.jadwal_pelajaran)) return res.jadwal_pelajaran;
   if (res.jadwal_guru && Array.isArray(res.jadwal_guru)) return res.jadwal_guru;
   if (res.laporan && Array.isArray(res.laporan)) return res.laporan;
+  if (res.presensi && Array.isArray(res.presensi)) return res.presensi;
+  if (res.absensi && Array.isArray(res.absensi)) return res.absensi;
+  if (res.presensiSiswa && Array.isArray(res.presensiSiswa)) return res.presensiSiswa;
+  if (res.presensiGuru && Array.isArray(res.presensiGuru)) return res.presensiGuru;
+  if (res.absensiMengajar && Array.isArray(res.absensiMengajar)) return res.absensiMengajar;
+  if (res.laporanSiswa && Array.isArray(res.laporanSiswa)) return res.laporanSiswa;
+  if (res.laporanGuru && Array.isArray(res.laporanGuru)) return res.laporanGuru;
   return [];
 }
 
@@ -972,6 +979,17 @@ export function callMock(action: string, args: any[] = []): any {
       return { success: true, data: filtered };
     }
 
+    case "getPresensiSiswa":
+    case "getLaporanSiswa": {
+      return { success: true, data: getStorage("laporan_siswa") };
+    }
+
+    case "getPresensiGuru":
+    case "getLaporanGuru": {
+      return { success: true, data: getStorage("laporan_guru") };
+    }
+
+    case "getLaporanPresensi":
     case "getLaporanFilter": {
       const [kategori, kelas, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta] = args;
       const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
