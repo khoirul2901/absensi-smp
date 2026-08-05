@@ -30,7 +30,7 @@ import {
   BookOpen,
   Users
 } from "lucide-react";
-import { callGas, getStorageKey, extractArrayData, formatToIsoDate } from "../lib/gasApi";
+import { callGas, getStorageKey, extractArrayData, formatToIsoDate, getStorage, setStorage } from "../lib/gasApi";
 import { LaporanRow, RekapPersentase, AbsensiMengajarItem } from "../types";
 
 export default function Laporan() {
@@ -173,10 +173,37 @@ export default function Laporan() {
       setError(null);
       
       if (kategori === "Mengajar") {
-        const res = await callGas("getAbsensiMengajarGuru");
-        const rawLogs: AbsensiMengajarItem[] = extractArrayData(res);
+        let res = await callGas("getAbsensiMengajarGuru");
+        let rawLogs: any[] = extractArrayData(res);
+        if (!rawLogs || rawLogs.length === 0) {
+          const res2 = await callGas("getAbsensiMengajar");
+          rawLogs = extractArrayData(res2);
+        }
+        if (!rawLogs || rawLogs.length === 0) {
+          rawLogs = getStorage("absensi_mengajar_guru") || [];
+        }
 
-        const filtered = rawLogs.filter((item) => {
+        const normalizedLogs: AbsensiMengajarItem[] = rawLogs.map((item: any) => ({
+          id_log_mengajar: String(item.id_log_mengajar || item.id_log || item.id || `LOG-MENG-${Math.random()}`),
+          tanggal: formatToIsoDate(item.tanggal || item.Tanggal),
+          waktu_absen: String(item.waktu_absen || item.waktu || item.Waktu || item.Jam || "-"),
+          hari: String(item.hari || item.Hari || "Senin"),
+          id_guru: String(item.id_guru || item.ID_Guru || item.id || "-"),
+          nama_guru: String(item.nama_guru || item.Nama_Guru || item.Nama || item.nama || "-"),
+          kelas: String(item.kelas || item.Kelas || "-"),
+          mapel: String(item.mapel || item.Mapel || "-"),
+          jam_ke: Number(item.jam_ke || item.Jam_Ke || item.jam || 1),
+          jam_mulai_jadwal: String(item.jam_mulai_jadwal || item.jam_mulai || "-"),
+          jam_selesai_jadwal: String(item.jam_selesai_jadwal || item.jam_selesai || "-"),
+          status: (item.status || item.Status || "Hadir Tepat Waktu") as any,
+          catatan_materi: String(item.catatan_materi || item.Catatan || item.materi || "-")
+        }));
+
+        if (normalizedLogs.length > 0) {
+          setStorage("absensi_mengajar_guru", normalizedLogs);
+        }
+
+        const filtered = normalizedLogs.filter((item) => {
           let matchDate = true;
           const itemDate = formatToIsoDate(item.tanggal);
           if (jenisFilter === "bulan") {
@@ -191,7 +218,9 @@ export default function Laporan() {
 
           let matchClass = true;
           if (selectedKelas && selectedKelas !== "Semua") {
-            matchClass = String(item.kelas || "").toLowerCase() === selectedKelas.toLowerCase();
+            const itemK = String(item.kelas || "").toLowerCase().replace(/[\s-]+/g, "");
+            const selK = selectedKelas.toLowerCase().replace(/[\s-]+/g, "");
+            matchClass = itemK.includes(selK) || selK.includes(itemK);
           }
 
           let matchGuru = true;
@@ -242,19 +271,9 @@ export default function Laporan() {
         });
 
         setRekapMengajarRows(rekapList);
-      } else if (viewMode === "detail") {
-        const res = await callGas("getLaporanFilter", [
-          kategori, 
-          selectedKelas, 
-          jenisFilter, 
-          tanggalMulai, 
-          tanggalSelesai, 
-          bulanMinta
-        ]);
-        const list = extractArrayData(res);
-        setDetailLogs(list);
       } else {
-        const res = await callGas("hitungRekapPersentase", [
+        // 1. Fetch from getLaporanFilter first
+        let res = await callGas("getLaporanFilter", [
           kategori, 
           selectedKelas, 
           jenisFilter, 
@@ -262,8 +281,156 @@ export default function Laporan() {
           tanggalSelesai, 
           bulanMinta
         ]);
-        const list = extractArrayData(res);
-        setRekapRows(list);
+        let rawLogs: any[] = extractArrayData(res);
+
+        // 2. Multi-fallback logic if getLaporanFilter returned empty
+        if (!rawLogs || rawLogs.length === 0) {
+          const res2 = await callGas(kategori === "Siswa" ? "getPresensiSiswa" : "getPresensiGuru");
+          rawLogs = extractArrayData(res2);
+        }
+        if (!rawLogs || rawLogs.length === 0) {
+          const res3 = await callGas(kategori === "Siswa" ? "getLaporanSiswa" : "getLaporanGuru");
+          rawLogs = extractArrayData(res3);
+        }
+        if (!rawLogs || rawLogs.length === 0) {
+          rawLogs = getStorage(kategori === "Siswa" ? "laporan_siswa" : "laporan_guru") || [];
+        }
+
+        // 3. Normalize raw log items
+        const normalizedLogs = rawLogs.map((row: any) => {
+          const tgl = formatToIsoDate(row.tanggal || row.Tanggal || row.tgl);
+          const idT = String(row.id_siswa || row.id_guru || row.id_target || row.id || row.ID || "");
+          const namaT = String(row.nama_siswa || row.nama_guru || row.nama_target || row.nama || row.Nama || "-");
+          const kJur = String(row.kelas_jurusan || row.kelas || row.Kelas || "-");
+          const jMasuk = String(row.jam_masuk || row.Jam_Masuk || row["Jam Masuk"] || "-");
+          const stMasuk = String(row.status_masuk || row.Status_Masuk || row["Status Masuk"] || "-");
+          const jPulang = String(row.jam_pulang || row.Jam_Pulang || row["Jam Pulang"] || "-");
+          const stPulang = String(row.status_pulang || row.Status_Pulang || row["Status Pulang"] || "-");
+          const ket = String(row.ket || row.keterangan || row.Catatan || "-");
+
+          return {
+            id_log_siswa: String(row.id_log_siswa || row.id_log || row.id || `LOG-S-${Math.random()}`),
+            id_log_guru: String(row.id_log_guru || row.id_log || row.id || `LOG-G-${Math.random()}`),
+            tanggal: tgl,
+            id_siswa: idT,
+            id_guru: idT,
+            id_target: idT,
+            nama_siswa: namaT,
+            nama_guru: namaT,
+            nama_target: namaT,
+            kelas_jurusan: kJur,
+            kelas: kJur,
+            jam_masuk: jMasuk,
+            status_masuk: stMasuk,
+            jam_pulang: jPulang,
+            status_pulang: stPulang,
+            ket: ket
+          };
+        }).filter((r: any) => Boolean(r.tanggal));
+
+        if (normalizedLogs.length > 0) {
+          setStorage(kategori === "Siswa" ? "laporan_siswa" : "laporan_guru", normalizedLogs);
+        }
+
+        // 4. Apply client-side date & class filter
+        const filtered = normalizedLogs.filter((row: any) => {
+          let matchDate = true;
+          if (jenisFilter === "rentang" && tanggalMulai && tanggalSelesai) {
+            matchDate = row.tanggal >= tanggalMulai && row.tanggal <= tanggalSelesai;
+          } else if (jenisFilter === "bulan" && bulanMinta) {
+            matchDate = row.tanggal.startsWith(bulanMinta);
+          }
+
+          let matchClass = true;
+          if (kategori === "Siswa" && selectedKelas && selectedKelas !== "Semua") {
+            const kJurClean = String(row.kelas_jurusan || row.kelas || "").toLowerCase().replace(/[\s-]+/g, "");
+            const filterClean = selectedKelas.toLowerCase().replace(/[\s-]+/g, "");
+            matchClass = kJurClean.includes(filterClean) || filterClean.includes(kJurClean);
+          }
+
+          return matchDate && matchClass;
+        });
+
+        if (viewMode === "detail") {
+          setDetailLogs(filtered);
+        } else {
+          // Compute Rekap Persentase
+          let masterRes = await callGas("getDataMaster", [kategori]);
+          let masterData = extractArrayData(masterRes);
+          if (!masterData || masterData.length === 0) {
+            masterRes = await callGas(kategori === "Siswa" ? "getDataSiswa" : "getDataGuru");
+            masterData = extractArrayData(masterRes);
+          }
+          if (!masterData || masterData.length === 0) {
+            masterData = getStorage(kategori === "Siswa" ? "data_siswa" : "data_guru") || [];
+          }
+
+          if (kategori === "Siswa" && selectedKelas && selectedKelas !== "Semua") {
+            const cleanKelas = selectedKelas.toLowerCase().replace(/[\s-]+/g, "");
+            masterData = masterData.filter((m: any) => {
+              const kJur = `${m.kelas || ""} ${m.jurusan || ""}`.toLowerCase().replace(/[\s-]+/g, "");
+              return kJur.includes(cleanKelas) || cleanKelas.includes(kJur);
+            });
+          }
+
+          const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
+          const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
+
+          const rekapList = masterData.map((m: any) => {
+            const idTarget = String(m[idKey] || m.id || m.nisn || m.nip_nuptk || "").trim();
+            const namaTarget = String(m[nameKey] || m.nama || m.name || "Siswa/Guru").trim();
+
+            const userRpts = filtered.filter((r: any) => {
+              const rId = String(r.id_siswa || r.id_guru || r.id_target || "").trim();
+              const rNama = String(r.nama_siswa || r.nama_guru || r.nama_target || "").trim();
+              if (idTarget && rId && rId === idTarget) return true;
+              if (namaTarget && rNama && rNama.toLowerCase() === namaTarget.toLowerCase()) return true;
+              return false;
+            });
+
+            let hadir = 0;
+            let sakit = 0;
+            let izin = 0;
+            let alfa = 0;
+            const jamMasuks: string[] = [];
+            const jamPulangs: string[] = [];
+
+            userRpts.forEach((r: any) => {
+              const sm = String(r.status_masuk || "").toLowerCase();
+              if (sm.includes("tepat") || sm.includes("terlambat") || sm.includes("lupa") || sm.includes("hadir")) {
+                hadir++;
+              } else if (sm.includes("sakit")) {
+                sakit++;
+              } else if (sm.includes("izin")) {
+                izin++;
+              } else if (sm.includes("alfa") || sm.includes("alpha")) {
+                alfa++;
+              } else if (r.status_masuk && r.status_masuk !== "-") {
+                hadir++;
+              }
+
+              if (r.jam_masuk && r.jam_masuk !== "-") jamMasuks.push(r.jam_masuk);
+              if (r.jam_pulang && r.jam_pulang !== "-") jamPulangs.push(r.jam_pulang);
+            });
+
+            const totalDays = hadir + sakit + izin + alfa;
+            const pct = totalDays === 0 ? "0%" : `${Math.round((hadir / totalDays) * 100)}%`;
+
+            return {
+              id: idTarget,
+              nama: namaTarget,
+              hadir,
+              sakit,
+              izin,
+              alfa,
+              persentase: pct,
+              jam_masuk: jamMasuks.length > 0 ? jamMasuks.join(", ") : "-",
+              jam_pulang: jamPulangs.length > 0 ? jamPulangs.join(", ") : "-"
+            };
+          });
+
+          setRekapRows(rekapList);
+        }
       }
     } catch (err: any) {
       setError(err.toString());
@@ -271,6 +438,10 @@ export default function Laporan() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    handleQuery();
+  }, [kategori, viewMode, jenisFilter, bulanMinta, tanggalMulai, tanggalSelesai, selectedKelas, selectedGuru]);
 
   const handleDeleteMengajarLog = async (idLog: string, namaGuru: string) => {
     if (!idLog) return;
