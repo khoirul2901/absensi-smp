@@ -24,7 +24,7 @@ import {
   Copy,
   Check
 } from "lucide-react";
-import { callGas, getGasUrl, getStorageKey } from "../lib/gasApi";
+import { callGas, getGasUrl, getStorageKey, setStorage, getStorage } from "../lib/gasApi";
 import { ConfigJam, HariLibur } from "../types";
 
 export default function Settings() {
@@ -353,7 +353,20 @@ export default function Settings() {
     if (!newKelasName.trim()) return;
     try {
       setLoading(true);
-      await callGas("tambahKelas", [newKelasName.trim(), newWaliKelas]);
+      const chosenWali = newWaliKelas && newWaliKelas.trim() ? newWaliKelas : "-";
+      await callGas("tambahKelas", [newKelasName.trim(), chosenWali]);
+      await callGas("simpanWaliKelas", [newKelasName.trim(), chosenWali]);
+
+      let dataKelas = getStorage("data_kelas");
+      if (!Array.isArray(dataKelas)) dataKelas = [];
+      const idx = dataKelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === newKelasName.trim());
+      if (idx !== -1) {
+        dataKelas[idx] = { nama_kelas: newKelasName.trim(), wali_kelas: chosenWali };
+      } else {
+        dataKelas.push({ nama_kelas: newKelasName.trim(), wali_kelas: chosenWali });
+      }
+      setStorage("data_kelas", dataKelas);
+
       setNewKelasName("");
       setNewWaliKelas("-");
       await fetchKelasList();
@@ -370,7 +383,20 @@ export default function Settings() {
     if (!editKelasLama || !editKelasBaru.trim()) return;
     try {
       setLoading(true);
-      await callGas("editKelas", [editKelasLama, editKelasBaru.trim(), editWaliKelas]);
+      const chosenWali = editWaliKelas && editWaliKelas.trim() ? editWaliKelas : "-";
+      await callGas("editKelas", [editKelasLama, editKelasBaru.trim(), chosenWali]);
+      await callGas("simpanWaliKelas", [editKelasBaru.trim(), chosenWali]);
+
+      let dataKelas = getStorage("data_kelas");
+      if (!Array.isArray(dataKelas)) dataKelas = [];
+      const idx = dataKelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === editKelasLama);
+      if (idx !== -1) {
+        dataKelas[idx] = { nama_kelas: editKelasBaru.trim(), wali_kelas: chosenWali };
+      } else {
+        dataKelas.push({ nama_kelas: editKelasBaru.trim(), wali_kelas: chosenWali });
+      }
+      setStorage("data_kelas", dataKelas);
+
       setEditKelasLama(null);
       setEditKelasBaru("");
       setEditWaliKelas("-");
@@ -386,10 +412,20 @@ export default function Settings() {
   const handleQuickWaliKelasChange = async (namaKelas: string, waliKelasBaru: string) => {
     try {
       setLoading(true);
-      let res = await callGas("simpanWaliKelas", [namaKelas, waliKelasBaru]);
-      if (!res || res.success === false) {
-        await callGas("editKelas", [namaKelas, namaKelas, waliKelasBaru]);
+      const chosenWali = waliKelasBaru || "-";
+      await callGas("simpanWaliKelas", [namaKelas, chosenWali]);
+      await callGas("editKelas", [namaKelas, namaKelas, chosenWali]);
+
+      let dataKelas = getStorage("data_kelas");
+      if (!Array.isArray(dataKelas)) dataKelas = [];
+      const idx = dataKelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === namaKelas);
+      if (idx !== -1) {
+        dataKelas[idx] = { nama_kelas: namaKelas, wali_kelas: chosenWali };
+      } else {
+        dataKelas.push({ nama_kelas: namaKelas, wali_kelas: chosenWali });
       }
+      setStorage("data_kelas", dataKelas);
+
       await fetchKelasList();
     } catch (e: any) {
       await fetchKelasList();
