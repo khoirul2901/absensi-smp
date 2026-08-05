@@ -128,12 +128,23 @@ function initMockDb() {
   }
 }
 
+export function getStorage(key: string): any {
+  try {
+    return JSON.parse(localStorage.getItem(getStorageKey("MOCK_" + key)) || "[]");
+  } catch (e) {
+    return [];
+  }
+}
+
+export function setStorage(key: string, val: any): void {
+  try {
+    localStorage.setItem(getStorageKey("MOCK_" + key), JSON.stringify(val));
+  } catch (e) {}
+}
+
 // Call local mock APIs
 export function callMock(action: string, args: any[] = []): any {
   initMockDb();
-  
-  const getStorage = (key: string) => JSON.parse(localStorage.getItem(getStorageKey("MOCK_" + key)) || "[]");
-  const setStorage = (key: string, val: any) => localStorage.setItem(getStorageKey("MOCK_" + key), JSON.stringify(val));
 
   switch (action) {
     case "verifikasiLogin": {
@@ -250,7 +261,11 @@ export function callMock(action: string, args: any[] = []): any {
         if (typeof item === "string") {
           return { nama_kelas: item, wali_kelas: "-" };
         }
-        return item;
+        const waliVal = item.wali_kelas || item.wali || item.waliKelas || item["Wali Kelas"] || "-";
+        return {
+          nama_kelas: item.nama_kelas || item.kelas || String(item),
+          wali_kelas: waliVal
+        };
       });
       return { success: true, data: normalized };
     }
@@ -259,15 +274,12 @@ export function callMock(action: string, args: any[] = []): any {
       const [namaKelas, waliKelas] = args;
       let kelas = getStorage("data_kelas");
       if (!Array.isArray(kelas)) kelas = [];
-      const idx = kelas.findIndex((k: any) => (typeof k === "string" ? k : k.nama_kelas) === namaKelas);
+      const idx = kelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === namaKelas);
+      const chosenWali = waliKelas || "-";
       if (idx === -1) {
-        kelas.push({ nama_kelas: namaKelas, wali_kelas: waliKelas || "-" });
+        kelas.push({ nama_kelas: namaKelas, wali_kelas: chosenWali });
       } else {
-        if (typeof kelas[idx] === "string") {
-          kelas[idx] = { nama_kelas: namaKelas, wali_kelas: waliKelas || "-" };
-        } else {
-          kelas[idx].wali_kelas = waliKelas || "-";
-        }
+        kelas[idx] = { nama_kelas: namaKelas, wali_kelas: chosenWali };
       }
       setStorage("data_kelas", kelas);
       return { success: true, message: "Kelas ditambahkan (SIMULASI)." };
@@ -277,7 +289,7 @@ export function callMock(action: string, args: any[] = []): any {
       const [namaKelas] = args;
       let kelas = getStorage("data_kelas");
       if (Array.isArray(kelas)) {
-        kelas = kelas.filter((k: any) => (typeof k === "string" ? k : k.nama_kelas) !== namaKelas);
+        kelas = kelas.filter((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) !== namaKelas);
         setStorage("data_kelas", kelas);
       }
       return { success: true, message: "Kelas dihapus (SIMULASI)." };
@@ -286,33 +298,37 @@ export function callMock(action: string, args: any[] = []): any {
     case "editKelas": {
       const [kelasLama, kelasBaru, waliKelasBaru] = args;
       let kelas = getStorage("data_kelas");
-      if (Array.isArray(kelas)) {
-        const idx = kelas.findIndex((k: any) => (typeof k === "string" ? k : k.nama_kelas) === kelasLama);
-        if (idx !== -1) {
-          kelas[idx] = {
-            nama_kelas: kelasBaru,
-            wali_kelas: waliKelasBaru !== undefined ? waliKelasBaru : (typeof kelas[idx] === "object" ? kelas[idx].wali_kelas : "-")
-          };
-          setStorage("data_kelas", kelas);
-          return { success: true, message: "Kelas diperbarui (SIMULASI)." };
-        }
+      if (!Array.isArray(kelas)) kelas = [];
+      const idx = kelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === kelasLama);
+      const chosenWali = waliKelasBaru || "-";
+      if (idx !== -1) {
+        kelas[idx] = {
+          nama_kelas: kelasBaru,
+          wali_kelas: chosenWali
+        };
+      } else {
+        kelas.push({
+          nama_kelas: kelasBaru,
+          wali_kelas: chosenWali
+        });
       }
-      return { success: false, message: "Kelas lama tidak ditemukan." };
+      setStorage("data_kelas", kelas);
+      return { success: true, message: "Kelas diperbarui (SIMULASI)." };
     }
 
     case "simpanWaliKelas": {
       const [namaKelas, waliKelas] = args;
       let kelas = getStorage("data_kelas");
       if (!Array.isArray(kelas)) kelas = [];
-      const idx = kelas.findIndex((k: any) => (typeof k === "string" ? k : k.nama_kelas) === namaKelas);
+      const idx = kelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === namaKelas);
+      const chosenWali = waliKelas || "-";
       if (idx !== -1) {
-        if (typeof kelas[idx] === "string") {
-          kelas[idx] = { nama_kelas: kelas[idx], wali_kelas: waliKelas || "-" };
-        } else {
-          kelas[idx].wali_kelas = waliKelas || "-";
-        }
+        kelas[idx] = {
+          nama_kelas: typeof kelas[idx] === "string" ? kelas[idx] : (kelas[idx].nama_kelas || namaKelas),
+          wali_kelas: chosenWali
+        };
       } else {
-        kelas.push({ nama_kelas: namaKelas, wali_kelas: waliKelas || "-" });
+        kelas.push({ nama_kelas: namaKelas, wali_kelas: chosenWali });
       }
       setStorage("data_kelas", kelas);
       return { success: true, message: `Wali kelas untuk ${namaKelas} berhasil disimpan!` };
