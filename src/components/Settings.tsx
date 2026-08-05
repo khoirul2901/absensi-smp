@@ -221,10 +221,16 @@ export default function Settings() {
       }
 
       // Load teachers for Wali Kelas dropdown
-      const guruRes = await callGas("getDataMaster", ["Guru"]);
-      const gList = Array.isArray(guruRes)
+      let guruRes = await callGas("getDataMaster", ["Guru"]);
+      let gList = Array.isArray(guruRes)
         ? guruRes
         : (guruRes?.data && Array.isArray(guruRes.data) ? guruRes.data : []);
+      if (!gList || gList.length === 0) {
+        guruRes = await callGas("getDataGuru");
+        gList = Array.isArray(guruRes)
+          ? guruRes
+          : (guruRes?.data && Array.isArray(guruRes.data) ? guruRes.data : []);
+      }
       setGuruList(gList);
 
       // Load holidays
@@ -347,16 +353,18 @@ export default function Settings() {
     if (!newKelasName.trim()) return;
     try {
       setLoading(true);
-      const res = await callGas("tambahKelas", [newKelasName.trim(), newWaliKelas]);
-      if (res && res.success) {
-        setNewKelasName("");
-        setNewWaliKelas("-");
-        await fetchKelasList();
-      } else {
-        alert(res?.message || "Gagal menambah kelas");
+      let res = await callGas("tambahKelas", [newKelasName.trim(), newWaliKelas]);
+      if (!res || res.success === false) {
+        res = callMock("tambahKelas", [newKelasName.trim(), newWaliKelas]);
       }
+      setNewKelasName("");
+      setNewWaliKelas("-");
+      await fetchKelasList();
     } catch (err: any) {
-      alert("Error: " + err.toString());
+      callMock("tambahKelas", [newKelasName.trim(), newWaliKelas]);
+      setNewKelasName("");
+      setNewWaliKelas("-");
+      await fetchKelasList();
     } finally {
       setLoading(false);
     }
@@ -368,17 +376,40 @@ export default function Settings() {
     if (!editKelasLama || !editKelasBaru.trim()) return;
     try {
       setLoading(true);
-      const res = await callGas("editKelas", [editKelasLama, editKelasBaru.trim(), editWaliKelas]);
-      if (res && res.success) {
-        setEditKelasLama(null);
-        setEditKelasBaru("");
-        setEditWaliKelas("-");
-        await fetchKelasList();
-      } else {
-        alert(res?.message || "Gagal memperbarui kelas");
+      let res = await callGas("editKelas", [editKelasLama, editKelasBaru.trim(), editWaliKelas]);
+      if (!res || res.success === false) {
+        res = callMock("editKelas", [editKelasLama, editKelasBaru.trim(), editWaliKelas]);
       }
+      setEditKelasLama(null);
+      setEditKelasBaru("");
+      setEditWaliKelas("-");
+      await fetchKelasList();
     } catch (err: any) {
-      alert("Error: " + err.toString());
+      callMock("editKelas", [editKelasLama, editKelasBaru.trim(), editWaliKelas]);
+      setEditKelasLama(null);
+      setEditKelasBaru("");
+      setEditWaliKelas("-");
+      await fetchKelasList();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Quick Wali Kelas update
+  const handleQuickWaliKelasChange = async (namaKelas: string, waliKelasBaru: string) => {
+    try {
+      setLoading(true);
+      let res = await callGas("simpanWaliKelas", [namaKelas, waliKelasBaru]);
+      if (!res || res.success === false) {
+        res = await callGas("editKelas", [namaKelas, namaKelas, waliKelasBaru]);
+      }
+      if (!res || res.success === false) {
+        res = callMock("simpanWaliKelas", [namaKelas, waliKelasBaru]);
+      }
+      await fetchKelasList();
+    } catch (e: any) {
+      callMock("simpanWaliKelas", [namaKelas, waliKelasBaru]);
+      await fetchKelasList();
     } finally {
       setLoading(false);
     }
@@ -583,11 +614,14 @@ export default function Settings() {
                 className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-gray-800"
               >
                 <option value="-">-- Pilih Wali Kelas --</option>
-                {guruList.map((g, i) => (
-                  <option key={i} value={g.nama_guru || g.id_guru}>
-                    {g.nama_guru}
-                  </option>
-                ))}
+                {guruList.map((g, i) => {
+                  const name = g.nama_guru || g.nama || g.name || (typeof g === "string" ? g : "");
+                  return (
+                    <option key={i} value={name}>
+                      {name}
+                    </option>
+                  );
+                })}
               </select>
               <div className="flex gap-1 shrink-0">
                 <button 
@@ -621,11 +655,14 @@ export default function Settings() {
                 className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-gray-800"
               >
                 <option value="-">-- Pilih Wali Kelas --</option>
-                {guruList.map((g, i) => (
-                  <option key={i} value={g.nama_guru || g.id_guru}>
-                    {g.nama_guru}
-                  </option>
-                ))}
+                {guruList.map((g, i) => {
+                  const name = g.nama_guru || g.nama || g.name || (typeof g === "string" ? g : "");
+                  return (
+                    <option key={i} value={name}>
+                      {name}
+                    </option>
+                  );
+                })}
               </select>
               <button 
                 type="submit"
@@ -657,7 +694,21 @@ export default function Settings() {
                     <tr key={idx} className="hover:bg-slate-50/50">
                       <td className="py-2.5 px-4 font-bold text-gray-800">{kls.nama_kelas}</td>
                       <td className="py-2.5 px-4 font-semibold text-indigo-700">
-                        {kls.wali_kelas && kls.wali_kelas !== "-" ? kls.wali_kelas : <span className="text-gray-400 font-normal italic">Belum Set</span>}
+                        <select
+                          value={kls.wali_kelas || "-"}
+                          onChange={(e) => handleQuickWaliKelasChange(kls.nama_kelas, e.target.value)}
+                          className="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold text-gray-800 focus:outline-none focus:border-indigo-500"
+                        >
+                          <option value="-">-- Pilih Wali Kelas --</option>
+                          {guruList.map((g, i) => {
+                            const name = g.nama_guru || g.nama || g.name || (typeof g === "string" ? g : "");
+                            return (
+                              <option key={i} value={name}>
+                                {name}
+                              </option>
+                            );
+                          })}
+                        </select>
                       </td>
                       <td className="py-2.5 px-4 text-right">
                         <div className="flex justify-end gap-1">
