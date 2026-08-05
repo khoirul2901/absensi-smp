@@ -223,15 +223,21 @@ export function callMock(action: string, args: any[] = []): any {
       return { success: false, message: "Password lama tidak sesuai / User tidak dikenali." };
     }
 
-    case "getPengaturanSemua": {
-      return JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
+    case "getPengaturanSemua":
+    case "getPengaturanJam":
+    case "getPengaturan":
+    case "getKonfigurasiJam": {
+      const cfg = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
+      return { success: true, data: cfg, ...cfg };
     }
 
-    case "simpanKonfigurasiJam": {
+    case "simpanKonfigurasiJam":
+    case "simpanPengaturanJam":
+    case "simpanPengaturan": {
       const [jamMasukMulai, jamMasukBatas, jamPulangMulai] = args;
       const cfg = { jam_masuk_mulai: jamMasukMulai, jam_masuk_batas: jamMasukBatas, jam_pulang_mulai: jamPulangMulai };
       localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify(cfg));
-      return { success: true, message: "Pengaturan Jam Operasional disimpan (SIMULASI)." };
+      return { success: true, message: "Pengaturan Jam Operasional disimpan!" };
     }
 
     case "getHariLiburSemua": {
@@ -1228,7 +1234,9 @@ export function callMock(action: string, args: any[] = []): any {
     }
 
     // Jam Pelajaran (Lesson Period Slots)
-    case "getJamPelajaran": {
+    case "getJamPelajaran":
+    case "getJamPelajaranSemua":
+    case "getJamPelajaranList": {
       return { success: true, data: getStorage("jam_pelajaran") };
     }
 
@@ -1271,7 +1279,9 @@ export function callMock(action: string, args: any[] = []): any {
     }
 
     // Jadwal Pelajaran (Subject Schedule Matrix)
-    case "getJadwalPelajaranSemua": {
+    case "getJadwalPelajaranSemua":
+    case "getJadwalPelajaran":
+    case "getJadwalSemua": {
       return { success: true, data: getStorage("jadwal_pelajaran") };
     }
 
@@ -1442,6 +1452,43 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
       console.warn(`GAS Action '${action}' not recognized by remote Web App endpoint. Falling back to local storage execution.`);
       return callMock(action, args);
     }
+
+    // Auto-sync valid cloud data to local storage for offline & fallback consistency
+    if (result && result.success !== false) {
+      try {
+        if (action.includes("JamPelajaran")) {
+          const list = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : null);
+          if (list) setStorage("jam_pelajaran", list);
+        } else if (action.includes("JadwalPelajaran") || action === "getJadwalSemua") {
+          const list = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : null);
+          if (list) setStorage("jadwal_pelajaran", list);
+        } else if (action === "getJadwalGuruSemua" || action === "getJadwalGuru") {
+          const list = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : null);
+          if (list) setStorage("jadwal_guru", list);
+        } else if (action.includes("Pengaturan") || action.includes("KonfigurasiJam")) {
+          const cfg = typeof result === "object" ? (result.data || result) : null;
+          if (cfg && (cfg.jam_masuk_mulai || cfg.jam_masuk_batas)) {
+            localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify(cfg));
+          }
+        } else if (action === "getDataMaster") {
+          const cat = args[0];
+          const list = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : null);
+          if (list) setStorage(cat === "Siswa" ? "data_siswa" : "data_guru", list);
+        } else if (action === "getKelasSemua") {
+          const list = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : null);
+          if (list) setStorage("data_kelas", list);
+        } else if (action === "getHariLiburSemua") {
+          const list = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : null);
+          if (list) setStorage("hari_libur", list);
+        } else if (action === "getAbsensiMengajarGuru") {
+          const list = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : null);
+          if (list) setStorage("absensi_mengajar_guru", list);
+        }
+      } catch (e) {
+        console.warn("Auto storage sync error:", e);
+      }
+    }
+
     return result;
   } catch (err: any) {
     clearTimeout(timeoutId);
