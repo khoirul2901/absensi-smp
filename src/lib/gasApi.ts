@@ -1520,17 +1520,78 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
           const list = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : null);
           if (list) setStorage("jadwal_guru", list);
         } else if (action.includes("Pengaturan") || action.includes("KonfigurasiJam")) {
-          const cfg = typeof result === "object" ? (result.data || result) : null;
-          if (cfg && (cfg.jam_masuk_mulai || cfg.jam_masuk_batas)) {
-            localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify(cfg));
+          let rawObj = result && typeof result === "object" ? (result.data || result) : null;
+          let jMulai = "";
+          let jBatas = "";
+          let jPulang = "";
+
+          if (Array.isArray(rawObj)) {
+            for (const item of rawObj) {
+              if (typeof item === "object" && item) {
+                const k = String(item.kunci || item.key || item.parameter || item.nama || item.kategori || "").toLowerCase();
+                const v = String(item.nilai || item.value || item.isi || "");
+                if (k.includes("masuk_mulai") || k.includes("masuk_awal") || k.includes("masukmulai") || k === "jam_masuk") jMulai = v;
+                if (k.includes("masuk_batas") || k.includes("terlambat") || k.includes("masukbatas") || k === "jam_batas") jBatas = v;
+                if (k.includes("pulang_mulai") || k.includes("pulang_awal") || k.includes("pulangmulai") || k === "jam_pulang") jPulang = v;
+              }
+            }
+          } else if (rawObj && typeof rawObj === "object") {
+            jMulai = rawObj.jam_masuk_mulai || rawObj.jamMasukMulai || rawObj.jam_masuk || rawObj.jam_masuk_awal || "";
+            jBatas = rawObj.jam_masuk_batas || rawObj.jamMasukBatas || rawObj.jam_batas || rawObj.jam_terlambat || "";
+            jPulang = rawObj.jam_pulang_mulai || rawObj.jamPulangMulai || rawObj.jam_pulang || "";
           }
+
+          const existingCfg = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
+          const newCfg = {
+            ...existingCfg,
+            jam_masuk_mulai: jMulai || existingCfg.jam_masuk_mulai || "06:00",
+            jam_masuk_batas: jBatas || existingCfg.jam_masuk_batas || "07:15",
+            jam_pulang_mulai: jPulang || existingCfg.jam_pulang_mulai || "15:30"
+          };
+          localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify(newCfg));
         } else if (action === "getDataMaster") {
           const cat = args[0];
           const list = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : null);
           if (list) setStorage(cat === "Siswa" ? "data_siswa" : "data_guru", list);
         } else if (action === "getKelasSemua") {
           const list = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : null);
-          if (list) setStorage("data_kelas", list);
+          if (list) {
+            const existing = getStorage("data_kelas") || [];
+            const mergedMap = new Map<string, string>();
+
+            // 1. Add existing local entries
+            for (const ex of existing) {
+              if (typeof ex === "string") {
+                if (!mergedMap.has(ex)) mergedMap.set(ex, "-");
+              } else if (typeof ex === "object" && ex) {
+                const name = String(ex.nama_kelas || ex.kelas || "").trim();
+                const wali = String(ex.wali_kelas || ex.wali || ex.waliKelas || ex["Wali Kelas"] || "-").trim();
+                if (name) {
+                  if (!mergedMap.has(name) || (mergedMap.get(name) === "-" && wali !== "-")) {
+                    mergedMap.set(name, wali);
+                  }
+                }
+              }
+            }
+
+            // 2. Add/merge API list
+            for (const item of list) {
+              const name = String(typeof item === "string" ? item : (item.nama_kelas || item.kelas || "")).trim();
+              const waliFromApi = String(typeof item === "object" && item ? (item.wali_kelas || item.wali || item.waliKelas || item.guru_wali || item["Wali Kelas"] || "-") : "-").trim();
+              if (name) {
+                const existingWali = mergedMap.get(name) || "-";
+                const finalWali = (waliFromApi && waliFromApi !== "-") ? waliFromApi : existingWali;
+                mergedMap.set(name, finalWali);
+              }
+            }
+
+            const merged = Array.from(mergedMap.entries()).map(([nama_kelas, wali_kelas]) => ({
+              nama_kelas,
+              wali_kelas
+            }));
+
+            setStorage("data_kelas", merged);
+          }
         } else if (action === "getHariLiburSemua") {
           const list = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : null);
           if (list) setStorage("hari_libur", list);
