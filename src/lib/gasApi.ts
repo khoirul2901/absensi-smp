@@ -321,11 +321,12 @@ export function callMock(action: string, args: any[] = []): any {
     }
 
     case "tambahKelas": {
-      const [namaKelas, waliKelas] = args;
+      const [namaKelas, waliKelas, payloadObj] = args;
       let kelas = getStorage("data_kelas");
       if (!Array.isArray(kelas)) kelas = [];
+      const obj = (typeof payloadObj === "object" && payloadObj !== null) ? payloadObj : {};
+      const chosenWali = (typeof waliKelas === "string" && waliKelas !== "wali kelas" && waliKelas !== "wali_kelas" ? waliKelas : (obj.wali_kelas || obj.wali || obj.nama_guru || obj.waliKelas || "-"));
       const idx = kelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === namaKelas);
-      const chosenWali = waliKelas || "-";
       if (idx === -1) {
         kelas.push({ nama_kelas: namaKelas, wali_kelas: chosenWali });
       } else {
@@ -346,11 +347,12 @@ export function callMock(action: string, args: any[] = []): any {
     }
 
     case "editKelas": {
-      const [kelasLama, kelasBaru, waliKelasBaru] = args;
+      const [kelasLama, kelasBaru, waliKelasBaru, payloadObj] = args;
       let kelas = getStorage("data_kelas");
       if (!Array.isArray(kelas)) kelas = [];
       const idx = kelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === kelasLama);
-      const chosenWali = waliKelasBaru || "-";
+      const obj = (typeof payloadObj === "object" && payloadObj !== null) ? payloadObj : {};
+      const chosenWali = (typeof waliKelasBaru === "string" && waliKelasBaru !== "wali kelas" && waliKelasBaru !== "wali_kelas" ? waliKelasBaru : (obj.wali_kelas || obj.wali || obj.nama_guru || obj.waliKelas || "-"));
       if (idx !== -1) {
         kelas[idx] = {
           nama_kelas: kelasBaru,
@@ -367,11 +369,12 @@ export function callMock(action: string, args: any[] = []): any {
     }
 
     case "simpanWaliKelas": {
-      const [namaKelas, waliKelas] = args;
+      const [namaKelas, waliKelas, payloadObj] = args;
       let kelas = getStorage("data_kelas");
       if (!Array.isArray(kelas)) kelas = [];
       const idx = kelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === namaKelas);
-      const chosenWali = waliKelas || "-";
+      const obj = (typeof payloadObj === "object" && payloadObj !== null) ? payloadObj : {};
+      const chosenWali = (typeof waliKelas === "string" && waliKelas !== "wali kelas" && waliKelas !== "wali_kelas" ? waliKelas : (obj.wali_kelas || obj.wali || obj.nama_guru || obj.waliKelas || "-"));
       if (idx !== -1) {
         kelas[idx] = {
           nama_kelas: typeof kelas[idx] === "string" ? kelas[idx] : (kelas[idx].nama_kelas || namaKelas),
@@ -1481,13 +1484,40 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
   const timeoutId = setTimeout(() => controller.abort(), 6000);
 
   try {
+    const bodyObj: any = { action, args, token };
+    if (args && args.length > 0) {
+      if (typeof args[0] === "string") {
+        bodyObj.nama_kelas = args[0];
+        bodyObj.kelas = args[0];
+        bodyObj.kelasLama = args[0];
+      }
+      if (typeof args[1] === "string") {
+        bodyObj.wali_kelas = args[1];
+        bodyObj.wali = args[1];
+        bodyObj.waliKelas = args[1];
+        bodyObj.nama_guru = args[1];
+        bodyObj.kelasBaru = args[1];
+      }
+      if (typeof args[2] === "string") {
+        bodyObj.wali_kelas = args[2];
+        bodyObj.wali = args[2];
+        bodyObj.waliKelas = args[2];
+        bodyObj.nama_guru = args[2];
+      }
+      for (const a of args) {
+        if (typeof a === "object" && a !== null && !Array.isArray(a)) {
+          Object.assign(bodyObj, a);
+        }
+      }
+    }
+
     const response = await fetch(url, {
       method: "POST",
       mode: "cors",
       headers: {
         "Content-Type": "text/plain",
       },
-      body: JSON.stringify({ action, args, token }),
+      body: JSON.stringify(bodyObj),
       signal: controller.signal
     });
     clearTimeout(timeoutId);
