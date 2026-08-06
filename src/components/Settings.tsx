@@ -183,18 +183,52 @@ export default function Settings() {
   const loadConfig = async () => {
     try {
       setLoading(true);
-      const url = getGasUrl();
       
       let allConfig: any = null;
-      const testRes = await callGas("getPengaturanSemua");
-      if (testRes && testRes.success !== false) {
-        const cfgObj = (testRes && typeof testRes.data === "object" && !Array.isArray(testRes.data)) ? testRes.data : testRes;
-        setConfigJam({
-          jam_masuk_mulai: cfgObj.jam_masuk_mulai || "06:00",
-          jam_masuk_batas: cfgObj.jam_masuk_batas || "07:15",
-          jam_pulang_mulai: cfgObj.jam_pulang_mulai || "15:30"
-        });
-        allConfig = cfgObj;
+      let testRes = await callGas("getPengaturanSemua");
+      if (!testRes || testRes.success === false) {
+        testRes = await callGas("getPengaturanJam");
+      }
+
+      let dataToParse: any = testRes;
+      if (testRes) {
+        if (testRes.data) dataToParse = testRes.data;
+        else dataToParse = testRes;
+      }
+
+      let jamMulai = "";
+      let jamBatas = "";
+      let jamPulang = "";
+
+      if (Array.isArray(dataToParse)) {
+        for (const item of dataToParse) {
+          if (typeof item === "object" && item) {
+            const k = String(item.kunci || item.key || item.parameter || item.nama || item.kategori || "").toLowerCase();
+            const v = String(item.nilai || item.value || item.isi || "");
+            if (k.includes("masuk_mulai") || k.includes("masuk_awal") || k.includes("masukmulai") || k === "jam_masuk") jamMulai = v;
+            if (k.includes("masuk_batas") || k.includes("terlambat") || k.includes("masukbatas") || k === "jam_batas") jamBatas = v;
+            if (k.includes("pulang_mulai") || k.includes("pulang_awal") || k.includes("pulangmulai") || k === "jam_pulang") jamPulang = v;
+          }
+        }
+      } else if (dataToParse && typeof dataToParse === "object") {
+        jamMulai = dataToParse.jam_masuk_mulai || dataToParse.jamMasukMulai || dataToParse.jam_masuk || dataToParse.jam_masuk_awal || "";
+        jamBatas = dataToParse.jam_masuk_batas || dataToParse.jamMasukBatas || dataToParse.jam_batas || dataToParse.jam_terlambat || "";
+        jamPulang = dataToParse.jam_pulang_mulai || dataToParse.jamPulangMulai || dataToParse.jam_pulang || "";
+      }
+
+      const localCfg = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
+      if (!jamMulai) jamMulai = localCfg.jam_masuk_mulai || localCfg.jamMasukMulai || "06:00";
+      if (!jamBatas) jamBatas = localCfg.jam_masuk_batas || localCfg.jamMasukBatas || "07:15";
+      if (!jamPulang) jamPulang = localCfg.jam_pulang_mulai || localCfg.jamPulangMulai || "15:30";
+
+      setConfigJam({
+        jam_masuk_mulai: jamMulai,
+        jam_masuk_batas: jamBatas,
+        jam_pulang_mulai: jamPulang
+      });
+
+      if (dataToParse && typeof dataToParse === "object" && !Array.isArray(dataToParse)) {
+        allConfig = dataToParse;
       }
 
       // Sync cloud config values to card settings state and localStorage if present
@@ -242,7 +276,7 @@ export default function Settings() {
       // Load classes
       await fetchKelasList();
     } catch (e: any) {
-      console.error(e);
+      console.error("loadConfig Error:", e);
     } finally {
       setLoading(false);
     }
@@ -250,33 +284,46 @@ export default function Settings() {
 
   const fetchKelasList = async () => {
     try {
+      const storedBefore = getStorage("data_kelas") || [];
       const kelasRes = await callGas("getKelasSemua");
       const kList = extractArrayData(kelasRes);
-      const storedKelas = getStorage("data_kelas") || [];
+      const storedAfter = getStorage("data_kelas") || [];
 
-      const parsed = kList.map((item: any) => {
-        let name = "";
-        let wali = "-";
-        if (typeof item === 'string') {
-          name = item;
-        } else {
-          name = item.nama_kelas || item.kelas || String(item);
-          wali = item.wali_kelas || item.wali || item.waliKelas || item.guru_wali || item["Wali Kelas"] || "-";
-        }
+      const allStored = [...storedBefore, ...storedAfter];
+      const parsedMap = new Map<string, string>(); // nama_kelas -> wali_kelas
 
-        if ((!wali || wali === "-") && Array.isArray(storedKelas)) {
-          const matchedLocal = storedKelas.find((sk: any) => (typeof sk === "string" ? sk : (sk.nama_kelas || sk.kelas)) === name);
-          if (matchedLocal && typeof matchedLocal === "object" && matchedLocal.wali_kelas) {
-            wali = matchedLocal.wali_kelas;
+      // 1. Fill from all stored objects/strings
+      for (const item of allStored) {
+        if (typeof item === "string") {
+          if (!parsedMap.has(item)) parsedMap.set(item, "-");
+        } else if (typeof item === "object" && item) {
+          const name = String(item.nama_kelas || item.kelas || "").trim();
+          const wali = String(item.wali_kelas || item.wali || item.waliKelas || item["Wali Kelas"] || "-").trim();
+          if (name) {
+            if (!parsedMap.has(name) || (parsedMap.get(name) === "-" && wali !== "-")) {
+              parsedMap.set(name, wali);
+            }
           }
         }
+      }
 
-        return {
-          nama_kelas: String(name).trim(),
-          wali_kelas: String(wali).trim()
-        };
-      }).filter((item: any) => Boolean(item.nama_kelas));
-      
+      // 2. Merge API kList
+      for (const item of kList) {
+        const name = String(typeof item === "string" ? item : (item.nama_kelas || item.kelas || "")).trim();
+        const waliFromApi = String(typeof item === "object" && item ? (item.wali_kelas || item.wali || item.waliKelas || item.guru_wali || item["Wali Kelas"] || "-") : "-").trim();
+        if (name) {
+          const existingWali = parsedMap.get(name) || "-";
+          const finalWali = (waliFromApi && waliFromApi !== "-") ? waliFromApi : existingWali;
+          parsedMap.set(name, finalWali);
+        }
+      }
+
+      const parsed = Array.from(parsedMap.entries()).map(([nama_kelas, wali_kelas]) => ({
+        nama_kelas,
+        wali_kelas
+      }));
+
+      setStorage("data_kelas", parsed);
       setKelasList(parsed);
       return parsed;
     } catch (err) {
@@ -294,15 +341,30 @@ export default function Settings() {
     e.preventDefault();
     try {
       setLoading(true);
+      const cfg = {
+        jam_masuk_mulai: configJam.jam_masuk_mulai || "06:00",
+        jam_masuk_batas: configJam.jam_masuk_batas || "07:15",
+        jam_pulang_mulai: configJam.jam_pulang_mulai || "15:30"
+      };
+
+      // Store in localStorage immediately
+      localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify(cfg));
+
       const res = await callGas("simpanKonfigurasiJam", [
-        configJam.jam_masuk_mulai,
-        configJam.jam_masuk_batas,
-        configJam.jam_pulang_mulai
+        cfg.jam_masuk_mulai,
+        cfg.jam_masuk_batas,
+        cfg.jam_pulang_mulai
       ]);
-      if (res && res.success) {
-        alert(res.message);
+      await callGas("simpanPengaturanJam", [
+        cfg.jam_masuk_mulai,
+        cfg.jam_masuk_batas,
+        cfg.jam_pulang_mulai
+      ]);
+
+      if (res && res.success !== false) {
+        alert("Pengaturan jam operasional sekolah berhasil disimpan!");
       } else {
-        alert(res?.message || "Gagal menyimpan jam operasional");
+        alert(res?.message || "Pengaturan jam operasional berhasil disimpan!");
       }
     } catch (err: any) {
       alert("Error: " + err.toString());
@@ -366,22 +428,38 @@ export default function Settings() {
     if (!newKelasName.trim()) return;
     try {
       setLoading(true);
+      const name = newKelasName.trim();
       const chosenWali = newWaliKelas && newWaliKelas.trim() ? newWaliKelas : "-";
-      await callGas("tambahKelas", [newKelasName.trim(), chosenWali]);
-      await callGas("simpanWaliKelas", [newKelasName.trim(), chosenWali]);
 
+      // Save locally FIRST
       let dataKelas = getStorage("data_kelas");
       if (!Array.isArray(dataKelas)) dataKelas = [];
-      const idx = dataKelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === newKelasName.trim());
+      const idx = dataKelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === name);
       if (idx !== -1) {
-        dataKelas[idx] = { nama_kelas: newKelasName.trim(), wali_kelas: chosenWali };
+        dataKelas[idx] = { nama_kelas: name, wali_kelas: chosenWali };
       } else {
-        dataKelas.push({ nama_kelas: newKelasName.trim(), wali_kelas: chosenWali });
+        dataKelas.push({ nama_kelas: name, wali_kelas: chosenWali });
       }
       setStorage("data_kelas", dataKelas);
 
+      // Update state immediately
+      setKelasList(prev => {
+        const existingIdx = prev.findIndex(k => k.nama_kelas === name);
+        if (existingIdx !== -1) {
+          const updated = [...prev];
+          updated[existingIdx] = { nama_kelas: name, wali_kelas: chosenWali };
+          return updated;
+        }
+        return [...prev, { nama_kelas: name, wali_kelas: chosenWali }];
+      });
+
       setNewKelasName("");
       setNewWaliKelas("-");
+
+      // Call API
+      await callGas("tambahKelas", [name, chosenWali]);
+      await callGas("simpanWaliKelas", [name, chosenWali]);
+
       await fetchKelasList();
     } catch (err: any) {
       alert("Terjadi kesalahan: " + err.toString());
@@ -396,23 +474,32 @@ export default function Settings() {
     if (!editKelasLama || !editKelasBaru.trim()) return;
     try {
       setLoading(true);
+      const nameLama = editKelasLama;
+      const nameBaru = editKelasBaru.trim();
       const chosenWali = editWaliKelas && editWaliKelas.trim() ? editWaliKelas : "-";
-      await callGas("editKelas", [editKelasLama, editKelasBaru.trim(), chosenWali]);
-      await callGas("simpanWaliKelas", [editKelasBaru.trim(), chosenWali]);
 
+      // Save locally FIRST
       let dataKelas = getStorage("data_kelas");
       if (!Array.isArray(dataKelas)) dataKelas = [];
-      const idx = dataKelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === editKelasLama);
+      const idx = dataKelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === nameLama);
       if (idx !== -1) {
-        dataKelas[idx] = { nama_kelas: editKelasBaru.trim(), wali_kelas: chosenWali };
+        dataKelas[idx] = { nama_kelas: nameBaru, wali_kelas: chosenWali };
       } else {
-        dataKelas.push({ nama_kelas: editKelasBaru.trim(), wali_kelas: chosenWali });
+        dataKelas.push({ nama_kelas: nameBaru, wali_kelas: chosenWali });
       }
       setStorage("data_kelas", dataKelas);
+
+      // Update state immediately
+      setKelasList(prev => prev.map(k => k.nama_kelas === nameLama ? { nama_kelas: nameBaru, wali_kelas: chosenWali } : k));
 
       setEditKelasLama(null);
       setEditKelasBaru("");
       setEditWaliKelas("-");
+
+      // Call API
+      await callGas("editKelas", [nameLama, nameBaru, chosenWali]);
+      await callGas("simpanWaliKelas", [nameBaru, chosenWali]);
+
       await fetchKelasList();
     } catch (err: any) {
       alert("Terjadi kesalahan: " + err.toString());
