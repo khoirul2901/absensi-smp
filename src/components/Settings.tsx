@@ -1120,8 +1120,9 @@ function doPost(e) {
       case "hapusJadwalGuru": result = hapusRowByColumn("JadwalGuru", ["id_jadwal"], args[0]); break;
 
       case "getKelasSemua": result = getKelasSemua(); break;
-      case "tambahKelas": result = simpanKelas(args[0]); break;
-      case "editKelas": result = editKelas(args[0], args[1]); break;
+      case "tambahKelas": result = simpanKelas(args[0], args[1]); break;
+      case "editKelas": result = editKelas(args[0], args[1], args[2]); break;
+      case "simpanWaliKelas": result = simpanWaliKelas(args[0], args[1]); break;
       case "hapusKelas": result = hapusRowByColumn("Kelas", ["nama_kelas", "id_kelas"], args[0]); break;
 
       case "getHariLiburSemua": result = getSheetDataObj("HariLibur"); break;
@@ -1873,28 +1874,114 @@ function simpanJadwalGuru(param1, param2) {
 function getKelasSemua() {
   const res = getSheetDataObj("Kelas");
   const list = res.data || [];
-  return { success: true, data: list.map(item => item.nama_kelas || item.kelas || String(item)).filter(Boolean) };
+  const parsed = list.map(item => {
+    let name = "";
+    let wali = "-";
+    if (typeof item === "string") {
+      name = item;
+    } else {
+      name = item.nama_kelas || item.kelas || String(item || "");
+      wali = item.wali_kelas || item.wali || item.waliKelas || item.guru_wali || item["Wali Kelas"] || "-";
+    }
+    if (!wali || wali === "wali kelas" || wali === "wali_kelas") wali = "-";
+    return {
+      nama_kelas: String(name).trim(),
+      wali_kelas: String(wali).trim()
+    };
+  }).filter(item => Boolean(item.nama_kelas));
+  return { success: true, data: parsed };
 }
 
-function simpanKelas(namaKelasInput) {
-  const namaKelas = typeof namaKelasInput === "string" ? namaKelasInput : (namaKelasInput.nama_kelas || "");
+function simpanKelas(param1, param2) {
+  let namaKelas = "";
+  let waliKelas = "-";
+  if (typeof param1 === "object" && param1 !== null) {
+    namaKelas = param1.nama_kelas || param1.kelas || "";
+    waliKelas = param1.wali_kelas || param1.wali || param1.nama_guru || param1.waliKelas || "-";
+  } else {
+    namaKelas = String(param1 || "").trim();
+    waliKelas = String(param2 || "-").trim();
+  }
   if (!namaKelas) return { success: false, message: "Nama kelas tidak boleh kosong." };
+  if (!waliKelas || waliKelas === "wali kelas" || waliKelas === "wali_kelas") waliKelas = "-";
+
   const sheet = getOrCreateSheet("Kelas", ["id_kelas", "nama_kelas", "wali_kelas"]);
-  sheet.appendRow(["KLS-" + Date.now(), namaKelas, "Wali Kelas"]);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(h => String(h).trim().toLowerCase());
+  const namaColIdx = headers.indexOf("nama_kelas") !== -1 ? headers.indexOf("nama_kelas") : 1;
+  const waliColIdx = headers.indexOf("wali_kelas") !== -1 ? headers.indexOf("wali_kelas") : 2;
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][namaColIdx]).trim() === namaKelas || String(data[i][0]).trim() === namaKelas) {
+      if (waliKelas !== "-") {
+        sheet.getRange(i + 1, waliColIdx + 1).setValue(waliKelas);
+      }
+      return { success: true, message: "Kelas dan Wali Kelas berhasil diperbarui!" };
+    }
+  }
+
+  sheet.appendRow(["KLS-" + Date.now(), namaKelas, waliKelas]);
   return { success: true, message: "Kelas berhasil ditambahkan!" };
 }
 
-function editKelas(kelasLama, kelasBaru) {
+function editKelas(kelasLama, kelasBaru, waliKelasBaru) {
+  let kLama = kelasLama;
+  let kBaru = kelasBaru;
+  let wBaru = waliKelasBaru;
+  if (typeof kelasLama === "object" && kelasLama !== null) {
+    kLama = kelasLama.kelasLama || kelasLama.nama_kelas || "";
+    kBaru = kelasLama.kelasBaru || kelasLama.nama_kelas || kLama;
+    wBaru = kelasLama.wali_kelas || kelasLama.wali || kelasLama.nama_guru || "-";
+  }
+  if (!wBaru || wBaru === "wali kelas" || wBaru === "wali_kelas") wBaru = "-";
+
   const sheet = findSheetByName(["Kelas"]);
   if (!sheet) return { success: false, message: "Sheet Kelas tidak ditemukan." };
   const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(h => String(h).trim().toLowerCase());
+  const namaColIdx = headers.indexOf("nama_kelas") !== -1 ? headers.indexOf("nama_kelas") : 1;
+  const waliColIdx = headers.indexOf("wali_kelas") !== -1 ? headers.indexOf("wali_kelas") : 2;
+
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][1]) === String(kelasLama) || String(data[i][0]) === String(kelasLama)) {
-      sheet.getRange(i + 1, 2).setValue(kelasBaru);
-      return { success: true, message: "Kelas berhasil diperbarui!" };
+    if (String(data[i][namaColIdx]).trim() === String(kLama).trim() || String(data[i][0]).trim() === String(kLama).trim()) {
+      sheet.getRange(i + 1, namaColIdx + 1).setValue(kBaru);
+      if (wBaru && wBaru !== "-") {
+        sheet.getRange(i + 1, waliColIdx + 1).setValue(wBaru);
+      }
+      return { success: true, message: "Kelas & Wali Kelas berhasil diperbarui!" };
     }
   }
   return { success: false, message: "Kelas lama tidak ditemukan." };
+}
+
+function simpanWaliKelas(param1, param2) {
+  let namaKelas = "";
+  let waliKelas = "-";
+  if (typeof param1 === "object" && param1 !== null) {
+    namaKelas = param1.nama_kelas || param1.kelas || "";
+    waliKelas = param1.wali_kelas || param1.wali || param1.nama_guru || param1.waliKelas || "-";
+  } else {
+    namaKelas = String(param1 || "").trim();
+    waliKelas = String(param2 || "-").trim();
+  }
+  if (!namaKelas) return { success: false, message: "Nama kelas tidak boleh kosong." };
+  if (!waliKelas || waliKelas === "wali kelas" || waliKelas === "wali_kelas") waliKelas = "-";
+
+  const sheet = getOrCreateSheet("Kelas", ["id_kelas", "nama_kelas", "wali_kelas"]);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(h => String(h).trim().toLowerCase());
+  const namaColIdx = headers.indexOf("nama_kelas") !== -1 ? headers.indexOf("nama_kelas") : 1;
+  const waliColIdx = headers.indexOf("wali_kelas") !== -1 ? headers.indexOf("wali_kelas") : 2;
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][namaColIdx]).trim() === namaKelas || String(data[i][0]).trim() === namaKelas) {
+      sheet.getRange(i + 1, waliColIdx + 1).setValue(waliKelas);
+      return { success: true, message: "Wali Kelas berhasil diperbarui di Google Sheets!" };
+    }
+  }
+
+  sheet.appendRow(["KLS-" + Date.now(), namaKelas, waliKelas]);
+  return { success: true, message: "Kelas & Wali Kelas berhasil ditambahkan!" };
 }
 
 function simpanHariLibur(param1, param2) {
