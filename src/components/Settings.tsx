@@ -731,21 +731,13 @@ export default function Settings() {
                     <tr key={idx} className="hover:bg-slate-50/50">
                       <td className="py-2.5 px-4 font-bold text-gray-800">{kls.nama_kelas}</td>
                       <td className="py-2.5 px-4 font-semibold text-indigo-700">
-                        <select
-                          value={kls.wali_kelas || "-"}
-                          onChange={(e) => handleQuickWaliKelasChange(kls.nama_kelas, e.target.value)}
-                          className="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold text-gray-800 focus:outline-none focus:border-indigo-500"
-                        >
-                          <option value="-">-- Pilih Wali Kelas --</option>
-                          {guruList.map((g, i) => {
-                            const name = g.nama_guru || g.nama || g.name || (typeof g === "string" ? g : "");
-                            return (
-                              <option key={i} value={name}>
-                                {name}
-                              </option>
-                            );
-                          })}
-                        </select>
+                        {kls.wali_kelas && kls.wali_kelas !== "-" ? (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                            {kls.wali_kelas}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 font-normal italic">-</span>
+                        )}
                       </td>
                       <td className="py-2.5 px-4 text-right">
                         <div className="flex justify-end gap-1">
