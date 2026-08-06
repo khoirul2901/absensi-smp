@@ -292,6 +292,8 @@ export default function Settings() {
       const allStored = [...storedBefore, ...storedAfter];
       const parsedMap = new Map<string, string>(); // nama_kelas -> wali_kelas
 
+      const isInvalidWali = (w: string) => !w || w === "-" || w.toLowerCase() === "wali kelas" || w.toLowerCase() === "wali_kelas" || w.toLowerCase() === "wali";
+
       // 1. Fill from all stored objects/strings
       for (const item of allStored) {
         if (typeof item === "string") {
@@ -299,10 +301,12 @@ export default function Settings() {
         } else if (typeof item === "object" && item) {
           const name = String(item.nama_kelas || item.kelas || "").trim();
           const wali = String(item.wali_kelas || item.wali || item.waliKelas || item["Wali Kelas"] || "-").trim();
-          if (name) {
-            if (!parsedMap.has(name) || (parsedMap.get(name) === "-" && wali !== "-")) {
+          if (name && !isInvalidWali(wali)) {
+            if (!parsedMap.has(name) || isInvalidWali(parsedMap.get(name) || "")) {
               parsedMap.set(name, wali);
             }
+          } else if (name && !parsedMap.has(name)) {
+            parsedMap.set(name, "-");
           }
         }
       }
@@ -313,7 +317,7 @@ export default function Settings() {
         const waliFromApi = String(typeof item === "object" && item ? (item.wali_kelas || item.wali || item.waliKelas || item.guru_wali || item["Wali Kelas"] || "-") : "-").trim();
         if (name) {
           const existingWali = parsedMap.get(name) || "-";
-          const finalWali = (waliFromApi && waliFromApi !== "-") ? waliFromApi : existingWali;
+          const finalWali = !isInvalidWali(waliFromApi) ? waliFromApi : existingWali;
           parsedMap.set(name, finalWali);
         }
       }
@@ -457,8 +461,16 @@ export default function Settings() {
       setNewWaliKelas("-");
 
       // Call API
-      await callGas("tambahKelas", [name, chosenWali]);
-      await callGas("simpanWaliKelas", [name, chosenWali]);
+      const payloadObj = {
+        nama_kelas: name,
+        kelas: name,
+        wali_kelas: chosenWali,
+        wali: chosenWali,
+        waliKelas: chosenWali,
+        nama_guru: chosenWali
+      };
+      await callGas("tambahKelas", [name, chosenWali, payloadObj]);
+      await callGas("simpanWaliKelas", [name, chosenWali, payloadObj]);
 
       await fetchKelasList();
     } catch (err: any) {
@@ -497,8 +509,18 @@ export default function Settings() {
       setEditWaliKelas("-");
 
       // Call API
-      await callGas("editKelas", [nameLama, nameBaru, chosenWali]);
-      await callGas("simpanWaliKelas", [nameBaru, chosenWali]);
+      const payloadObj = {
+        kelasLama: nameLama,
+        kelasBaru: nameBaru,
+        nama_kelas: nameBaru,
+        kelas: nameBaru,
+        wali_kelas: chosenWali,
+        wali: chosenWali,
+        waliKelas: chosenWali,
+        nama_guru: chosenWali
+      };
+      await callGas("editKelas", [nameLama, nameBaru, chosenWali, payloadObj]);
+      await callGas("simpanWaliKelas", [nameBaru, chosenWali, payloadObj]);
 
       await fetchKelasList();
     } catch (err: any) {
@@ -532,8 +554,16 @@ export default function Settings() {
       setStorage("data_kelas", dataKelas);
 
       // Call GAS APIs
-      await callGas("simpanWaliKelas", [namaKelas, chosenWali]);
-      await callGas("editKelas", [namaKelas, namaKelas, chosenWali]);
+      const payloadObj = {
+        nama_kelas: namaKelas,
+        kelas: namaKelas,
+        wali_kelas: chosenWali,
+        wali: chosenWali,
+        waliKelas: chosenWali,
+        nama_guru: chosenWali
+      };
+      await callGas("simpanWaliKelas", [namaKelas, chosenWali, payloadObj]);
+      await callGas("editKelas", [namaKelas, namaKelas, chosenWali, payloadObj]);
     } catch (e: any) {
       console.error("Error updating wali kelas:", e);
     }
