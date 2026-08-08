@@ -21,7 +21,7 @@ import {
   Calendar,
   ScanLine
 } from "lucide-react";
-import { callGas, isUsingMock, getGasUrl, getStorageKey } from "./lib/gasApi";
+import { callGas, isUsingMock, getGasUrl, getStorageKey, extractArrayData, getStorage } from "./lib/gasApi";
 import { User as UserType } from "./types";
 
 // Component imports
@@ -137,8 +137,11 @@ export default function App() {
         callGas("getKelasSemua"),
         callGas("getDataMaster", ["Guru"])
       ]).then(([resKelas, resGuru]) => {
-        const kelasData = Array.isArray(resKelas) ? resKelas : (resKelas?.data || []);
-        const guruData = Array.isArray(resGuru) ? resGuru : (resGuru?.data || []);
+        let kelasData = extractArrayData(resKelas);
+        if (!kelasData || kelasData.length === 0) {
+          kelasData = getStorage("data_kelas") || [];
+        }
+        const guruData = extractArrayData(resGuru);
         
         const currentGuru = guruData.find((g: any) => 
           g.id_guru === session.target_id || 
@@ -150,14 +153,23 @@ export default function App() {
         const targetIdLoggedIn = currentGuru?.id_guru || session.target_id || "";
         
         const matchedWali = kelasData.some((k: any) => {
-          const wk = typeof k === 'object' ? (k.wali_kelas || "") : "";
+          const wk = typeof k === 'object' ? (k.wali_kelas || k.wali || "") : "";
           if (!wk || wk === "-") return false;
           return wk.toLowerCase().includes(namaGuruLoggedIn.toLowerCase()) || 
                  (targetIdLoggedIn && wk.toLowerCase().includes(targetIdLoggedIn.toLowerCase()));
         });
         
         setIsWaliKelas(matchedWali);
-      }).catch(err => console.error("Error checking wali kelas:", err));
+      }).catch(err => {
+        console.error("Error checking wali kelas:", err);
+        const storedKelas = getStorage("data_kelas") || [];
+        const matchedWali = storedKelas.some((k: any) => {
+          const wk = typeof k === 'object' ? (k.wali_kelas || k.wali || "") : "";
+          if (!wk || wk === "-") return false;
+          return wk.toLowerCase().includes((session.username || "").toLowerCase());
+        });
+        setIsWaliKelas(matchedWali);
+      });
     } else {
       setIsWaliKelas(false);
     }
