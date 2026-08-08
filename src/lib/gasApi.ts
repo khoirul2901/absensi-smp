@@ -593,7 +593,16 @@ export function callMock(action: string, args: any[] = []): any {
               const activeSlot = jamSlots.find((j: any) => jam >= j.jam_mulai && jam <= j.jam_selesai) || jamSlots[0];
               const matchSch = teacherSchedules.find((s: any) => s.jam_ke === (activeSlot?.jam_ke || 1)) || teacherSchedules[0];
               const jamMulai = matchSch.jam_mulai || activeSlot?.jam_mulai || "07:00";
-              const statusMengajar = jam <= jamMulai ? "Hadir Tepat Waktu" : "Terlambat Masuk Kelas";
+              let statusMengajar = "Hadir Tepat Waktu";
+              if (jamMulai && jamMulai !== "-") {
+                const [hM, mM] = jamMulai.split(":").map(Number);
+                const [hN, mN] = jam.split(":").map(Number);
+                if (!isNaN(hM) && !isNaN(mM) && !isNaN(hN) && !isNaN(mN)) {
+                  if (hN * 60 + mN > hM * 60 + mM + 15) {
+                    statusMengajar = "Terlambat Masuk Kelas";
+                  }
+                }
+              }
               const absLogs = getStorage("absensi_mengajar_guru") || [];
               const existingIdx = absLogs.findIndex((a: any) => a.tanggal === tgl && a.id_guru === idTarget && a.jam_ke === Number(matchSch.jam_ke));
               const logItem = {
