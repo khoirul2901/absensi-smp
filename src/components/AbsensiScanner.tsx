@@ -49,7 +49,7 @@ import {
 } from "lucide-react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { callGas, getStorageKey, setStorage, getStorage } from "../lib/gasApi";
-import { LiveAbsen, ScheduleLessonItem, AbsensiMengajarItem } from "../types";
+import { LiveAbsen, ScheduleLessonItem, AbsensiMengajarItem, JamPelajaranItem } from "../types";
 
 const HARI_LIST = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
 
@@ -134,6 +134,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
   const [lessonSchedules, setLessonSchedules] = useState<ScheduleLessonItem[]>([]);
   const [absensiMengajarLogs, setAbsensiMengajarLogs] = useState<AbsensiMengajarItem[]>([]);
   const [teachersList, setTeachersList] = useState<any[]>([]);
+  const [jamSlots, setJamSlots] = useState<JamPelajaranItem[]>([]);
   const [isLoadingMengajar, setIsLoadingMengajar] = useState(false);
 
   const getTodayHari = () => {
@@ -353,14 +354,23 @@ export default function AbsensiScanner({ session }: { session?: any }) {
     }
   };
 
+  // Helper to accurately get start & end times for a specific period (jam_ke)
+  const getJamSlotTime = (jamKeNum: number, fallbackMulai?: string, fallbackSelesai?: string) => {
+    const slot = jamSlots.find(j => Number(j.jam_ke) === Number(jamKeNum));
+    const mulai = slot ? slot.jam_mulai : (fallbackMulai && fallbackMulai !== "-" ? fallbackMulai : "-");
+    const selesai = slot ? slot.jam_selesai : (fallbackSelesai && fallbackSelesai !== "-" ? fallbackSelesai : "-");
+    return { mulai, selesai };
+  };
+
   // Load Presensi Mengajar Data (Schedules & Logs)
   const fetchMengajarData = async () => {
     setIsLoadingMengajar(true);
     try {
-      const [resSchedules, resLogs, resTeachers] = await Promise.all([
+      const [resSchedules, resLogs, resTeachers, resJam] = await Promise.all([
         callGas("getJadwalPelajaranSemua"),
         callGas("getAbsensiMengajarGuru"),
-        callGas("getDataMaster", ["Guru"])
+        callGas("getDataMaster", ["Guru"]),
+        callGas("getJamPelajaran")
       ]);
 
       const scheds = Array.isArray(resSchedules)
@@ -377,6 +387,11 @@ export default function AbsensiScanner({ session }: { session?: any }) {
         ? resTeachers
         : (resTeachers && Array.isArray(resTeachers.data) ? resTeachers.data : (resTeachers?.data || []));
       setTeachersList(teachers);
+
+      const jams = Array.isArray(resJam)
+        ? resJam
+        : (resJam && Array.isArray(resJam.data) ? resJam.data : (resJam?.data || []));
+      setJamSlots(jams);
     } catch (err) {
       console.error("Gagal memuat data presensi mengajar:", err);
     } finally {
@@ -398,6 +413,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
     setSelectedScheduleForAbsen(sched);
     const nowTime = new Date().toTimeString().slice(0, 5);
     const todayStr = filterTanggal || new Date().toISOString().split("T")[0];
+    const { mulai: slotMulai, selesai: slotSelesai } = getJamSlotTime(sched.jam_ke, sched.jam_mulai, sched.jam_selesai);
 
     if (existingLog) {
       setMengajarForm({
@@ -406,8 +422,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
         kelas: existingLog.kelas || sched.kelas || "",
         mapel: existingLog.mapel || sched.mapel || "",
         jam_ke: Number(existingLog.jam_ke || sched.jam_ke || 1),
-        jam_mulai_jadwal: existingLog.jam_mulai_jadwal || sched.jam_mulai || "-",
-        jam_selesai_jadwal: existingLog.jam_selesai_jadwal || sched.jam_selesai || "-",
+        jam_mulai_jadwal: (existingLog.jam_mulai_jadwal && existingLog.jam_mulai_jadwal !== "-") ? existingLog.jam_mulai_jadwal : slotMulai,
+        jam_selesai_jadwal: (existingLog.jam_selesai_jadwal && existingLog.jam_selesai_jadwal !== "-") ? existingLog.jam_selesai_jadwal : slotSelesai,
         hari: existingLog.hari || sched.hari || selectedDay,
         tanggal: existingLog.tanggal || todayStr,
         waktu_absen: existingLog.waktu_absen || nowTime,
@@ -416,8 +432,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
       });
     } else {
       let autoStatus = "Hadir Tepat Waktu";
-      if (sched.jam_mulai && sched.jam_mulai !== "-") {
-        if (nowTime > sched.jam_mulai) {
+      if (slotMulai && slotMulai !== "-") {
+        if (nowTime > slotMulai) {
           autoStatus = "Terlambat Masuk Kelas";
         }
       }
@@ -428,8 +444,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
         kelas: sched.kelas || "",
         mapel: sched.mapel || "",
         jam_ke: Number(sched.jam_ke || 1),
-        jam_mulai_jadwal: sched.jam_mulai || "-",
-        jam_selesai_jadwal: sched.jam_selesai || "-",
+        jam_mulai_jadwal: slotMulai,
+        jam_selesai_jadwal: slotSelesai,
         hari: sched.hari || selectedDay,
         tanggal: todayStr,
         waktu_absen: nowTime,
@@ -460,19 +476,26 @@ export default function AbsensiScanner({ session }: { session?: any }) {
       let savedCount = 0;
 
       if (matchingSchedules.length > 1) {
-        // Automatically save attendance for ALL hours in the multi-jam block (1x Scan)
+        // Automatically save attendance for ALL hours in the multi-jam block (1x Scan) with precise period times
         for (const schedItem of matchingSchedules) {
+          const { mulai: slotMulai, selesai: slotSelesai } = getJamSlotTime(schedItem.jam_ke, schedItem.jam_mulai, schedItem.jam_selesai);
+
           const itemPayload = {
             ...mengajarForm,
             jam_ke: Number(schedItem.jam_ke),
-            jam_mulai_jadwal: schedItem.jam_mulai || mengajarForm.jam_mulai_jadwal,
-            jam_selesai_jadwal: schedItem.jam_selesai || mengajarForm.jam_selesai_jadwal
+            jam_mulai_jadwal: slotMulai !== "-" ? slotMulai : mengajarForm.jam_mulai_jadwal,
+            jam_selesai_jadwal: slotSelesai !== "-" ? slotSelesai : mengajarForm.jam_selesai_jadwal
           };
           const res = await callGas("simpanAbsensiMengajarGuru", [itemPayload]);
           if (res && res.success !== false) savedCount++;
         }
       } else {
-        const payload = { ...mengajarForm };
+        const { mulai: slotMulai, selesai: slotSelesai } = getJamSlotTime(mengajarForm.jam_ke, mengajarForm.jam_mulai_jadwal, mengajarForm.jam_selesai_jadwal);
+        const payload = {
+          ...mengajarForm,
+          jam_mulai_jadwal: slotMulai !== "-" ? slotMulai : mengajarForm.jam_mulai_jadwal,
+          jam_selesai_jadwal: slotSelesai !== "-" ? slotSelesai : mengajarForm.jam_selesai_jadwal
+        };
         const res = await callGas("simpanAbsensiMengajarGuru", [payload]);
         if (res && res.success !== false) savedCount = 1;
       }
@@ -2125,6 +2148,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                           );
                         });
 
+                        const { mulai: schedMulai, selesai: schedSelesai } = getJamSlotTime(sched.jam_ke, sched.jam_mulai, sched.jam_selesai);
+
                         return (
                           <div
                             key={sched.id_jadwal || `${sched.kelas}_${sched.jam_ke}_${sched.hari}`}
@@ -2137,7 +2162,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                             <div className="flex justify-between items-start gap-2">
                               <div className="space-y-0.5">
                                 <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
-                                  Jam Ke-{sched.jam_ke} • {sched.jam_mulai || "-"} - {sched.jam_selesai || "-"}
+                                  Jam Ke-{sched.jam_ke} • {schedMulai} - {schedSelesai}
                                 </span>
                                 <h4 className="font-black text-sm text-gray-900">{sched.mapel}</h4>
                                 <p className="text-xs font-bold text-emerald-700">{sched.kelas}</p>
