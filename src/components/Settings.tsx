@@ -284,52 +284,50 @@ export default function Settings() {
 
   const fetchKelasList = async () => {
     try {
-      const storedBefore = getStorage("data_kelas") || [];
       const kelasRes = await callGas("getKelasSemua");
       const kList = extractArrayData(kelasRes);
-      const storedAfter = getStorage("data_kelas") || [];
+      const storedLocal = getStorage("data_kelas") || [];
 
-      const allStored = [...storedBefore, ...storedAfter];
-      const parsedMap = new Map<string, string>(); // nama_kelas -> wali_kelas
-
+      const parsedMap = new Map<string, string>();
       const isInvalidWali = (w: string) => !w || w === "-" || w.toLowerCase() === "wali kelas" || w.toLowerCase() === "wali_kelas" || w.toLowerCase() === "wali";
 
-      // 1. Fill from all stored objects/strings
-      for (const item of allStored) {
-        if (typeof item === "string") {
-          if (!parsedMap.has(item)) parsedMap.set(item, "-");
-        } else if (typeof item === "object" && item) {
-          const name = String(item.nama_kelas || item.kelas || "").trim();
-          const wali = String(item.wali_kelas || item.wali || item.waliKelas || item["Wali Kelas"] || "-").trim();
-          if (name && !isInvalidWali(wali)) {
-            if (!parsedMap.has(name) || isInvalidWali(parsedMap.get(name) || "")) {
-              parsedMap.set(name, wali);
-            }
-          } else if (name && !parsedMap.has(name)) {
-            parsedMap.set(name, "-");
+      if (Array.isArray(kList) && kList.length > 0) {
+        for (const item of kList) {
+          const name = String(typeof item === "string" ? item : (item.nama_kelas || item.kelas || "")).trim();
+          const waliFromApi = String(typeof item === "object" && item ? (item.wali_kelas || item.wali || item.waliKelas || item.guru_wali || item["Wali Kelas"] || "-") : "-").trim();
+          if (name) {
+            parsedMap.set(name, !isInvalidWali(waliFromApi) ? waliFromApi : "-");
           }
         }
-      }
 
-      // 2. Merge API kList
-      for (const item of kList) {
-        const name = String(typeof item === "string" ? item : (item.nama_kelas || item.kelas || "")).trim();
-        const waliFromApi = String(typeof item === "object" && item ? (item.wali_kelas || item.wali || item.waliKelas || item.guru_wali || item["Wali Kelas"] || "-") : "-").trim();
-        if (name) {
-          const existingWali = parsedMap.get(name) || "-";
-          const finalWali = !isInvalidWali(waliFromApi) ? waliFromApi : existingWali;
-          parsedMap.set(name, finalWali);
+        for (const item of storedLocal) {
+          const name = String(typeof item === "string" ? item : (item.nama_kelas || item.kelas || "")).trim();
+          const waliLocal = String(typeof item === "object" && item ? (item.wali_kelas || item.wali || item.waliKelas || "-") : "-").trim();
+          if (name && parsedMap.has(name) && !isInvalidWali(waliLocal)) {
+            if (parsedMap.get(name) === "-") {
+              parsedMap.set(name, waliLocal);
+            }
+          }
         }
+
+        const parsed = Array.from(parsedMap.entries()).map(([nama_kelas, wali_kelas]) => ({
+          nama_kelas,
+          wali_kelas
+        }));
+
+        setStorage("data_kelas", parsed);
+        setKelasList(parsed);
+        return parsed;
+      } else if (Array.isArray(storedLocal) && storedLocal.length > 0) {
+        const parsed = storedLocal.map((item: any) => ({
+          nama_kelas: String(typeof item === "string" ? item : (item.nama_kelas || item.kelas || "")).trim(),
+          wali_kelas: String(typeof item === "object" && item ? (item.wali_kelas || item.wali || item.waliKelas || "-") : "-").trim()
+        })).filter(x => Boolean(x.nama_kelas));
+        setKelasList(parsed);
+        return parsed;
       }
-
-      const parsed = Array.from(parsedMap.entries()).map(([nama_kelas, wali_kelas]) => ({
-        nama_kelas,
-        wali_kelas
-      }));
-
-      setStorage("data_kelas", parsed);
-      setKelasList(parsed);
-      return parsed;
+      setKelasList([]);
+      return [];
     } catch (err) {
       console.error("Gagal memuat kelas:", err);
       return [];
@@ -472,6 +470,8 @@ export default function Settings() {
       await callGas("tambahKelas", [name, chosenWali, payloadObj]);
       await callGas("simpanWaliKelas", [name, chosenWali, payloadObj]);
 
+      alert(`Kelas "${name}" dengan Wali Kelas "${chosenWali}" berhasil ditambahkan ke database!`);
+
       await fetchKelasList();
     } catch (err: any) {
       alert("Terjadi kesalahan: " + err.toString());
@@ -522,6 +522,8 @@ export default function Settings() {
       await callGas("editKelas", [nameLama, nameBaru, chosenWali, payloadObj]);
       await callGas("simpanWaliKelas", [nameBaru, chosenWali, payloadObj]);
 
+      alert(`Kelas "${nameBaru}" dan Wali Kelas "${chosenWali}" berhasil diperbarui di database!`);
+
       await fetchKelasList();
     } catch (err: any) {
       alert("Terjadi kesalahan: " + err.toString());
@@ -530,9 +532,10 @@ export default function Settings() {
     }
   };
 
-  // Quick Wali Kelas update
+  // Submit / Save Wali Kelas Explicitly
   const handleQuickWaliKelasChange = async (namaKelas: string, waliKelasBaru: string) => {
     try {
+      setLoading(true);
       const chosenWali = waliKelasBaru || "-";
       
       // Update UI state immediately
@@ -562,24 +565,50 @@ export default function Settings() {
         waliKelas: chosenWali,
         nama_guru: chosenWali
       };
-      await callGas("simpanWaliKelas", [namaKelas, chosenWali, payloadObj]);
+      const res = await callGas("simpanWaliKelas", [namaKelas, chosenWali, payloadObj]);
       await callGas("editKelas", [namaKelas, namaKelas, chosenWali, payloadObj]);
+
+      alert(`Wali Kelas "${chosenWali}" untuk kelas ${namaKelas} berhasil disimpan ke database!`);
+
+      await fetchKelasList();
     } catch (e: any) {
-      console.error("Error updating wali kelas:", e);
+      alert("Gagal menyimpan wali kelas: " + e.toString());
+    } finally {
+      setLoading(false);
     }
   };
 
   // Delete Class Name
   const handleDeleteClass = async (name: string) => {
-    if (!confirm(`Hapus kelas "${name}"?`)) return;
+    if (!confirm(`Apakah Anda yakin ingin menghapus kelas "${name}" dan data wali kelasnya?`)) return;
     try {
       setLoading(true);
-      const res = await callGas("hapusKelas", [name]);
-      if (res && res.success) {
-        await fetchKelasList();
-      } else {
-        alert(res?.message || "Gagal menghapus kelas");
+      const nameClean = name.trim();
+
+      // Delete locally FIRST
+      let dataKelas = getStorage("data_kelas");
+      if (Array.isArray(dataKelas)) {
+        dataKelas = dataKelas.filter((k: any) => {
+          const kName = typeof k === "string" ? k : (k.nama_kelas || k.kelas || "");
+          return String(kName).trim() !== nameClean;
+        });
+        setStorage("data_kelas", dataKelas);
       }
+
+      // Update state immediately
+      setKelasList(prev => prev.filter(k => k.nama_kelas.trim() !== nameClean));
+
+      // Call GAS API
+      const payloadObj = { nama_kelas: nameClean, kelas: nameClean, id_kelas: nameClean };
+      const res = await callGas("hapusKelas", [nameClean, payloadObj]);
+
+      if (res && res.success !== false) {
+        alert(`Kelas "${nameClean}" berhasil dihapus dari database!`);
+      } else {
+        alert(res?.message || `Kelas "${nameClean}" berhasil dihapus!`);
+      }
+
+      await fetchKelasList();
     } catch (err: any) {
       alert("Error: " + err.toString());
     } finally {
@@ -848,13 +877,35 @@ export default function Settings() {
                     <tr key={idx} className="hover:bg-slate-50/50">
                       <td className="py-2.5 px-4 font-bold text-gray-800">{kls.nama_kelas}</td>
                       <td className="py-2.5 px-4 font-semibold text-indigo-700">
-                        {kls.wali_kelas && kls.wali_kelas !== "-" ? (
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
-                            {kls.wali_kelas}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400 font-normal italic">-</span>
-                        )}
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            value={kls.wali_kelas && kls.wali_kelas !== "-" ? kls.wali_kelas : "-"}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setKelasList(prev => prev.map(k => k.nama_kelas === kls.nama_kelas ? { ...k, wali_kelas: val } : k));
+                            }}
+                            className="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold text-gray-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 max-w-[150px] sm:max-w-[200px]"
+                          >
+                            <option value="-">-- Pilih Wali Kelas --</option>
+                            {guruList.map((g, i) => {
+                              const name = g.nama_guru || g.nama || g.name || (typeof g === "string" ? g : "");
+                              return (
+                                <option key={i} value={name}>
+                                  {name}
+                                </option>
+                              );
+                            })}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => handleQuickWaliKelasChange(kls.nama_kelas, kls.wali_kelas || "-")}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white p-1 px-2 rounded-lg text-[11px] font-bold flex items-center gap-1 shadow-sm shrink-0"
+                            title="Simpan Wali Kelas ke Database"
+                          >
+                            <Save className="w-3 h-3" />
+                            <span>Simpan</span>
+                          </button>
+                        </div>
                       </td>
                       <td className="py-2.5 px-4 text-right">
                         <div className="flex justify-end gap-1">
@@ -2086,12 +2137,24 @@ function hapusRowByColumn(sheetPrimaryName, possibleColHeaders, value) {
   if (!sheet) return { success: true, message: "Sheet tidak ditemukan." };
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return { success: true, message: "Data kosong." };
+
+  let targetVal = value;
+  if (typeof value === "object" && value !== null) {
+    targetVal = value.nama_kelas || value.kelas || value.id_kelas || value.id || value.username || "";
+  }
+  targetVal = String(targetVal || "").trim();
+  if (!targetVal) return { success: false, message: "Target hapus tidak valid." };
+
   const headers = data[0].map(h => String(h).trim());
   const colIdx = findHeaderIndex(headers, possibleColHeaders);
-  if (colIdx === -1) return { success: false, message: "Kolom kunci tidak ditemukan." };
   let deletedCount = 0;
   for (let i = data.length - 1; i >= 1; i--) {
-    if (String(data[i][colIdx]) === String(value)) { sheet.deleteRow(i + 1); deletedCount++; }
+    const valInCol = colIdx !== -1 ? String(data[i][colIdx] || "").trim() : "";
+    const valInFirst = String(data[i][0] || "").trim();
+    if (valInCol === targetVal || valInFirst === targetVal) {
+      sheet.deleteRow(i + 1);
+      deletedCount++;
+    }
   }
   return { success: true, message: deletedCount + " baris berhasil dihapus!" };
 }`;
