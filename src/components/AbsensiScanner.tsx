@@ -203,6 +203,17 @@ export default function AbsensiScanner({ session }: { session?: any }) {
     }
   }, [isGuru]);
 
+  useEffect(() => {
+    if (filterTanggal) {
+      const d = new Date(filterTanggal + "T00:00:00");
+      if (!isNaN(d.getTime())) {
+        const dayIdx = d.getDay();
+        const dayName = HARI_MAP_INDEX[dayIdx] || "Senin";
+        setSelectedDay(dayName);
+      }
+    }
+  }, [filterTanggal]);
+
   // Audio Beep generator
   const playBeep = (isSuccess = true) => {
     if (audioMuted) return;
@@ -597,7 +608,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
         window.removeEventListener("click", handleGlobalClick);
       };
     }
-  }, [scanMethod, autoFocusLock]);
+  }, [scanMethod, autoFocusLock, attendanceType]);
 
   const triggerFlash = (type: "success" | "error") => {
     setScreenFlash(type);
@@ -668,48 +679,137 @@ export default function AbsensiScanner({ session }: { session?: any }) {
       ...prev.slice(0, 7) // keep 8 items
     ]);
 
+    // Smart auto-detect: Check if scanned code is a Schedule ID or matches teaching schedule
+    let activeAttendanceType = attendanceType;
+    const cleanCodeStr = code.trim();
+    const codeLowerStr = cleanCodeStr.toLowerCase();
+    const codeNoPrefix = codeLowerStr.replace(/^(guru|teacher|jadwal|id|nip)[:\-\s]+/i, '').trim();
+
+    const isDirectScheduleScan = codeLowerStr.startsWith("jadwal-") || 
+      lessonSchedules.some(s => String(s.id_jadwal || "").trim().toLowerCase() === codeLowerStr || String(s.id_jadwal || "").trim().toLowerCase() === codeNoPrefix);
+
+    if (activeAttendanceType === "harian" && isDirectScheduleScan) {
+      activeAttendanceType = "mengajar";
+      setAttendanceType("mengajar");
+    }
+
     setScanStatus({ 
       type: "info", 
       msg: `[Scan Cepat] Memproses ID: ${code}...`,
-      details: attendanceType === "mengajar" ? `Mode: Presensi Mengajar • Hari: ${selectedDay}` : `Mode: ${activeMode} • Speed: ${fastMode.toUpperCase()}`
+      details: activeAttendanceType === "mengajar" ? `Mode: Presensi Mengajar • Hari: ${selectedDay}` : `Mode: ${activeMode} • Speed: ${fastMode.toUpperCase()}`
     });
 
     // Check if handling Presensi Mengajar Guru
-    if (attendanceType === "mengajar") {
+    if (activeAttendanceType === "mengajar") {
       try {
-        const codeLower = code.trim().toLowerCase();
-        const matchedTeacher = teachersList.find(
-          t => String(t.id_guru || "").toLowerCase() === codeLower ||
-               String(t.nip || "").toLowerCase() === codeLower ||
-               String(t.nama_guru || "").toLowerCase() === codeLower
+        const cleanCode = code.trim();
+        const codeLower = cleanCode.toLowerCase();
+        const codeWithoutPrefix = codeLower.replace(/^(guru|teacher|jadwal|id|nip)[:\-\s]+/i, '').trim();
+
+        const normalizeName = (str: string) => {
+          return String(str || "")
+            .toLowerCase()
+            .replace(/[,.]/g, " ")
+            .replace(/\b(s|m)\s*\.?\s*(pd|kom|ag|is|si|se|mm|hum|st|pt|tp|sos|ip|ed|pdi|mat|bio|fis)\b/gi, "")
+            .replace(/\s+/g, " ")
+            .trim();
+        };
+
+        const isNameMatch = (n1: string, n2: string) => {
+          if (!n1 || !n2) return false;
+          const s1 = String(n1).trim().toLowerCase();
+          const s2 = String(n2).trim().toLowerCase();
+          if (!s1 || !s2) return false;
+          if (s1 === s2) return true;
+          if (s1.includes(s2) || s2.includes(s1)) return true;
+          
+          const norm1 = normalizeName(n1);
+          const norm2 = normalizeName(n2);
+          if (norm1 && norm2 && (norm1 === norm2 || norm1.includes(norm2) || norm2.includes(norm1))) return true;
+          return false;
+        };
+
+        // Find teacher in teachersList
+        const matchedTeacher = teachersList.find(t => {
+          const tId = String(t.id_guru || t.id || "").trim().toLowerCase();
+          const tNip = String(t.nip || "").trim().toLowerCase();
+          return (
+            (tId && (tId === codeLower || tId === codeWithoutPrefix)) ||
+            (tNip && (tNip === codeLower || tNip === codeWithoutPrefix)) ||
+            isNameMatch(t.nama_guru, cleanCode) ||
+            isNameMatch(t.nama_guru, codeWithoutPrefix)
+          );
+        });
+
+        const guruId = matchedTeacher ? (matchedTeacher.id_guru || matchedTeacher.id || cleanCode) : cleanCode;
+        const guruNama = matchedTeacher ? matchedTeacher.nama_guru : cleanCode;
+
+        // Schedules for target day
+        const daySchedules = lessonSchedules.filter(
+          s => (s.hari || "").trim().toLowerCase() === selectedDay.trim().toLowerCase()
         );
 
-        const guruId = matchedTeacher ? matchedTeacher.id_guru : code;
-        const guruNama = matchedTeacher ? matchedTeacher.nama_guru : code;
-
-        // Find schedules for this teacher on selectedDay
-        const teacherSchedules = lessonSchedules.filter(
-          s => (s.hari || "").toLowerCase() === selectedDay.toLowerCase() &&
-               (s.id_guru === guruId || s.nama_guru.toLowerCase().includes(guruNama.toLowerCase()))
+        // 1. Direct Schedule ID match
+        const directSchedMatch = daySchedules.filter(
+          s => String(s.id_jadwal || "").trim().toLowerCase() === codeLower ||
+               String(s.id_jadwal || "").trim().toLowerCase() === codeWithoutPrefix
         );
 
-        if (teacherSchedules.length === 0) {
-          const directSched = lessonSchedules.find(s => s.id_jadwal === code && (s.hari || "").toLowerCase() === selectedDay.toLowerCase());
-          if (directSched) {
-            openModalForSchedule(directSched);
+        // 2. Teacher Schedule match on target day
+        const teacherSchedMatch = daySchedules.filter(s => {
+          const sGuruId = String(s.id_guru || "").trim().toLowerCase();
+          const sGuruName = s.nama_guru;
+
+          if (matchedTeacher) {
+            const tId = String(matchedTeacher.id_guru || matchedTeacher.id || "").trim().toLowerCase();
+            const tNip = String(matchedTeacher.nip || "").trim().toLowerCase();
+            if (sGuruId && (sGuruId === tId || sGuruId === tNip)) return true;
+            if (isNameMatch(sGuruName, matchedTeacher.nama_guru)) return true;
+          }
+
+          if (sGuruId && (sGuruId === codeLower || sGuruId === codeWithoutPrefix)) return true;
+          if (isNameMatch(sGuruName, cleanCode) || isNameMatch(sGuruName, codeWithoutPrefix)) return true;
+
+          return false;
+        });
+
+        const candidateSchedules = directSchedMatch.length > 0 ? directSchedMatch : teacherSchedMatch;
+
+        if (candidateSchedules.length === 0) {
+          // Check if teacher has schedules on OTHER days
+          const otherDaySchedules = lessonSchedules.filter(s => {
+            const sGuruId = String(s.id_guru || "").trim().toLowerCase();
+            if (matchedTeacher) {
+              const tId = String(matchedTeacher.id_guru || matchedTeacher.id || "").trim().toLowerCase();
+              const tNip = String(matchedTeacher.nip || "").trim().toLowerCase();
+              return (sGuruId && (sGuruId === tId || sGuruId === tNip)) || isNameMatch(s.nama_guru, matchedTeacher.nama_guru);
+            }
+            return (sGuruId && (sGuruId === codeLower || sGuruId === codeWithoutPrefix)) || isNameMatch(s.nama_guru, cleanCode);
+          });
+
+          if (otherDaySchedules.length > 0) {
+            const availableDays = Array.from(new Set(otherDaySchedules.map(s => s.hari))).join(", ");
+            const errorMsg = `Jadwal untuk '${guruNama}' tidak ada di hari ${selectedDay}. Ditemukan di hari: ${availableDays}`;
             setScanStatus({
-              type: "success",
-              msg: `Jadwal Terdeteksi: ${directSched.mapel} (${directSched.kelas})`,
-              details: `Guru: ${directSched.nama_guru} • Jam ke-${directSched.jam_ke}`
+              type: "error",
+              msg: errorMsg,
+              details: `Silakan ubah filter hari di atas ke hari: ${availableDays}`
             });
+            playBeep(false);
+            triggerFlash("error");
+            if (speechEnabled) speakText(`Jadwal tidak ada di hari ${selectedDay}.`);
+
+            setScanQueue(prev => prev.map(item => 
+              item.id === queueId ? { ...item, status: "error", message: `Jadwal ada di hari ${availableDays}` } : item
+            ));
             return;
           }
 
-          const errorMsg = `Jadwal mengajar tidak ditemukan untuk '${guruNama}' pada hari ${selectedDay}`;
+          const errorMsg = `Jadwal mengajar tidak ditemukan untuk '${guruNama}' di database.`;
           setScanStatus({
             type: "error",
             msg: errorMsg,
-            details: "Silakan periksa konfigurasi jadwal di menu Jadwal Pelajaran."
+            details: "Silakan pastikan jadwal telah diinput di menu Jadwal Pelajaran."
           });
           playBeep(false);
           triggerFlash("error");
@@ -729,7 +829,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
             .map(l => `${l.kelas}_${l.jam_ke}`)
         );
 
-        const targetSched = teacherSchedules.find(s => !loggedScheduleJamSet.has(`${s.kelas}_${s.jam_ke}`)) || teacherSchedules[0];
+        const targetSched = candidateSchedules.find(s => !loggedScheduleJamSet.has(`${s.kelas}_${s.jam_ke}`)) || candidateSchedules[0];
 
         openModalForSchedule(targetSched);
         setScanStatus({
@@ -879,7 +979,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
         qrReaderRef.current.stop().catch(e => console.log("Stop camera scan err", e));
       }
     };
-  }, [scanMethod, cameraActive, selectedCameraId, kategori, mode]);
+  }, [scanMethod, cameraActive, selectedCameraId, kategori, mode, attendanceType, selectedDay, filterTanggal]);
 
   // Load Entities for Manual Modal
   useEffect(() => {
@@ -2039,50 +2139,198 @@ export default function AbsensiScanner({ session }: { session?: any }) {
             {/* Left Column: Quick Scanner Input for Teacher QR */}
             <div className="lg:col-span-4 space-y-4">
               <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm space-y-4">
-                <div className="flex items-center gap-2 text-xs font-extrabold text-slate-800">
-                  <Usb className="w-4 h-4 text-emerald-600" />
-                  <span>Scan QR Guru / Id Jadwal</span>
-                </div>
-                <p className="text-[11px] text-gray-500 leading-relaxed">
-                  Arahkan QR Code Kartu Guru atau Barcode Jadwal ke scanner eksternal untuk mengaktifkan presensi mengajar secara cepat.
-                </p>
-
-                <div className="space-y-2">
-                  <div className="relative">
-                    <input
-                      ref={barcodeInputRef}
-                      type="text"
-                      placeholder="Scan Barcode / ketik ID..."
-                      value={barcodeInput}
-                      onChange={(e) => setBarcodeInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && barcodeInput) {
-                          processScanCode(barcodeInput);
-                        }
-                      }}
-                      className="w-full bg-slate-900 text-emerald-400 font-mono text-sm px-3.5 py-3 rounded-xl border border-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                    <Scan className="w-4 h-4 text-emerald-500 absolute right-3 top-3.5 animate-pulse" />
+                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                  <div className="flex items-center gap-2 text-xs font-extrabold text-slate-800">
+                    <BookOpen className="w-4 h-4 text-emerald-600" />
+                    <span>Scan Presensi Mengajar</span>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => processScanCode(barcodeInput)}
-                    disabled={!barcodeInput}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2.5 rounded-xl disabled:opacity-50 transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Proses Presensi Mengajar</span>
-                  </button>
+                  <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full">
+                    {selectedDay}
+                  </span>
                 </div>
+
+                {/* Input Mode Selector Tabs */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block">Metode Scanner</label>
+                  <div className="grid grid-cols-2 gap-1.5 bg-gray-100 p-1 rounded-xl border border-gray-200/80">
+                    <button
+                      type="button"
+                      onClick={() => setScanMethod("hardware")}
+                      className={`py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        scanMethod === "hardware" 
+                          ? "bg-white text-emerald-700 shadow-sm border border-gray-200" 
+                          : "text-gray-500 hover:text-gray-900"
+                      }`}
+                    >
+                      <Keyboard className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Hardware</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setScanMethod("camera");
+                        detectCameras();
+                      }}
+                      className={`py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        scanMethod === "camera" 
+                          ? "bg-white text-blue-700 shadow-sm border border-gray-200" 
+                          : "text-gray-500 hover:text-gray-900"
+                      }`}
+                    >
+                      <Camera className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Kamera Live</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* HARDWARE SCANNER MODE */}
+                {scanMethod === "hardware" && (
+                  <div className="space-y-3 pt-1">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[11px] font-extrabold text-gray-700 flex items-center gap-1">
+                        <Usb className="w-3.5 h-3.5 text-emerald-600" /> Input Barcode Guru
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setAutoFocusLock(!autoFocusLock)}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all cursor-pointer ${
+                          autoFocusLock 
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
+                            : "bg-gray-100 text-gray-600 border-gray-200"
+                        }`}
+                      >
+                        {autoFocusLock ? "🔒 Focus Lock Active" : "🔓 Focus Unlocked"}
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleHardwareSubmit} className="space-y-2">
+                      <div className="relative">
+                        <input
+                          ref={barcodeInputRef}
+                          type="text"
+                          autoFocus
+                          placeholder="Scan Barcode Guru / Ketik ID..."
+                          value={barcodeInput}
+                          onChange={(e) => setBarcodeInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && barcodeInput) {
+                              e.preventDefault();
+                              processScanCode(barcodeInput);
+                            }
+                          }}
+                          className="w-full bg-slate-900 text-emerald-400 font-mono text-xs px-3.5 py-3 rounded-xl border border-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-10"
+                        />
+                        <Scan className="w-4 h-4 text-emerald-500 absolute right-3 top-3.5 animate-pulse" />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={!barcodeInput.trim() || isProcessingScan}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2.5 rounded-xl disabled:opacity-50 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        {isProcessingScan ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Memproses Jadwal...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Proses Presensi Mengajar</span>
+                          </>
+                        )}
+                      </button>
+                    </form>
+                  </div>
+                )}
+
+                {/* CAMERA SCANNER MODE */}
+                {scanMethod === "camera" && (
+                  <div className="space-y-3 pt-1">
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[11px] font-bold text-gray-700">Pilih Kamera</label>
+                        <button
+                          type="button"
+                          onClick={detectCameras}
+                          className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
+                        >
+                          <RefreshCw className="w-3 h-3" /> Refresh
+                        </button>
+                      </div>
+
+                      <select
+                        value={selectedCameraId}
+                        onChange={(e) => {
+                          setSelectedCameraId(e.target.value);
+                          if (cameraActive) {
+                            setCameraActive(false);
+                            setTimeout(() => setCameraActive(true), 200);
+                          }
+                        }}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2 text-xs font-semibold text-gray-800 focus:outline-none"
+                      >
+                        {availableCameras.length === 0 ? (
+                          <option value="">-- Tidak ada kamera terdeteksi --</option>
+                        ) : (
+                          availableCameras.map(cam => (
+                            <option key={cam.id} value={cam.id}>{cam.label}</option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+
+                    <button 
+                      onClick={() => setCameraActive(!cameraActive)}
+                      className={`w-full py-2 rounded-xl font-bold text-xs shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                        cameraActive ? "bg-rose-600 text-white hover:bg-rose-700" : "bg-emerald-600 text-white hover:bg-emerald-700"
+                      }`}
+                    >
+                      {cameraActive ? (
+                        <>
+                          <CameraOff className="w-3.5 h-3.5" />
+                          Stop Kamera
+                        </>
+                      ) : (
+                        <>
+                          <Camera className="w-3.5 h-3.5" />
+                          Start Kamera Mengajar
+                        </>
+                      )}
+                    </button>
+
+                    {/* Camera Feed Container */}
+                    <div className="relative bg-slate-900 rounded-xl overflow-hidden aspect-[4/3] min-h-[180px] border border-slate-800 flex flex-col items-center justify-center">
+                      {cameraActive ? (
+                        <>
+                          <div id="qr-external-camera-frame" className="w-full h-full object-cover"></div>
+                          <div className="absolute inset-0 border-2 border-emerald-500/40 m-4 pointer-events-none rounded-lg">
+                            <div className="w-full h-[2px] bg-emerald-400 absolute top-0 left-0 animate-bounce-slow shadow-lg shadow-emerald-500"></div>
+                          </div>
+                          <div className="absolute bottom-2 left-2 bg-slate-950/80 backdrop-blur-sm px-2 py-0.5 rounded text-[9px] text-emerald-400 font-mono flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                            SCANNER MENGAJAR LIVE • {selectedDay}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-center p-4 text-slate-500 space-y-1">
+                          <Camera className="w-8 h-8 mx-auto text-slate-600 stroke-[1.5]" />
+                          <p className="text-[11px] font-bold text-slate-400">Kamera Mengajar Nonaktif</p>
+                          <p className="text-[10px]">Klik tombol di atas untuk menyalakan pemindai QR kamera.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Quick Helper Badge */}
                 <div className="bg-emerald-50 border border-emerald-200/80 p-3 rounded-xl space-y-1 text-[11px] text-emerald-900">
                   <span className="font-bold flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" /> Auto Match Schedule
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" /> Auto Match Schedule ({selectedDay})
                   </span>
                   <p className="text-[10px] text-emerald-800 leading-snug">
-                    Sistem otomatis mencocokkan jadwal hari <strong>{selectedDay}</strong> berdasarkan ID Guru yang discan.
+                    Sistem otomatis mencocokkan jadwal hari <strong>{selectedDay}</strong> berdasarkan ID Guru / Barcode Jadwal yang discan.
                   </p>
                 </div>
               </div>
