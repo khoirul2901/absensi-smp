@@ -1717,6 +1717,12 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
         } else if (action === "getAbsensiMengajarGuru") {
           const list = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : null);
           if (list) setStorage("absensi_mengajar_guru", list);
+        } else if (action === "getLaporanFilter" || action === "getLaporanPresensi" || action === "getPresensiSiswa" || action === "getPresensiGuru" || action === "getLaporanSiswa" || action === "getLaporanGuru") {
+          const list = Array.isArray(result) ? result : (Array.isArray(result?.data) ? result.data : null);
+          if (list && Array.isArray(list)) {
+            const isSiswa = args[0] === "Siswa" || action.includes("Siswa");
+            setStorage(isSiswa ? "laporan_siswa" : "laporan_guru", list);
+          }
         }
       } catch (e) {
         console.warn("Auto storage sync error:", e);
