@@ -128,21 +128,67 @@ export default function Laporan() {
     setTanggalSelesai(todayStr);
   }, []);
 
-  // Load Classes List
+  // Load Classes List & Auto-select Wali Kelas
   useEffect(() => {
     async function loadClasses() {
       try {
         const res = await callGas("getKelasSemua");
         const list = extractArrayData(res);
-        let parsed = list.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
-        if (!parsed || parsed.length === 0) {
+        let classObjects: { nama_kelas: string; wali_kelas: string }[] = [];
+
+        if (Array.isArray(list) && list.length > 0) {
+          classObjects = list.map((item: any) => {
+            if (typeof item === "string") {
+              return { nama_kelas: item, wali_kelas: "-" };
+            }
+            return {
+              nama_kelas: item.nama_kelas || item.kelas || String(item),
+              wali_kelas: item.wali_kelas || item.wali || item.waliKelas || "-"
+            };
+          }).filter(c => Boolean(c.nama_kelas));
+        }
+
+        if (classObjects.length === 0) {
           const stored = getStorage("data_kelas") || [];
-          parsed = stored.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
+          classObjects = stored.map((item: any) => {
+            if (typeof item === "string") {
+              return { nama_kelas: item, wali_kelas: "-" };
+            }
+            return {
+              nama_kelas: item.nama_kelas || item.kelas || String(item),
+              wali_kelas: item.wali_kelas || item.wali || item.waliKelas || "-"
+            };
+          }).filter((c: any) => Boolean(c.nama_kelas));
         }
-        if (!parsed || parsed.length === 0) {
-          parsed = ["X RPL 1", "X RPL 2", "XI RPL 1", "XI RPL 2", "XII RPL 1"];
+
+        if (classObjects.length === 0) {
+          classObjects = [
+            { nama_kelas: "X RPL 1", wali_kelas: "-" },
+            { nama_kelas: "X RPL 2", wali_kelas: "-" },
+            { nama_kelas: "XI RPL 1", wali_kelas: "-" },
+            { nama_kelas: "XI RPL 2", wali_kelas: "-" },
+            { nama_kelas: "XII RPL 1", wali_kelas: "-" }
+          ];
         }
-        setClassList(parsed);
+
+        const names = classObjects.map(c => c.nama_kelas);
+        setClassList(names);
+
+        // If current user is a Wali Kelas, auto-select their assigned class
+        if (currentUser) {
+          const uName = (currentUser.nama_guru || currentUser.username || currentUser.nama || "").toLowerCase();
+          const uTargetId = (currentUser.target_id || currentUser.id_guru || "").toLowerCase();
+
+          const myClass = classObjects.find(c => {
+            const w = (c.wali_kelas || "").toLowerCase();
+            if (!w || w === "-") return false;
+            return (uName && w.includes(uName)) || (uTargetId && w.includes(uTargetId));
+          });
+
+          if (myClass && myClass.nama_kelas) {
+            setSelectedKelas(myClass.nama_kelas);
+          }
+        }
       } catch (e) {
         const stored = getStorage("data_kelas") || [];
         let parsed = stored.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
@@ -153,7 +199,7 @@ export default function Laporan() {
       }
     }
     loadClasses();
-  }, []);
+  }, [currentUser]);
 
   // Load Teachers List
   useEffect(() => {
@@ -287,26 +333,46 @@ export default function Laporan() {
         setRekapMengajarRows(rekapList);
       } else {
         // 1. Fetch from getLaporanFilter first
-        let res = await callGas("getLaporanFilter", [
-          kategori, 
-          selectedKelas, 
-          jenisFilter, 
-          tanggalMulai, 
-          tanggalSelesai, 
-          bulanMinta
-        ]);
-        let rawLogs: any[] = extractArrayData(res);
+        let hasApiResult = false;
+        let rawLogs: any[] = [];
 
-        // 2. Multi-fallback logic if getLaporanFilter returned empty
-        if (!rawLogs || rawLogs.length === 0) {
-          const res2 = await callGas(kategori === "Siswa" ? "getPresensiSiswa" : "getPresensiGuru");
-          rawLogs = extractArrayData(res2);
+        try {
+          const res = await callGas("getLaporanFilter", [
+            kategori, 
+            selectedKelas, 
+            jenisFilter, 
+            tanggalMulai, 
+            tanggalSelesai, 
+            bulanMinta
+          ]);
+          if (res && res.success !== false) {
+            rawLogs = extractArrayData(res);
+            hasApiResult = true;
+          }
+        } catch (e) {
+          console.warn("getLaporanFilter error:", e);
         }
-        if (!rawLogs || rawLogs.length === 0) {
-          const res3 = await callGas(kategori === "Siswa" ? "getLaporanSiswa" : "getLaporanGuru");
-          rawLogs = extractArrayData(res3);
+
+        // 2. Multi-fallback logic ONLY if API call failed
+        if (!hasApiResult) {
+          try {
+            const res2 = await callGas(kategori === "Siswa" ? "getPresensiSiswa" : "getPresensiGuru");
+            if (res2 && res2.success !== false) {
+              rawLogs = extractArrayData(res2);
+              hasApiResult = true;
+            }
+          } catch (e) {}
         }
-        if (!rawLogs || rawLogs.length === 0) {
+        if (!hasApiResult) {
+          try {
+            const res3 = await callGas(kategori === "Siswa" ? "getLaporanSiswa" : "getLaporanGuru");
+            if (res3 && res3.success !== false) {
+              rawLogs = extractArrayData(res3);
+              hasApiResult = true;
+            }
+          } catch (e) {}
+        }
+        if (!hasApiResult) {
           rawLogs = getStorage(kategori === "Siswa" ? "laporan_siswa" : "laporan_guru") || [];
         }
 
@@ -477,12 +543,6 @@ export default function Laporan() {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (bulanMinta || (tanggalMulai && tanggalSelesai)) {
-      handleQuery();
-    }
-  }, [kategori, viewMode, jenisFilter, selectedKelas, selectedGuru, tanggalMulai, tanggalSelesai, bulanMinta]);
 
   // Load master entities for edit dropdown
   const loadMasterForEdit = async (cat: "Siswa" | "Guru") => {
