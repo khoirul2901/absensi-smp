@@ -1506,7 +1506,7 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
   const url = getGasUrl();
   const token = getGasToken();
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 6000);
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   try {
     const bodyObj: any = { action, args, token };
