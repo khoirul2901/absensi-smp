@@ -1996,7 +1996,7 @@ function getKelasSemua() {
   return { success: true, data: parsed };
 }
 
-function simpanKelas(param1, param2) {
+function simpanKelas(param1, param2, param3) {
   let namaKelas = "";
   let waliKelas = "-";
   if (typeof param1 === "object" && param1 !== null) {
@@ -2004,7 +2004,14 @@ function simpanKelas(param1, param2) {
     waliKelas = param1.wali_kelas || param1.wali || param1.nama_guru || param1.waliKelas || "-";
   } else {
     namaKelas = String(param1 || "").trim();
-    waliKelas = String(param2 || "-").trim();
+    if (typeof param2 === "string") {
+      waliKelas = param2.trim();
+    } else if (typeof param2 === "object" && param2 !== null) {
+      waliKelas = param2.wali_kelas || param2.wali || param2.nama_guru || param2.waliKelas || "-";
+    }
+    if ((!waliKelas || waliKelas === "-" || isInvalidWali(waliKelas)) && typeof param3 === "object" && param3 !== null) {
+      waliKelas = param3.wali_kelas || param3.wali || param3.nama_guru || param3.waliKelas || waliKelas;
+    }
   }
   if (!namaKelas) return { success: false, message: "Nama kelas tidak boleh kosong." };
   if (isInvalidWali(waliKelas)) waliKelas = "-";
@@ -2031,7 +2038,7 @@ function simpanKelas(param1, param2) {
   return { success: true, message: "Kelas berhasil ditambahkan!" };
 }
 
-function editKelas(kelasLama, kelasBaru, waliKelasBaru) {
+function editKelas(kelasLama, kelasBaru, waliKelasBaru, param4) {
   let kLama = kelasLama;
   let kBaru = kelasBaru;
   let wBaru = waliKelasBaru;
@@ -2039,6 +2046,13 @@ function editKelas(kelasLama, kelasBaru, waliKelasBaru) {
     kLama = kelasLama.kelasLama || kelasLama.nama_kelas || "";
     kBaru = kelasLama.kelasBaru || kelasLama.nama_kelas || kLama;
     wBaru = kelasLama.wali_kelas || kelasLama.wali || kelasLama.nama_guru || "-";
+  } else {
+    if (typeof waliKelasBaru === "object" && waliKelasBaru !== null) {
+      wBaru = waliKelasBaru.wali_kelas || waliKelasBaru.wali || waliKelasBaru.nama_guru || "-";
+    }
+    if ((!wBaru || wBaru === "-" || isInvalidWali(wBaru)) && typeof param4 === "object" && param4 !== null) {
+      wBaru = param4.wali_kelas || param4.wali || param4.nama_guru || wBaru;
+    }
   }
   if (isInvalidWali(wBaru)) wBaru = "-";
 
@@ -2064,7 +2078,7 @@ function editKelas(kelasLama, kelasBaru, waliKelasBaru) {
   return { success: false, message: "Kelas lama tidak ditemukan." };
 }
 
-function simpanWaliKelas(param1, param2) {
+function simpanWaliKelas(param1, param2, param3) {
   let namaKelas = "";
   let waliKelas = "-";
   if (typeof param1 === "object" && param1 !== null) {
@@ -2072,7 +2086,14 @@ function simpanWaliKelas(param1, param2) {
     waliKelas = param1.wali_kelas || param1.wali || param1.nama_guru || param1.waliKelas || "-";
   } else {
     namaKelas = String(param1 || "").trim();
-    waliKelas = String(param2 || "-").trim();
+    if (typeof param2 === "string") {
+      waliKelas = param2.trim();
+    } else if (typeof param2 === "object" && param2 !== null) {
+      waliKelas = param2.wali_kelas || param2.wali || param2.nama_guru || param2.waliKelas || "-";
+    }
+    if ((!waliKelas || waliKelas === "-" || isInvalidWali(waliKelas)) && typeof param3 === "object" && param3 !== null) {
+      waliKelas = param3.wali_kelas || param3.wali || param3.nama_guru || param3.waliKelas || waliKelas;
+    }
   }
   if (!namaKelas) return { success: false, message: "Nama kelas tidak boleh kosong." };
   if (isInvalidWali(waliKelas)) waliKelas = "-";
