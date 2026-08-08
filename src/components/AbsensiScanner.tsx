@@ -415,10 +415,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
   }, [kategori, filterTanggal, filterKelas]);
 
   useEffect(() => {
-    if (attendanceType === "mengajar") {
-      fetchMengajarData();
-    }
-  }, [attendanceType, filterTanggal, selectedDay]);
+    fetchMengajarData();
+  }, [filterTanggal, selectedDay]);
 
   const openModalForSchedule = (sched: ScheduleLessonItem, existingLog?: AbsensiMengajarItem) => {
     setSelectedScheduleForAbsen(sched);
@@ -679,16 +677,53 @@ export default function AbsensiScanner({ session }: { session?: any }) {
       ...prev.slice(0, 7) // keep 8 items
     ]);
 
-    // Smart auto-detect: Check if scanned code is a Schedule ID or matches teaching schedule
+    // Smart auto-detect: Check if scanned code is a Schedule ID or matches a Teacher
     let activeAttendanceType = attendanceType;
     const cleanCodeStr = code.trim();
     const codeLowerStr = cleanCodeStr.toLowerCase();
-    const codeNoPrefix = codeLowerStr.replace(/^(guru|teacher|jadwal|id|nip)[:\-\s]+/i, '').trim();
+    const codeNoPrefix = codeLowerStr.replace(/^(guru|teacher|jadwal|id|nip)[_:\-\s]+/i, '').trim();
 
     const isDirectScheduleScan = codeLowerStr.startsWith("jadwal-") || 
       lessonSchedules.some(s => String(s.id_jadwal || "").trim().toLowerCase() === codeLowerStr || String(s.id_jadwal || "").trim().toLowerCase() === codeNoPrefix);
 
-    if (activeAttendanceType === "harian" && isDirectScheduleScan) {
+    const normalizeNameForDetect = (str: string) => {
+      return String(str || "")
+        .toLowerCase()
+        .replace(/[,.]/g, " ")
+        .replace(/\b(s|m)\s*\.?\s*(pd|kom|ag|is|si|se|mm|hum|st|pt|tp|sos|ip|ed|pdi|mat|bio|fis)\b/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    };
+
+    const isNameMatchDetect = (n1: string, n2: string) => {
+      if (!n1 || !n2) return false;
+      const s1 = String(n1).trim().toLowerCase();
+      const s2 = String(n2).trim().toLowerCase();
+      if (!s1 || !s2) return false;
+      if (s1 === s2 || s1.includes(s2) || s2.includes(s1)) return true;
+      const norm1 = normalizeNameForDetect(n1);
+      const norm2 = normalizeNameForDetect(n2);
+      if (norm1 && norm2 && (norm1 === norm2 || norm1.includes(norm2) || norm2.includes(norm1))) return true;
+      return false;
+    };
+
+    const isTeacherScan = teachersList.some(t => {
+      const tId = String(t.id_guru || t.id || "").trim().toLowerCase();
+      const tNip = String(t.nip_nuptk || t.nip || "").trim().toLowerCase();
+      const tQr = String(t.qr_content || t.qr_code || "").trim().toLowerCase();
+      return (
+        (tId && (tId === codeLowerStr || tId === codeNoPrefix)) ||
+        (tNip && (tNip === codeLowerStr || tNip === codeNoPrefix)) ||
+        (tQr && (tQr === codeLowerStr || tQr === codeNoPrefix)) ||
+        isNameMatchDetect(t.nama_guru, cleanCodeStr) ||
+        isNameMatchDetect(t.nama_guru, codeNoPrefix)
+      );
+    }) || lessonSchedules.some(s => {
+      const sGuruId = String(s.id_guru || "").trim().toLowerCase();
+      return (sGuruId && (sGuruId === codeLowerStr || sGuruId === codeNoPrefix)) || isNameMatchDetect(s.nama_guru, cleanCodeStr) || isNameMatchDetect(s.nama_guru, codeNoPrefix);
+    });
+
+    if (activeAttendanceType === "harian" && (isDirectScheduleScan || isTeacherScan)) {
       activeAttendanceType = "mengajar";
       setAttendanceType("mengajar");
     }
@@ -704,7 +739,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
       try {
         const cleanCode = code.trim();
         const codeLower = cleanCode.toLowerCase();
-        const codeWithoutPrefix = codeLower.replace(/^(guru|teacher|jadwal|id|nip)[:\-\s]+/i, '').trim();
+        const codeWithoutPrefix = codeLower.replace(/^(guru|teacher|jadwal|id|nip)[_:\-\s]+/i, '').trim();
 
         const normalizeName = (str: string) => {
           return String(str || "")
@@ -729,13 +764,42 @@ export default function AbsensiScanner({ session }: { session?: any }) {
           return false;
         };
 
-        // Find teacher in teachersList
+        // 1. Direct Schedule ID match across ALL days
+        const allDirectSchedMatches = lessonSchedules.filter(
+          s => String(s.id_jadwal || "").trim().toLowerCase() === codeLower ||
+               String(s.id_jadwal || "").trim().toLowerCase() === codeWithoutPrefix
+        );
+
+        if (allDirectSchedMatches.length > 0) {
+          const matchedDirect = allDirectSchedMatches.find(s => (s.hari || "").trim().toLowerCase() === selectedDay.trim().toLowerCase()) || allDirectSchedMatches[0];
+          if (matchedDirect.hari && matchedDirect.hari !== selectedDay) {
+            setSelectedDay(matchedDirect.hari);
+          }
+          openModalForSchedule(matchedDirect);
+          setScanStatus({
+            type: "success",
+            msg: `Jadwal Terdeteksi: ${matchedDirect.mapel} (${matchedDirect.kelas})`,
+            details: `Guru: ${matchedDirect.nama_guru} • Hari ${matchedDirect.hari} • Jam ke-${matchedDirect.jam_ke}`
+          });
+          playBeep(true);
+          triggerFlash("success");
+          if (speechEnabled) speakText(`Presensi mengajar ${matchedDirect.nama_guru}.`);
+
+          setScanQueue(prev => prev.map(item => 
+            item.id === queueId ? { ...item, status: "success", message: `Jadwal ${matchedDirect.mapel}` } : item
+          ));
+          return;
+        }
+
+        // 2. Find teacher in teachersList
         const matchedTeacher = teachersList.find(t => {
           const tId = String(t.id_guru || t.id || "").trim().toLowerCase();
-          const tNip = String(t.nip || "").trim().toLowerCase();
+          const tNip = String(t.nip_nuptk || t.nip || "").trim().toLowerCase();
+          const tQr = String(t.qr_content || t.qr_code || "").trim().toLowerCase();
           return (
             (tId && (tId === codeLower || tId === codeWithoutPrefix)) ||
             (tNip && (tNip === codeLower || tNip === codeWithoutPrefix)) ||
+            (tQr && (tQr === codeLower || tQr === codeWithoutPrefix)) ||
             isNameMatch(t.nama_guru, cleanCode) ||
             isNameMatch(t.nama_guru, codeWithoutPrefix)
           );
@@ -749,20 +813,14 @@ export default function AbsensiScanner({ session }: { session?: any }) {
           s => (s.hari || "").trim().toLowerCase() === selectedDay.trim().toLowerCase()
         );
 
-        // 1. Direct Schedule ID match
-        const directSchedMatch = daySchedules.filter(
-          s => String(s.id_jadwal || "").trim().toLowerCase() === codeLower ||
-               String(s.id_jadwal || "").trim().toLowerCase() === codeWithoutPrefix
-        );
-
-        // 2. Teacher Schedule match on target day
+        // Teacher Schedule match on target day
         const teacherSchedMatch = daySchedules.filter(s => {
           const sGuruId = String(s.id_guru || "").trim().toLowerCase();
           const sGuruName = s.nama_guru;
 
           if (matchedTeacher) {
             const tId = String(matchedTeacher.id_guru || matchedTeacher.id || "").trim().toLowerCase();
-            const tNip = String(matchedTeacher.nip || "").trim().toLowerCase();
+            const tNip = String(matchedTeacher.nip_nuptk || matchedTeacher.nip || "").trim().toLowerCase();
             if (sGuruId && (sGuruId === tId || sGuruId === tNip)) return true;
             if (isNameMatch(sGuruName, matchedTeacher.nama_guru)) return true;
           }
@@ -773,34 +831,32 @@ export default function AbsensiScanner({ session }: { session?: any }) {
           return false;
         });
 
-        const candidateSchedules = directSchedMatch.length > 0 ? directSchedMatch : teacherSchedMatch;
-
-        if (candidateSchedules.length === 0) {
+        if (teacherSchedMatch.length === 0) {
           // Check if teacher has schedules on OTHER days
           const otherDaySchedules = lessonSchedules.filter(s => {
             const sGuruId = String(s.id_guru || "").trim().toLowerCase();
             if (matchedTeacher) {
               const tId = String(matchedTeacher.id_guru || matchedTeacher.id || "").trim().toLowerCase();
-              const tNip = String(matchedTeacher.nip || "").trim().toLowerCase();
+              const tNip = String(matchedTeacher.nip_nuptk || matchedTeacher.nip || "").trim().toLowerCase();
               return (sGuruId && (sGuruId === tId || sGuruId === tNip)) || isNameMatch(s.nama_guru, matchedTeacher.nama_guru);
             }
-            return (sGuruId && (sGuruId === codeLower || sGuruId === codeWithoutPrefix)) || isNameMatch(s.nama_guru, cleanCode);
+            return (sGuruId && (sGuruId === codeLower || sGuruId === codeWithoutPrefix)) || isNameMatch(s.nama_guru, cleanCode) || isNameMatch(s.nama_guru, codeWithoutPrefix);
           });
 
           if (otherDaySchedules.length > 0) {
             const availableDays = Array.from(new Set(otherDaySchedules.map(s => s.hari))).join(", ");
-            const errorMsg = `Jadwal untuk '${guruNama}' tidak ada di hari ${selectedDay}. Ditemukan di hari: ${availableDays}`;
+            const errorMsg = `Jadwal mengajar '${guruNama}' tidak ada di hari ${selectedDay}. Ditemukan di hari: ${availableDays}`;
             setScanStatus({
               type: "error",
               msg: errorMsg,
-              details: `Silakan ubah filter hari di atas ke hari: ${availableDays}`
+              details: `Silakan klik tombol hari di atas untuk memilih hari: ${availableDays}`
             });
             playBeep(false);
             triggerFlash("error");
-            if (speechEnabled) speakText(`Jadwal tidak ada di hari ${selectedDay}.`);
+            if (speechEnabled) speakText(`Jadwal ada di hari ${availableDays}.`);
 
             setScanQueue(prev => prev.map(item => 
-              item.id === queueId ? { ...item, status: "error", message: `Jadwal ada di hari ${availableDays}` } : item
+              item.id === queueId ? { ...item, status: "error", message: `Ada di hari ${availableDays}` } : item
             ));
             return;
           }
@@ -809,7 +865,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
           setScanStatus({
             type: "error",
             msg: errorMsg,
-            details: "Silakan pastikan jadwal telah diinput di menu Jadwal Pelajaran."
+            details: "Pastikan jadwal pelajaran telah diinput pada menu Jadwal Pelajaran."
           });
           playBeep(false);
           triggerFlash("error");
@@ -829,7 +885,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
             .map(l => `${l.kelas}_${l.jam_ke}`)
         );
 
-        const targetSched = candidateSchedules.find(s => !loggedScheduleJamSet.has(`${s.kelas}_${s.jam_ke}`)) || candidateSchedules[0];
+        const targetSched = teacherSchedMatch.find(s => !loggedScheduleJamSet.has(`${s.kelas}_${s.jam_ke}`)) || teacherSchedMatch[0];
 
         openModalForSchedule(targetSched);
         setScanStatus({
@@ -2334,6 +2390,64 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                   </p>
                 </div>
               </div>
+
+              {/* Dynamic Result Feedback Card for Presensi Mengajar */}
+              {scanStatus.type && (
+                <div className={`p-4 rounded-2xl border transition-all duration-300 shadow-md ${
+                  scanStatus.type === "success" ? "bg-emerald-50 border-emerald-200 text-emerald-900" :
+                  scanStatus.type === "error" ? "bg-rose-50 border-rose-200 text-rose-900" :
+                  "bg-blue-50 border-blue-200 text-blue-900"
+                }`}>
+                  <div className="flex items-start gap-3">
+                    <span className="text-xl mt-0.5">
+                      {scanStatus.type === "success" ? <CheckCircle2 className="w-6 h-6 text-emerald-600" /> : 
+                       scanStatus.type === "error" ? <XCircle className="w-6 h-6 text-rose-600" /> : 
+                       <RefreshCw className="w-6 h-6 text-blue-600 animate-spin" />}
+                    </span>
+                    <div className="space-y-1 flex-grow">
+                      <h4 className="font-extrabold text-sm">
+                        {scanStatus.type === "success" ? "Presensi Mengajar Terdeteksi" : 
+                         scanStatus.type === "error" ? "Gagal / Informasi Jadwal" : "Memproses Data..."}
+                      </h4>
+                      <p className="text-xs font-semibold">{scanStatus.msg}</p>
+                      {scanStatus.details && (
+                        <p className="text-[11px] opacity-80 font-mono mt-1 pt-1 border-t border-black/10">
+                          {scanStatus.details}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Real-Time Rapid Scan Queue Feed for Presensi Mengajar */}
+              {scanQueue.length > 0 && (
+                <div className="bg-slate-900 rounded-2xl border border-slate-800 p-4 shadow-sm text-white space-y-3">
+                  <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
+                    <span className="text-xs font-black text-amber-300 flex items-center gap-1.5 uppercase tracking-wider">
+                      <Zap className="w-3.5 h-3.5 text-amber-400" /> Stream Scan Mengajar ({scanQueue.length})
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">Live Speed</span>
+                  </div>
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {scanQueue.map((item) => (
+                      <div key={item.id} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800/80 flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${
+                            item.status === 'success' ? 'bg-emerald-500' :
+                            item.status === 'error' ? 'bg-rose-500' : 'bg-amber-400'
+                          }`} />
+                          <span className="font-mono text-[11px] text-slate-300 truncate">{item.code}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[10px] text-slate-400">{item.message}</span>
+                          <span className="text-[9px] font-mono text-slate-500">{item.timestamp}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Right Column: Jadwal Grid & Log Table */}
