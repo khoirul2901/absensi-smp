@@ -131,12 +131,26 @@ export default function Laporan() {
   // Load Classes List
   useEffect(() => {
     async function loadClasses() {
-      const res = await callGas("getKelasSemua");
-      const list = Array.isArray(res)
-        ? res
-        : (res && res.success && Array.isArray(res.data) ? res.data : []);
-      const parsed = list.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
-      setClassList(parsed);
+      try {
+        const res = await callGas("getKelasSemua");
+        const list = extractArrayData(res);
+        let parsed = list.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
+        if (!parsed || parsed.length === 0) {
+          const stored = getStorage("data_kelas") || [];
+          parsed = stored.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
+        }
+        if (!parsed || parsed.length === 0) {
+          parsed = ["X RPL 1", "X RPL 2", "XI RPL 1", "XI RPL 2", "XII RPL 1"];
+        }
+        setClassList(parsed);
+      } catch (e) {
+        const stored = getStorage("data_kelas") || [];
+        let parsed = stored.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
+        if (!parsed || parsed.length === 0) {
+          parsed = ["X RPL 1", "X RPL 2", "XI RPL 1", "XI RPL 2", "XII RPL 1"];
+        }
+        setClassList(parsed);
+      }
     }
     loadClasses();
   }, []);
