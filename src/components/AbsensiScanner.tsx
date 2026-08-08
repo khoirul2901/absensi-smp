@@ -444,8 +444,15 @@ export default function AbsensiScanner({ session }: { session?: any }) {
     } else {
       let autoStatus = "Hadir Tepat Waktu";
       if (slotMulai && slotMulai !== "-") {
-        if (nowTime > slotMulai) {
-          autoStatus = "Terlambat Masuk Kelas";
+        const [hM, mM] = slotMulai.split(":").map(Number);
+        const [hN, mN] = nowTime.split(":").map(Number);
+        if (!isNaN(hM) && !isNaN(mM) && !isNaN(hN) && !isNaN(mN)) {
+          const startMin = hM * 60 + mM;
+          const nowMin = hN * 60 + mN;
+          // Toleransi keterlambatan 15 menit
+          if (nowMin > startMin + 15) {
+            autoStatus = "Terlambat Masuk Kelas";
+          }
         }
       }
 
@@ -637,8 +644,15 @@ export default function AbsensiScanner({ session }: { session?: any }) {
 
       let autoStatus = "Hadir Tepat Waktu";
       if (slotMulai && slotMulai !== "-") {
-        if (nowTime > slotMulai) {
-          autoStatus = "Terlambat Masuk Kelas";
+        const [hM, mM] = slotMulai.split(":").map(Number);
+        const [hN, mN] = nowTime.split(":").map(Number);
+        if (!isNaN(hM) && !isNaN(mM) && !isNaN(hN) && !isNaN(mN)) {
+          const startMin = hM * 60 + mM;
+          const nowMin = hN * 60 + mN;
+          // Toleransi keterlambatan 15 menit
+          if (nowMin > startMin + 15) {
+            autoStatus = "Terlambat Masuk Kelas";
+          }
         }
       }
 
