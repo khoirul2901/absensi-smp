@@ -1408,9 +1408,21 @@ export function callMock(action: string, args: any[] = []): any {
     case "simpanAbsensiMengajarGuru": {
       const [payload] = args;
       const list = getStorage("absensi_mengajar_guru");
+      const jamList = getStorage("jam_pelajaran") || [];
       const idLog = "LOG-MENG-" + Date.now();
       const tgl = payload.tanggal || new Date().toISOString().split("T")[0];
       const timeStr = payload.waktu_absen || new Date().toTimeString().slice(0, 5);
+      const jamNum = Number(payload.jam_ke || 1);
+      const slot = jamList.find((j: any) => Number(j.jam_ke) === jamNum);
+
+      let startJadwal = payload.jam_mulai_jadwal;
+      let endJadwal = payload.jam_selesai_jadwal;
+      if ((!startJadwal || startJadwal === "-") && slot) {
+        startJadwal = slot.jam_mulai;
+      }
+      if ((!endJadwal || endJadwal === "-") && slot) {
+        endJadwal = slot.jam_selesai;
+      }
 
       // Check if already logged for same guru, date, kelas, jam_ke
       const existingIdx = list.findIndex(
@@ -1418,7 +1430,7 @@ export function callMock(action: string, args: any[] = []): any {
           item.tanggal === tgl &&
           item.id_guru === payload.id_guru &&
           item.kelas === payload.kelas &&
-          item.jam_ke === Number(payload.jam_ke)
+          Number(item.jam_ke) === jamNum
       );
 
       const logItem = {
@@ -1430,9 +1442,9 @@ export function callMock(action: string, args: any[] = []): any {
         nama_guru: payload.nama_guru,
         kelas: payload.kelas,
         mapel: payload.mapel,
-        jam_ke: Number(payload.jam_ke),
-        jam_mulai_jadwal: payload.jam_mulai_jadwal || "-",
-        jam_selesai_jadwal: payload.jam_selesai_jadwal || "-",
+        jam_ke: jamNum,
+        jam_mulai_jadwal: startJadwal || "-",
+        jam_selesai_jadwal: endJadwal || "-",
         status: payload.status || "Hadir Tepat Waktu",
         catatan_materi: payload.catatan_materi || "-"
       };
