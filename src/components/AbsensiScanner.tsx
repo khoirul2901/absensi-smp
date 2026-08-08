@@ -92,10 +92,12 @@ export default function AbsensiScanner({ session }: { session?: any }) {
   const [scanMethod, setScanMethod] = useState<"hardware" | "camera">("hardware");
 
   // Hardware Scanner States
-  const [barcodeInput, setBarcodeInput] = useState("");
+  const [barcodeInputHarian, setBarcodeInputHarian] = useState("");
+  const [barcodeInputMengajar, setBarcodeInputMengajar] = useState("");
   const [autoFocusLock, setAutoFocusLock] = useState(true);
   const [isProcessingScan, setIsProcessingScan] = useState(false);
-  const barcodeInputRef = useRef<HTMLInputElement | null>(null);
+  const barcodeInputRefHarian = useRef<HTMLInputElement | null>(null);
+  const barcodeInputRefMengajar = useRef<HTMLInputElement | null>(null);
 
   // Camera Scanner States
   const [cameraActive, setCameraActive] = useState(false);
@@ -581,22 +583,25 @@ export default function AbsensiScanner({ session }: { session?: any }) {
   useEffect(() => {
     if (scanMethod === "hardware" && autoFocusLock) {
       const timer = setTimeout(() => {
-        if (barcodeInputRef.current) {
-          barcodeInputRef.current.focus();
+        if (attendanceType === "harian" && barcodeInputRefHarian.current) {
+          barcodeInputRefHarian.current.focus();
+        } else if (attendanceType === "mengajar" && barcodeInputRefMengajar.current) {
+          barcodeInputRefMengajar.current.focus();
         }
       }, 100);
 
       const handleGlobalClick = (e: MouseEvent) => {
         // Keep focus inside scanner input if user didn't click inside an interactive element
         const target = e.target as HTMLElement;
+        const currentRef = attendanceType === "harian" ? barcodeInputRefHarian.current : barcodeInputRefMengajar.current;
         if (
-          barcodeInputRef.current &&
+          currentRef &&
           !target.closest("button") &&
           !target.closest("input") &&
           !target.closest("select") &&
           !target.closest("textarea")
         ) {
-          barcodeInputRef.current.focus();
+          currentRef.focus();
         }
       };
 
@@ -618,8 +623,118 @@ export default function AbsensiScanner({ session }: { session?: any }) {
   // Calculate scans per minute (throughput speed)
   const scansPerMinute = recentScanTimes.filter(t => Date.now() - t < 60000).length;
 
+  // Helper for Auto-Saving Presensi Mengajar Guru without manual confirmation modal
+  const autoSaveAbsensiMengajar = async (
+    targetSched: ScheduleLessonItem,
+    guruNama: string,
+    queueId?: string
+  ) => {
+    setIsProcessingScan(true);
+    try {
+      const nowTime = new Date().toTimeString().slice(0, 5);
+      const todayStr = filterTanggal || new Date().toISOString().split("T")[0];
+      const { mulai: slotMulai, selesai: slotSelesai } = getJamSlotTime(targetSched.jam_ke, targetSched.jam_mulai, targetSched.jam_selesai);
+
+      let autoStatus = "Hadir Tepat Waktu";
+      if (slotMulai && slotMulai !== "-") {
+        if (nowTime > slotMulai) {
+          autoStatus = "Terlambat Masuk Kelas";
+        }
+      }
+
+      const activeDay = targetSched.hari || selectedDay;
+
+      // Find if there are multiple consecutive schedules for this teacher, class, and mapel on activeDay
+      const matchingSchedules = lessonSchedules.filter(s =>
+        (s.hari || "").toLowerCase() === activeDay.toLowerCase() &&
+        (s.id_guru === targetSched.id_guru || (s.nama_guru && s.nama_guru.toLowerCase().includes(targetSched.nama_guru.toLowerCase()))) &&
+        s.kelas.toLowerCase() === targetSched.kelas.toLowerCase() &&
+        s.mapel.toLowerCase() === targetSched.mapel.toLowerCase()
+      );
+
+      let savedCount = 0;
+
+      if (matchingSchedules.length > 1) {
+        for (const schedItem of matchingSchedules) {
+          const { mulai: sMulai, selesai: sSelesai } = getJamSlotTime(schedItem.jam_ke, schedItem.jam_mulai, schedItem.jam_selesai);
+
+          const itemPayload = {
+            id_guru: targetSched.id_guru || schedItem.id_guru || "",
+            nama_guru: targetSched.nama_guru || schedItem.nama_guru || guruNama,
+            kelas: schedItem.kelas || targetSched.kelas,
+            mapel: schedItem.mapel || targetSched.mapel,
+            jam_ke: Number(schedItem.jam_ke),
+            jam_mulai_jadwal: sMulai !== "-" ? sMulai : slotMulai,
+            jam_selesai_jadwal: sSelesai !== "-" ? sSelesai : slotSelesai,
+            hari: activeDay,
+            tanggal: todayStr,
+            waktu_absen: nowTime,
+            status: autoStatus,
+            catatan_materi: "Presensi Otomatis Scan QR"
+          };
+          const res = await callGas("simpanAbsensiMengajarGuru", [itemPayload]);
+          if (res && res.success !== false) savedCount++;
+        }
+      } else {
+        const payload = {
+          id_guru: targetSched.id_guru || "",
+          nama_guru: targetSched.nama_guru || guruNama,
+          kelas: targetSched.kelas || "",
+          mapel: targetSched.mapel || "",
+          jam_ke: Number(targetSched.jam_ke || 1),
+          jam_mulai_jadwal: slotMulai,
+          jam_selesai_jadwal: slotSelesai,
+          hari: activeDay,
+          tanggal: todayStr,
+          waktu_absen: nowTime,
+          status: autoStatus,
+          catatan_materi: "Presensi Otomatis Scan QR"
+        };
+        const res = await callGas("simpanAbsensiMengajarGuru", [payload]);
+        if (res && res.success !== false) savedCount = 1;
+      }
+
+      const jamNumbers = matchingSchedules.map(s => Number(s.jam_ke)).sort((a, b) => a - b);
+      const minJam = jamNumbers.length > 0 ? jamNumbers[0] : targetSched.jam_ke;
+      const maxJam = jamNumbers.length > 0 ? jamNumbers[jamNumbers.length - 1] : targetSched.jam_ke;
+      const jamLabel = savedCount > 1
+        ? `Blok ${savedCount} Jam Pelajaran (Jam ke-${minJam} s/d Jam ke-${maxJam})`
+        : `Jam Ke-${targetSched.jam_ke}`;
+
+      setScanStatus({
+        type: "success",
+        msg: `Presensi Mengajar ${targetSched.nama_guru || guruNama} Terekam Otomatis!`,
+        targetName: targetSched.nama_guru || guruNama,
+        details: `Kelas ${targetSched.kelas} • ${targetSched.mapel} • ${jamLabel} • Status: ${autoStatus}`
+      });
+      playBeep(true);
+      triggerFlash("success");
+      if (speechEnabled) speakText(`Presensi mengajar ${targetSched.nama_guru || guruNama} berhasil terekam.`);
+
+      if (queueId) {
+        setScanQueue(prev => prev.map(item =>
+          item.id === queueId ? { ...item, status: "success", message: `Auto OK: Jam ${targetSched.jam_ke}` } : item
+        ));
+      }
+
+      await fetchMengajarData();
+    } catch (err: any) {
+      setScanStatus({
+        type: "error",
+        msg: "Gagal menyimpan presensi mengajar otomatis",
+        details: err.toString()
+      });
+      playBeep(false);
+      triggerFlash("error");
+    } finally {
+      setIsProcessingScan(false);
+      setBarcodeInputMengajar("");
+      if (barcodeInputRefMengajar.current) barcodeInputRefMengajar.current.focus();
+    }
+  };
+
   // Process Scan Logic (Shared by Hardware & Camera)
-  const processScanCode = async (rawCode: string) => {
+  const processScanCode = async (rawCode: string, forcedType?: "harian" | "mengajar") => {
     const code = rawCode.trim();
     if (!code) return;
 
@@ -656,9 +771,12 @@ export default function AbsensiScanner({ session }: { session?: any }) {
 
     // Fast Mode: Instant input reset & focus for hardware reader so next barcode can be scanned right away
     if (fastMode !== "normal") {
-      setBarcodeInput("");
-      if (barcodeInputRef.current) {
-        barcodeInputRef.current.focus();
+      setBarcodeInputHarian("");
+      setBarcodeInputMengajar("");
+      if (attendanceType === "harian" && barcodeInputRefHarian.current) {
+        barcodeInputRefHarian.current.focus();
+      } else if (attendanceType === "mengajar" && barcodeInputRefMengajar.current) {
+        barcodeInputRefMengajar.current.focus();
       }
     } else {
       setIsProcessingScan(true);
@@ -677,56 +795,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
       ...prev.slice(0, 7) // keep 8 items
     ]);
 
-    // Smart auto-detect: Check if scanned code is a Schedule ID or matches a Teacher
-    let activeAttendanceType = attendanceType;
-    const cleanCodeStr = code.trim();
-    const codeLowerStr = cleanCodeStr.toLowerCase();
-    const codeNoPrefix = codeLowerStr.replace(/^(guru|teacher|jadwal|id|nip)[_:\-\s]+/i, '').trim();
-
-    const isDirectScheduleScan = codeLowerStr.startsWith("jadwal-") || 
-      lessonSchedules.some(s => String(s.id_jadwal || "").trim().toLowerCase() === codeLowerStr || String(s.id_jadwal || "").trim().toLowerCase() === codeNoPrefix);
-
-    const normalizeNameForDetect = (str: string) => {
-      return String(str || "")
-        .toLowerCase()
-        .replace(/[,.]/g, " ")
-        .replace(/\b(s|m)\s*\.?\s*(pd|kom|ag|is|si|se|mm|hum|st|pt|tp|sos|ip|ed|pdi|mat|bio|fis)\b/gi, "")
-        .replace(/\s+/g, " ")
-        .trim();
-    };
-
-    const isNameMatchDetect = (n1: string, n2: string) => {
-      if (!n1 || !n2) return false;
-      const s1 = String(n1).trim().toLowerCase();
-      const s2 = String(n2).trim().toLowerCase();
-      if (!s1 || !s2) return false;
-      if (s1 === s2 || s1.includes(s2) || s2.includes(s1)) return true;
-      const norm1 = normalizeNameForDetect(n1);
-      const norm2 = normalizeNameForDetect(n2);
-      if (norm1 && norm2 && (norm1 === norm2 || norm1.includes(norm2) || norm2.includes(norm1))) return true;
-      return false;
-    };
-
-    const isTeacherScan = teachersList.some(t => {
-      const tId = String(t.id_guru || t.id || "").trim().toLowerCase();
-      const tNip = String(t.nip_nuptk || t.nip || "").trim().toLowerCase();
-      const tQr = String(t.qr_content || t.qr_code || "").trim().toLowerCase();
-      return (
-        (tId && (tId === codeLowerStr || tId === codeNoPrefix)) ||
-        (tNip && (tNip === codeLowerStr || tNip === codeNoPrefix)) ||
-        (tQr && (tQr === codeLowerStr || tQr === codeNoPrefix)) ||
-        isNameMatchDetect(t.nama_guru, cleanCodeStr) ||
-        isNameMatchDetect(t.nama_guru, codeNoPrefix)
-      );
-    }) || lessonSchedules.some(s => {
-      const sGuruId = String(s.id_guru || "").trim().toLowerCase();
-      return (sGuruId && (sGuruId === codeLowerStr || sGuruId === codeNoPrefix)) || isNameMatchDetect(s.nama_guru, cleanCodeStr) || isNameMatchDetect(s.nama_guru, codeNoPrefix);
-    });
-
-    if (activeAttendanceType === "harian" && (isDirectScheduleScan || isTeacherScan)) {
-      activeAttendanceType = "mengajar";
-      setAttendanceType("mengajar");
-    }
+    // Active attendance type strictly respects current tab or forcedType
+    const activeAttendanceType = forcedType || attendanceType;
 
     setScanStatus({ 
       type: "info", 
@@ -775,19 +845,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
           if (matchedDirect.hari && matchedDirect.hari !== selectedDay) {
             setSelectedDay(matchedDirect.hari);
           }
-          openModalForSchedule(matchedDirect);
-          setScanStatus({
-            type: "success",
-            msg: `Jadwal Terdeteksi: ${matchedDirect.mapel} (${matchedDirect.kelas})`,
-            details: `Guru: ${matchedDirect.nama_guru} • Hari ${matchedDirect.hari} • Jam ke-${matchedDirect.jam_ke}`
-          });
-          playBeep(true);
-          triggerFlash("success");
-          if (speechEnabled) speakText(`Presensi mengajar ${matchedDirect.nama_guru}.`);
-
-          setScanQueue(prev => prev.map(item => 
-            item.id === queueId ? { ...item, status: "success", message: `Jadwal ${matchedDirect.mapel}` } : item
-          ));
+          await autoSaveAbsensiMengajar(matchedDirect, matchedDirect.nama_guru, queueId);
           return;
         }
 
@@ -887,19 +945,9 @@ export default function AbsensiScanner({ session }: { session?: any }) {
 
         const targetSched = teacherSchedMatch.find(s => !loggedScheduleJamSet.has(`${s.kelas}_${s.jam_ke}`)) || teacherSchedMatch[0];
 
-        openModalForSchedule(targetSched);
-        setScanStatus({
-          type: "success",
-          msg: `Guru Terdeteksi: ${guruNama}`,
-          details: `Memproses kelas ${targetSched.kelas} - ${targetSched.mapel} (Jam Ke-${targetSched.jam_ke})`
-        });
-        playBeep(true);
-        triggerFlash("success");
-        if (speechEnabled) speakText(`Presensi mengajar ${targetSched.nama_guru}.`);
-
-        setScanQueue(prev => prev.map(item => 
-          item.id === queueId ? { ...item, status: "success", message: `Jadwal Jam ${targetSched.jam_ke}` } : item
-        ));
+        // Automatically record attendance without popup modal
+        await autoSaveAbsensiMengajar(targetSched, guruNama, queueId);
+        return;
       } catch (err: any) {
         setScanStatus({
           type: "error",
@@ -910,8 +958,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
         triggerFlash("error");
       } finally {
         setIsProcessingScan(false);
-        setBarcodeInput("");
-        if (barcodeInputRef.current) barcodeInputRef.current.focus();
+        setBarcodeInputMengajar("");
+        if (barcodeInputRefMengajar.current) barcodeInputRefMengajar.current.focus();
       }
 
       setTimeout(() => setScanStatus({ type: null, msg: null }), 3500);
@@ -973,9 +1021,9 @@ export default function AbsensiScanner({ session }: { session?: any }) {
       ));
     } finally {
       setIsProcessingScan(false);
-      setBarcodeInput("");
-      if (barcodeInputRef.current) {
-        barcodeInputRef.current.focus();
+      setBarcodeInputHarian("");
+      if (barcodeInputRefHarian.current) {
+        barcodeInputRefHarian.current.focus();
       }
     }
 
@@ -985,11 +1033,18 @@ export default function AbsensiScanner({ session }: { session?: any }) {
     }, 3500);
   };
 
-  // Hardware Scanner Form Submit (triggers when Clabel sends Enter key)
-  const handleHardwareSubmit = (e: FormEvent) => {
+  // Hardware Scanner Form Submit Handlers
+  const handleHardwareSubmitHarian = (e: FormEvent) => {
     e.preventDefault();
-    if (barcodeInput.trim()) {
-      processScanCode(barcodeInput);
+    if (barcodeInputHarian.trim() && !isProcessingScan) {
+      processScanCode(barcodeInputHarian.trim(), "harian");
+    }
+  };
+
+  const handleHardwareSubmitMengajar = (e: FormEvent) => {
+    e.preventDefault();
+    if (barcodeInputMengajar.trim() && !isProcessingScan) {
+      processScanCode(barcodeInputMengajar.trim(), "mengajar");
     }
   };
 
@@ -1575,22 +1630,22 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                   </button>
                 </div>
 
-                <form onSubmit={handleHardwareSubmit} className="space-y-3">
+                <form onSubmit={handleHardwareSubmitHarian} className="space-y-3">
                   <div className="relative">
                     <input
-                      ref={barcodeInputRef}
+                      ref={barcodeInputRefHarian}
                       type="text"
                       autoFocus
-                      value={barcodeInput}
-                      onChange={(e) => setBarcodeInput(e.target.value)}
-                      placeholder="Arahkan Clabel Scanner / Ketik ID..."
+                      value={barcodeInputHarian}
+                      onChange={(e) => setBarcodeInputHarian(e.target.value)}
+                      placeholder="Arahkan Clabel Scanner / Ketik ID Siswa atau Guru..."
                       className="w-full bg-slate-900 border-2 border-indigo-500 text-white font-mono text-sm py-3.5 pl-10 pr-24 rounded-xl focus:outline-none focus:ring-4 focus:ring-indigo-500/20 shadow-inner placeholder-slate-500"
                     />
                     <Scan className="w-5 h-5 text-indigo-400 absolute left-3 top-3.5 animate-pulse" />
                     
                     <button
                       type="submit"
-                      disabled={!barcodeInput.trim() || isProcessingScan}
+                      disabled={!barcodeInputHarian.trim() || isProcessingScan}
                       className="absolute right-2 top-2 bottom-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-xs font-bold px-3 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
                     >
                       {isProcessingScan ? (
@@ -1599,7 +1654,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                           <span>Memproses...</span>
                         </>
                       ) : (
-                        <span>Scan</span>
+                        <span>Scan Harian</span>
                       )}
                     </button>
                   </div>
@@ -2260,19 +2315,19 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                       </button>
                     </div>
 
-                    <form onSubmit={handleHardwareSubmit} className="space-y-2">
+                    <form onSubmit={handleHardwareSubmitMengajar} className="space-y-2">
                       <div className="relative">
                         <input
-                          ref={barcodeInputRef}
+                          ref={barcodeInputRefMengajar}
                           type="text"
                           autoFocus
-                          placeholder="Scan Barcode Guru / Ketik ID..."
-                          value={barcodeInput}
-                          onChange={(e) => setBarcodeInput(e.target.value)}
+                          placeholder="Scan Barcode Guru / Ketik ID Guru..."
+                          value={barcodeInputMengajar}
+                          onChange={(e) => setBarcodeInputMengajar(e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === "Enter" && barcodeInput) {
+                            if (e.key === "Enter" && barcodeInputMengajar) {
                               e.preventDefault();
-                              processScanCode(barcodeInput);
+                              processScanCode(barcodeInputMengajar, "mengajar");
                             }
                           }}
                           className="w-full bg-slate-900 text-emerald-400 font-mono text-xs px-3.5 py-3 rounded-xl border border-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-10"
@@ -2282,7 +2337,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
 
                       <button
                         type="submit"
-                        disabled={!barcodeInput.trim() || isProcessingScan}
+                        disabled={!barcodeInputMengajar.trim() || isProcessingScan}
                         className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2.5 rounded-xl disabled:opacity-50 transition-all cursor-pointer flex items-center justify-center gap-1.5"
                       >
                         {isProcessingScan ? (
