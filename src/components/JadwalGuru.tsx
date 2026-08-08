@@ -227,7 +227,7 @@ export default function JadwalGuru({ session }: { session?: any }) {
 
   // Auto-fill jam slot time when jam_ke changes in Schedule Form
   const handleScheduleJamKeChange = (jamKeNum: number) => {
-    const slot = jamSlots.find(j => j.jam_ke === jamKeNum);
+    const slot = jamSlots.find(j => Number(j.jam_ke) === Number(jamKeNum));
     setScheduleForm(prev => ({
       ...prev,
       jam_ke: jamKeNum,
@@ -257,7 +257,7 @@ export default function JadwalGuru({ session }: { session?: any }) {
 
         for (let i = 0; i < durasi; i++) {
           const currentJam = startJam + i;
-          const slot = jamSlots.find(j => j.jam_ke === currentJam);
+          const slot = jamSlots.find(j => Number(j.jam_ke) === Number(currentJam));
 
           const payload = {
             hari: scheduleForm.hari,
@@ -459,7 +459,7 @@ export default function JadwalGuru({ session }: { session?: any }) {
   const openAbsensiFromSchedule = (sch: ScheduleLessonItem) => {
     const todayStr = new Date().toISOString().split("T")[0];
     const timeNow = new Date().toTimeString().slice(0, 5);
-    const slot = jamSlots.find(j => j.jam_ke === sch.jam_ke);
+    const slot = jamSlots.find(j => Number(j.jam_ke) === Number(sch.jam_ke));
     const jamMulai = slot ? slot.jam_mulai : (sch.jam_mulai || "07:00");
     const jamSelesai = slot ? slot.jam_selesai : (sch.jam_selesai || "07:45");
 
@@ -736,7 +736,7 @@ export default function JadwalGuru({ session }: { session?: any }) {
                     </thead>
                     <tbody className="divide-y divide-gray-50 text-xs text-gray-700">
                       {paginatedSchedules.map((item) => {
-                        const slot = jamSlots.find(j => j.jam_ke === item.jam_ke);
+                        const slot = jamSlots.find(j => Number(j.jam_ke) === Number(item.jam_ke));
                         const jamMulai = slot ? slot.jam_mulai : (item.jam_mulai || "-");
                         const jamSelesai = slot ? slot.jam_selesai : (item.jam_selesai || "-");
 
@@ -1611,7 +1611,7 @@ export default function JadwalGuru({ session }: { session?: any }) {
                     value={absensiForm.jam_ke}
                     onChange={(e) => {
                       const jNum = Number(e.target.value);
-                      const slot = jamSlots.find(j => j.jam_ke === jNum);
+                      const slot = jamSlots.find(j => Number(j.jam_ke) === Number(jNum));
                       setAbsensiForm({
                         ...absensiForm,
                         jam_ke: jNum,
