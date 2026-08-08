@@ -337,13 +337,17 @@ export function callMock(action: string, args: any[] = []): any {
     }
 
     case "hapusKelas": {
-      const [namaKelas] = args;
+      const [namaKelas, payloadObj] = args;
+      const nameClean = typeof payloadObj === "object" && payloadObj !== null && payloadObj.nama_kelas ? payloadObj.nama_kelas : (typeof namaKelas === "string" ? namaKelas : "");
       let kelas = getStorage("data_kelas");
       if (Array.isArray(kelas)) {
-        kelas = kelas.filter((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) !== namaKelas);
+        kelas = kelas.filter((k: any) => {
+          const kName = typeof k === "string" ? k : (k.nama_kelas || k.kelas || "");
+          return String(kName).trim() !== String(nameClean).trim();
+        });
         setStorage("data_kelas", kelas);
       }
-      return { success: true, message: "Kelas dihapus (SIMULASI)." };
+      return { success: true, message: "Kelas berhasil dihapus!" };
     }
 
     case "editKelas": {
