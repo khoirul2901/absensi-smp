@@ -84,10 +84,21 @@ export default function Settings() {
   };
 
   // Operational Hours
-  const [configJam, setConfigJam] = useState<ConfigJam>({
-    jam_masuk_mulai: "06:00",
-    jam_masuk_batas: "07:15",
-    jam_pulang_mulai: "15:30"
+  const [configJam, setConfigJam] = useState<ConfigJam>(() => {
+    try {
+      const localCfg = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || localStorage.getItem(getStorageKey("pengaturan_jam")) || "{}");
+      return {
+        jam_masuk_mulai: localCfg.jam_masuk_mulai || localCfg.jamMasukMulai || "06:00",
+        jam_masuk_batas: localCfg.jam_masuk_batas || localCfg.jamMasukBatas || "07:15",
+        jam_pulang_mulai: localCfg.jam_pulang_mulai || localCfg.jamPulangMulai || "15:30"
+      };
+    } catch (e) {
+      return {
+        jam_masuk_mulai: "06:00",
+        jam_masuk_batas: "07:15",
+        jam_pulang_mulai: "15:30"
+      };
+    }
   });
 
   // Holidays
@@ -216,16 +227,13 @@ export default function Settings() {
         jamPulang = dataToParse.jam_pulang_mulai || dataToParse.jamPulangMulai || dataToParse.jam_pulang || "";
       }
 
-      const localCfg = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
-      if (!jamMulai) jamMulai = localCfg.jam_masuk_mulai || localCfg.jamMasukMulai || "06:00";
-      if (!jamBatas) jamBatas = localCfg.jam_masuk_batas || localCfg.jamMasukBatas || "07:15";
-      if (!jamPulang) jamPulang = localCfg.jam_pulang_mulai || localCfg.jamPulangMulai || "15:30";
-
-      setConfigJam({
-        jam_masuk_mulai: jamMulai,
-        jam_masuk_batas: jamBatas,
-        jam_pulang_mulai: jamPulang
-      });
+      const localCfg = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || localStorage.getItem(getStorageKey("pengaturan_jam")) || "{}");
+      
+      setConfigJam(prev => ({
+        jam_masuk_mulai: jamMulai || prev.jam_masuk_mulai || localCfg.jam_masuk_mulai || localCfg.jamMasukMulai || "06:00",
+        jam_masuk_batas: jamBatas || prev.jam_masuk_batas || localCfg.jam_masuk_batas || localCfg.jamMasukBatas || "07:15",
+        jam_pulang_mulai: jamPulang || prev.jam_pulang_mulai || localCfg.jam_pulang_mulai || localCfg.jamPulangMulai || "15:30"
+      }));
 
       if (dataToParse && typeof dataToParse === "object" && !Array.isArray(dataToParse)) {
         allConfig = dataToParse;
@@ -351,6 +359,7 @@ export default function Settings() {
 
       // Store in localStorage immediately
       localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify(cfg));
+      localStorage.setItem(getStorageKey("pengaturan_jam"), JSON.stringify(cfg));
 
       const res = await callGas("simpanKonfigurasiJam", [
         cfg.jam_masuk_mulai,
@@ -858,13 +867,13 @@ export default function Settings() {
           )}
 
           {/* List display */}
-          <div className="border border-gray-100 rounded-xl overflow-hidden max-h-[220px] overflow-y-auto">
-            <table className="w-full text-left text-xs text-gray-700">
+          <div className="border border-gray-100 rounded-xl overflow-x-auto max-h-[300px] overflow-y-auto">
+            <table className="w-full text-left text-xs text-gray-700 min-w-[500px]">
               <thead className="bg-gray-50 border-b border-gray-100 text-[11px] font-extrabold text-gray-500 uppercase tracking-wider">
                 <tr>
-                  <th className="py-2 px-4">Nama Kelas</th>
-                  <th className="py-2 px-4">Wali Kelas</th>
-                  <th className="py-2 px-4 text-right">Aksi</th>
+                  <th className="py-2.5 px-4">Nama Kelas</th>
+                  <th className="py-2.5 px-4">Wali Kelas</th>
+                  <th className="py-2.5 px-4 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -879,7 +888,7 @@ export default function Settings() {
                       <td className="py-2.5 px-4 font-semibold text-indigo-700">
                         <div className="flex items-center gap-1.5">
                           <select
-                            value={kls.wali_kelas && kls.wali_kelas !== "-" ? kls.wali_kelas : "-"}
+                            value={kls.wali_kelas && kls.wali_kelas !== "-" && kls.wali_kelas.toLowerCase() !== "wali kelas" ? kls.wali_kelas : "-"}
                             onChange={(e) => {
                               const val = e.target.value;
                               setKelasList(prev => prev.map(k => k.nama_kelas === kls.nama_kelas ? { ...k, wali_kelas: val } : k));
@@ -908,20 +917,24 @@ export default function Settings() {
                         </div>
                       </td>
                       <td className="py-2.5 px-4 text-right">
-                        <div className="flex justify-end gap-1">
+                        <div className="flex justify-end items-center gap-1.5 shrink-0">
                           <button 
+                            type="button"
                             onClick={() => { setEditKelasLama(kls.nama_kelas); setEditKelasBaru(kls.nama_kelas); setEditWaliKelas(kls.wali_kelas || "-"); }}
-                            className="p-1 text-indigo-600 hover:bg-indigo-50 rounded"
-                            title="Edit Kelas & Wali Kelas"
+                            className="p-1 px-2 text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
+                            title="Edit Nama Kelas"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Edit</span>
                           </button>
                           <button 
+                            type="button"
                             onClick={() => handleDeleteClass(kls.nama_kelas)}
-                            className="p-1 text-rose-600 hover:bg-rose-50 rounded"
-                            title="Hapus Kelas"
+                            className="p-1 px-2 text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
+                            title="Hapus Kelas Ini"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
+                            <span>Hapus</span>
                           </button>
                         </div>
                       </td>
@@ -1922,6 +1935,12 @@ function simpanJadwalGuru(param1, param2) {
   return { success: true, message: "Jadwal guru berhasil disimpan!" };
 }
 
+function isInvalidWali(w) {
+  if (!w) return true;
+  var s = String(w).trim().toLowerCase();
+  return s === "" || s === "-" || s === "wali" || s === "wali kelas" || s === "wali_kelas" || s.indexOf("pilih wali") !== -1;
+}
+
 function getKelasSemua() {
   const res = getSheetDataObj("Kelas");
   const list = res.data || [];
@@ -1934,7 +1953,7 @@ function getKelasSemua() {
       name = item.nama_kelas || item.kelas || String(item || "");
       wali = item.wali_kelas || item.wali || item.waliKelas || item.guru_wali || item["Wali Kelas"] || "-";
     }
-    if (!wali || wali === "wali kelas" || wali === "wali_kelas") wali = "-";
+    if (isInvalidWali(wali)) wali = "-";
     return {
       nama_kelas: String(name).trim(),
       wali_kelas: String(wali).trim()
@@ -1954,7 +1973,7 @@ function simpanKelas(param1, param2) {
     waliKelas = String(param2 || "-").trim();
   }
   if (!namaKelas) return { success: false, message: "Nama kelas tidak boleh kosong." };
-  if (!waliKelas || waliKelas === "wali kelas" || waliKelas === "wali_kelas") waliKelas = "-";
+  if (isInvalidWali(waliKelas)) waliKelas = "-";
 
   const sheet = getOrCreateSheet("Kelas", ["id_kelas", "nama_kelas", "wali_kelas"]);
   const data = sheet.getDataRange().getValues();
@@ -1984,7 +2003,7 @@ function editKelas(kelasLama, kelasBaru, waliKelasBaru) {
     kBaru = kelasLama.kelasBaru || kelasLama.nama_kelas || kLama;
     wBaru = kelasLama.wali_kelas || kelasLama.wali || kelasLama.nama_guru || "-";
   }
-  if (!wBaru || wBaru === "wali kelas" || wBaru === "wali_kelas") wBaru = "-";
+  if (isInvalidWali(wBaru)) wBaru = "-";
 
   const sheet = findSheetByName(["Kelas"]);
   if (!sheet) return { success: false, message: "Sheet Kelas tidak ditemukan." };
@@ -2016,7 +2035,7 @@ function simpanWaliKelas(param1, param2) {
     waliKelas = String(param2 || "-").trim();
   }
   if (!namaKelas) return { success: false, message: "Nama kelas tidak boleh kosong." };
-  if (!waliKelas || waliKelas === "wali kelas" || waliKelas === "wali_kelas") waliKelas = "-";
+  if (isInvalidWali(waliKelas)) waliKelas = "-";
 
   const sheet = getOrCreateSheet("Kelas", ["id_kelas", "nama_kelas", "wali_kelas"]);
   const data = sheet.getDataRange().getValues();
@@ -2033,6 +2052,35 @@ function simpanWaliKelas(param1, param2) {
 
   sheet.appendRow(["KLS-" + Date.now(), namaKelas, waliKelas]);
   return { success: true, message: "Kelas & Wali Kelas berhasil ditambahkan!" };
+}
+
+function hapusKelas(param1, param2) {
+  let namaKelas = "";
+  if (typeof param1 === "object" && param1 !== null) {
+    namaKelas = param1.nama_kelas || param1.kelas || param1.id_kelas || "";
+  } else {
+    namaKelas = String(param1 || "").trim();
+  }
+  if (!namaKelas) return { success: false, message: "Nama kelas tidak valid." };
+
+  const sheet = findSheetByName(["Kelas"]);
+  if (!sheet) return { success: true, message: "Sheet Kelas tidak ditemukan." };
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return { success: true, message: "Sheet Kelas kosong." };
+
+  const headers = data[0].map(h => String(h).trim().toLowerCase());
+  const namaColIdx = headers.indexOf("nama_kelas") !== -1 ? headers.indexOf("nama_kelas") : 1;
+
+  let deletedCount = 0;
+  for (let i = data.length - 1; i >= 1; i--) {
+    const rowValName = String(data[i][namaColIdx] || "").trim();
+    const rowValFirst = String(data[i][0] || "").trim();
+    if (rowValName === namaKelas || rowValFirst === namaKelas) {
+      sheet.deleteRow(i + 1);
+      deletedCount++;
+    }
+  }
+  return { success: true, message: "Kelas " + namaKelas + " berhasil dihapus (" + deletedCount + " baris)!" };
 }
 
 function simpanHariLibur(param1, param2) {
