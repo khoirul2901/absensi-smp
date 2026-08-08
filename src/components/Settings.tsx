@@ -24,7 +24,7 @@ import {
   Copy,
   Check
 } from "lucide-react";
-import { callGas, getGasUrl, getStorageKey, setStorage, getStorage, extractArrayData } from "../lib/gasApi";
+import { callGas, getGasUrl, getStorageKey, setStorage, getStorage, extractArrayData, cleanTimeHHMM, isInvalidWali } from "../lib/gasApi";
 import { ConfigJam, HariLibur } from "../types";
 
 export default function Settings() {
@@ -88,9 +88,9 @@ export default function Settings() {
     try {
       const localCfg = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || localStorage.getItem(getStorageKey("pengaturan_jam")) || "{}");
       return {
-        jam_masuk_mulai: localCfg.jam_masuk_mulai || localCfg.jamMasukMulai || "06:00",
-        jam_masuk_batas: localCfg.jam_masuk_batas || localCfg.jamMasukBatas || "07:15",
-        jam_pulang_mulai: localCfg.jam_pulang_mulai || localCfg.jamPulangMulai || "15:30"
+        jam_masuk_mulai: cleanTimeHHMM(localCfg.jam_masuk_mulai || localCfg.jamMasukMulai) || "06:00",
+        jam_masuk_batas: cleanTimeHHMM(localCfg.jam_masuk_batas || localCfg.jamMasukBatas) || "07:15",
+        jam_pulang_mulai: cleanTimeHHMM(localCfg.jam_pulang_mulai || localCfg.jamPulangMulai) || "15:30"
       };
     } catch (e) {
       return {
@@ -215,24 +215,31 @@ export default function Settings() {
         for (const item of dataToParse) {
           if (typeof item === "object" && item) {
             const k = String(item.kunci || item.key || item.parameter || item.nama || item.kategori || "").toLowerCase();
-            const v = String(item.nilai || item.value || item.isi || "");
-            if (k.includes("masuk_mulai") || k.includes("masuk_awal") || k.includes("masukmulai") || k === "jam_masuk") jamMulai = v;
-            if (k.includes("masuk_batas") || k.includes("terlambat") || k.includes("masukbatas") || k === "jam_batas") jamBatas = v;
-            if (k.includes("pulang_mulai") || k.includes("pulang_awal") || k.includes("pulangmulai") || k === "jam_pulang") jamPulang = v;
+            const rawV = item.nilai || item.value || item.isi || "";
+            const v = cleanTimeHHMM(rawV);
+            if (v) {
+              if (k.includes("masuk_mulai") || k.includes("masuk_awal") || k.includes("masukmulai") || k === "jam_masuk") jamMulai = v;
+              if (k.includes("masuk_batas") || k.includes("terlambat") || k.includes("masukbatas") || k === "jam_batas") jamBatas = v;
+              if (k.includes("pulang_mulai") || k.includes("pulang_awal") || k.includes("pulangmulai") || k === "jam_pulang") jamPulang = v;
+            }
           }
         }
       } else if (dataToParse && typeof dataToParse === "object") {
-        jamMulai = dataToParse.jam_masuk_mulai || dataToParse.jamMasukMulai || dataToParse.jam_masuk || dataToParse.jam_masuk_awal || "";
-        jamBatas = dataToParse.jam_masuk_batas || dataToParse.jamMasukBatas || dataToParse.jam_batas || dataToParse.jam_terlambat || "";
-        jamPulang = dataToParse.jam_pulang_mulai || dataToParse.jamPulangMulai || dataToParse.jam_pulang || "";
+        jamMulai = cleanTimeHHMM(dataToParse.jam_masuk_mulai || dataToParse.jamMasukMulai || dataToParse.jam_masuk || dataToParse.jam_masuk_awal);
+        jamBatas = cleanTimeHHMM(dataToParse.jam_masuk_batas || dataToParse.jamMasukBatas || dataToParse.jam_batas || dataToParse.jam_terlambat);
+        jamPulang = cleanTimeHHMM(dataToParse.jam_pulang_mulai || dataToParse.jamPulangMulai || dataToParse.jam_pulang);
       }
 
       const localCfg = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || localStorage.getItem(getStorageKey("pengaturan_jam")) || "{}");
       
+      const cleanLocalMulai = cleanTimeHHMM(localCfg.jam_masuk_mulai || localCfg.jamMasukMulai);
+      const cleanLocalBatas = cleanTimeHHMM(localCfg.jam_masuk_batas || localCfg.jamMasukBatas);
+      const cleanLocalPulang = cleanTimeHHMM(localCfg.jam_pulang_mulai || localCfg.jamPulangMulai);
+
       setConfigJam(prev => ({
-        jam_masuk_mulai: jamMulai || prev.jam_masuk_mulai || localCfg.jam_masuk_mulai || localCfg.jamMasukMulai || "06:00",
-        jam_masuk_batas: jamBatas || prev.jam_masuk_batas || localCfg.jam_masuk_batas || localCfg.jamMasukBatas || "07:15",
-        jam_pulang_mulai: jamPulang || prev.jam_pulang_mulai || localCfg.jam_pulang_mulai || localCfg.jamPulangMulai || "15:30"
+        jam_masuk_mulai: jamMulai || cleanLocalMulai || prev.jam_masuk_mulai || "06:00",
+        jam_masuk_batas: jamBatas || cleanLocalBatas || prev.jam_masuk_batas || "07:15",
+        jam_pulang_mulai: jamPulang || cleanLocalPulang || prev.jam_pulang_mulai || "15:30"
       }));
 
       if (dataToParse && typeof dataToParse === "object" && !Array.isArray(dataToParse)) {
@@ -297,7 +304,6 @@ export default function Settings() {
       const storedLocal = getStorage("data_kelas") || [];
 
       const parsedMap = new Map<string, string>();
-      const isInvalidWali = (w: string) => !w || w === "-" || w.toLowerCase() === "wali kelas" || w.toLowerCase() === "wali_kelas" || w.toLowerCase() === "wali";
 
       if (Array.isArray(kList) && kList.length > 0) {
         for (const item of kList) {
@@ -2016,9 +2022,7 @@ function simpanKelas(param1, param2) {
 
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][namaColIdx]).trim() === namaKelas || String(data[i][0]).trim() === namaKelas) {
-      if (waliKelas !== "-") {
-        sheet.getRange(i + 1, waliColIdx + 1).setValue(waliKelas);
-      }
+      sheet.getRange(i + 1, waliColIdx + 1).setValue(waliKelas);
       return { success: true, message: "Kelas dan Wali Kelas berhasil diperbarui!" };
     }
   }
@@ -2053,9 +2057,7 @@ function editKelas(kelasLama, kelasBaru, waliKelasBaru) {
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][namaColIdx]).trim() === String(kLama).trim() || String(data[i][0]).trim() === String(kLama).trim()) {
       sheet.getRange(i + 1, namaColIdx + 1).setValue(kBaru);
-      if (wBaru && wBaru !== "-") {
-        sheet.getRange(i + 1, waliColIdx + 1).setValue(wBaru);
-      }
+      sheet.getRange(i + 1, waliColIdx + 1).setValue(wBaru);
       return { success: true, message: "Kelas & Wali Kelas berhasil diperbarui!" };
     }
   }
