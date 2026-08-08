@@ -1923,7 +1923,23 @@ function simpanJadwalPelajaran(param1, param2) {
 function simpanAbsensiMengajarGuru(payload) {
   if (!payload) return { success: false, message: "Payload tidak valid." };
   const sheet = getOrCreateSheet("AbsensiMengajar", ["id_log_mengajar", "tanggal", "waktu_absen", "hari", "id_guru", "nama_guru", "kelas", "mapel", "jam_ke", "jam_mulai_jadwal", "jam_selesai_jadwal", "status", "catatan_materi"]);
-  sheet.appendRow([payload.id_log_mengajar || ("LOG-MENG-" + Date.now()), payload.tanggal || new Date().toISOString().split("T")[0], payload.waktu_absen || new Date().toTimeString().slice(0, 5), payload.hari || "Senin", payload.id_guru || "", payload.nama_guru || "", payload.kelas || "", payload.mapel || "", payload.jam_ke || 1, payload.jam_mulai_jadwal || "-", payload.jam_selesai_jadwal || "-", payload.status || "Hadir Tepat Waktu", payload.catatan_materi || "-"]);
+  var jamNum = Number(payload.jam_ke || 1);
+  var startJadwal = payload.jam_mulai_jadwal || "-";
+  var endJadwal = payload.jam_selesai_jadwal || "-";
+  if (!startJadwal || startJadwal === "-") {
+    var jamSheet = findSheetByName(["JamPelajaran"]);
+    if (jamSheet) {
+      var jamData = jamSheet.getDataRange().getValues();
+      for (var i = 1; i < jamData.length; i++) {
+        if (Number(jamData[i][1]) === jamNum) {
+          startJadwal = jamData[i][3] || startJadwal;
+          endJadwal = jamData[i][4] || endJadwal;
+          break;
+        }
+      }
+    }
+  }
+  sheet.appendRow([payload.id_log_mengajar || ("LOG-MENG-" + Date.now()), payload.tanggal || new Date().toISOString().split("T")[0], payload.waktu_absen || new Date().toTimeString().slice(0, 5), payload.hari || "Senin", payload.id_guru || "", payload.nama_guru || "", payload.kelas || "", payload.mapel || "", jamNum, startJadwal, endJadwal, payload.status || "Hadir Tepat Waktu", payload.catatan_materi || "-"]);
   return { success: true, message: "Presensi Mengajar Guru berhasil dicatat!" };
 }
 
