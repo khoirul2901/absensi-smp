@@ -1957,6 +1957,18 @@ function isInvalidWali(w) {
   return s === "" || s === "-" || s === "wali" || s === "wali kelas" || s === "wali_kelas" || s.indexOf("pilih wali") !== -1;
 }
 
+function findHeaderIdx(headers, candidates, defaultIdx) {
+  if (!Array.isArray(headers)) return defaultIdx;
+  for (var i = 0; i < headers.length; i++) {
+    var h = String(headers[i] || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    for (var c = 0; c < candidates.length; c++) {
+      var cand = candidates[c].toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (h === cand || (cand.length > 3 && h.indexOf(cand) !== -1)) return i;
+    }
+  }
+  return defaultIdx;
+}
+
 function getKelasSemua() {
   const res = getSheetDataObj("Kelas");
   const list = res.data || [];
@@ -1967,7 +1979,7 @@ function getKelasSemua() {
       name = item;
     } else {
       name = item.nama_kelas || item.kelas || String(item || "");
-      wali = item.wali_kelas || item.wali || item.waliKelas || item.guru_wali || item["Wali Kelas"] || "-";
+      wali = item.wali_kelas || item.wali || item.waliKelas || item.guru_wali || item["Wali Kelas"] || item["wali_kelas"] || "-";
     }
     if (isInvalidWali(wali)) wali = "-";
     return {
@@ -1994,8 +2006,13 @@ function simpanKelas(param1, param2) {
   const sheet = getOrCreateSheet("Kelas", ["id_kelas", "nama_kelas", "wali_kelas"]);
   const data = sheet.getDataRange().getValues();
   const headers = data[0].map(h => String(h).trim().toLowerCase());
-  const namaColIdx = headers.indexOf("nama_kelas") !== -1 ? headers.indexOf("nama_kelas") : 1;
-  const waliColIdx = headers.indexOf("wali_kelas") !== -1 ? headers.indexOf("wali_kelas") : 2;
+  const namaColIdx = findHeaderIdx(headers, ["nama_kelas", "kelas", "namakelas"], 1);
+  let waliColIdx = findHeaderIdx(headers, ["wali_kelas", "wali", "walikelas", "guru_wali", "guruwali"], -1);
+
+  if (waliColIdx === -1) {
+    waliColIdx = headers.length;
+    sheet.getRange(1, waliColIdx + 1).setValue("wali_kelas");
+  }
 
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][namaColIdx]).trim() === namaKelas || String(data[i][0]).trim() === namaKelas) {
@@ -2025,8 +2042,13 @@ function editKelas(kelasLama, kelasBaru, waliKelasBaru) {
   if (!sheet) return { success: false, message: "Sheet Kelas tidak ditemukan." };
   const data = sheet.getDataRange().getValues();
   const headers = data[0].map(h => String(h).trim().toLowerCase());
-  const namaColIdx = headers.indexOf("nama_kelas") !== -1 ? headers.indexOf("nama_kelas") : 1;
-  const waliColIdx = headers.indexOf("wali_kelas") !== -1 ? headers.indexOf("wali_kelas") : 2;
+  const namaColIdx = findHeaderIdx(headers, ["nama_kelas", "kelas", "namakelas"], 1);
+  let waliColIdx = findHeaderIdx(headers, ["wali_kelas", "wali", "walikelas", "guru_wali", "guruwali"], -1);
+
+  if (waliColIdx === -1) {
+    waliColIdx = headers.length;
+    sheet.getRange(1, waliColIdx + 1).setValue("wali_kelas");
+  }
 
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][namaColIdx]).trim() === String(kLama).trim() || String(data[i][0]).trim() === String(kLama).trim()) {
@@ -2056,8 +2078,13 @@ function simpanWaliKelas(param1, param2) {
   const sheet = getOrCreateSheet("Kelas", ["id_kelas", "nama_kelas", "wali_kelas"]);
   const data = sheet.getDataRange().getValues();
   const headers = data[0].map(h => String(h).trim().toLowerCase());
-  const namaColIdx = headers.indexOf("nama_kelas") !== -1 ? headers.indexOf("nama_kelas") : 1;
-  const waliColIdx = headers.indexOf("wali_kelas") !== -1 ? headers.indexOf("wali_kelas") : 2;
+  const namaColIdx = findHeaderIdx(headers, ["nama_kelas", "kelas", "namakelas"], 1);
+  let waliColIdx = findHeaderIdx(headers, ["wali_kelas", "wali", "walikelas", "guru_wali", "guruwali"], -1);
+
+  if (waliColIdx === -1) {
+    waliColIdx = headers.length;
+    sheet.getRange(1, waliColIdx + 1).setValue("wali_kelas");
+  }
 
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][namaColIdx]).trim() === namaKelas || String(data[i][0]).trim() === namaKelas) {
