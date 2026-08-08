@@ -463,14 +463,14 @@ export default function JadwalGuru({ session }: { session?: any }) {
     const jamMulai = slot ? slot.jam_mulai : (sch.jam_mulai || "07:00");
     const jamSelesai = slot ? slot.jam_selesai : (sch.jam_selesai || "07:45");
 
-    // Check if late (more than 5 mins after start time)
+    // Check if late (more than 15 mins tolerance after start time)
     let autoStatus: "Hadir Tepat Waktu" | "Terlambat Masuk Kelas" = "Hadir Tepat Waktu";
     if (jamMulai && jamMulai !== "-") {
       const [hM, mM] = jamMulai.split(":").map(Number);
       const [hN, mN] = timeNow.split(":").map(Number);
       const startMin = hM * 60 + mM;
       const nowMin = hN * 60 + mN;
-      if (nowMin > startMin + 5) {
+      if (nowMin > startMin + 15) {
         autoStatus = "Terlambat Masuk Kelas";
       }
     }
