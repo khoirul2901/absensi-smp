@@ -48,7 +48,7 @@ import {
   Layers
 } from "lucide-react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
-import { callGas, getStorageKey, setStorage, getStorage } from "../lib/gasApi";
+import { callGas, getStorageKey, setStorage, getStorage, extractArrayData } from "../lib/gasApi";
 import { LiveAbsen, ScheduleLessonItem, AbsensiMengajarItem, JamPelajaranItem } from "../types";
 
 const HARI_LIST = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
@@ -261,12 +261,26 @@ export default function AbsensiScanner({ session }: { session?: any }) {
   // Load Classes
   useEffect(() => {
     async function fetchClasses() {
-      const res = await callGas("getKelasSemua");
-      const list = Array.isArray(res)
-        ? res
-        : (res && res.success && Array.isArray(res.data) ? res.data : []);
-      const parsed = list.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
-      setClassList(parsed);
+      try {
+        const res = await callGas("getKelasSemua");
+        const list = extractArrayData(res);
+        let parsed = list.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
+        if (!parsed || parsed.length === 0) {
+          const stored = getStorage("data_kelas") || [];
+          parsed = stored.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
+        }
+        if (!parsed || parsed.length === 0) {
+          parsed = ["X RPL 1", "X RPL 2", "XI RPL 1", "XI RPL 2", "XII RPL 1"];
+        }
+        setClassList(parsed);
+      } catch (e) {
+        const stored = getStorage("data_kelas") || [];
+        let parsed = stored.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
+        if (!parsed || parsed.length === 0) {
+          parsed = ["X RPL 1", "X RPL 2", "XI RPL 1", "XI RPL 2", "XII RPL 1"];
+        }
+        setClassList(parsed);
+      }
     }
     fetchClasses();
   }, []);
@@ -1380,6 +1394,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
           type="button"
           onClick={() => {
             setAttendanceType("mengajar");
+            setScanMethod("hardware");
+            setCameraActive(false);
             fetchMengajarData();
           }}
           className={`flex-1 py-3 px-4 rounded-xl text-xs sm:text-sm font-extrabold transition-all flex items-center justify-center gap-2 cursor-pointer ${
@@ -2274,180 +2290,64 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                   </span>
                 </div>
 
-                {/* Input Mode Selector Tabs */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block">Metode Scanner</label>
-                  <div className="grid grid-cols-2 gap-1.5 bg-gray-100 p-1 rounded-xl border border-gray-200/80">
+                {/* HARDWARE SCANNER INPUT FOR PRESENSI MENGAJAR */}
+                <div className="space-y-3 pt-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[11px] font-extrabold text-gray-700 flex items-center gap-1">
+                      <Usb className="w-3.5 h-3.5 text-emerald-600" /> Input Barcode Scanner Guru
+                    </span>
                     <button
                       type="button"
-                      onClick={() => setScanMethod("hardware")}
-                      className={`py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                        scanMethod === "hardware" 
-                          ? "bg-white text-emerald-700 shadow-sm border border-gray-200" 
-                          : "text-gray-500 hover:text-gray-900"
+                      onClick={() => setAutoFocusLock(!autoFocusLock)}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all cursor-pointer ${
+                        autoFocusLock 
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
+                          : "bg-gray-100 text-gray-600 border-gray-200"
                       }`}
                     >
-                      <Keyboard className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Hardware</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setScanMethod("camera");
-                        detectCameras();
-                      }}
-                      className={`py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                        scanMethod === "camera" 
-                          ? "bg-white text-blue-700 shadow-sm border border-gray-200" 
-                          : "text-gray-500 hover:text-gray-900"
-                      }`}
-                    >
-                      <Camera className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Kamera Live</span>
+                      {autoFocusLock ? "🔒 Focus Lock Active" : "🔓 Focus Unlocked"}
                     </button>
                   </div>
-                </div>
 
-                {/* HARDWARE SCANNER MODE */}
-                {scanMethod === "hardware" && (
-                  <div className="space-y-3 pt-1">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[11px] font-extrabold text-gray-700 flex items-center gap-1">
-                        <Usb className="w-3.5 h-3.5 text-emerald-600" /> Input Barcode Guru
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setAutoFocusLock(!autoFocusLock)}
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all cursor-pointer ${
-                          autoFocusLock 
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
-                            : "bg-gray-100 text-gray-600 border-gray-200"
-                        }`}
-                      >
-                        {autoFocusLock ? "🔒 Focus Lock Active" : "🔓 Focus Unlocked"}
-                      </button>
-                    </div>
-
-                    <form onSubmit={handleHardwareSubmitMengajar} className="space-y-2">
-                      <div className="relative">
-                        <input
-                          ref={barcodeInputRefMengajar}
-                          type="text"
-                          autoFocus
-                          placeholder="Scan Barcode Guru / Ketik ID Guru..."
-                          value={barcodeInputMengajar}
-                          onChange={(e) => setBarcodeInputMengajar(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" && barcodeInputMengajar) {
-                              e.preventDefault();
-                              processScanCode(barcodeInputMengajar, "mengajar");
-                            }
-                          }}
-                          className="w-full bg-slate-900 text-emerald-400 font-mono text-xs px-3.5 py-3 rounded-xl border border-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-10"
-                        />
-                        <Scan className="w-4 h-4 text-emerald-500 absolute right-3 top-3.5 animate-pulse" />
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={!barcodeInputMengajar.trim() || isProcessingScan}
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2.5 rounded-xl disabled:opacity-50 transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                      >
-                        {isProcessingScan ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Memproses Jadwal...</span>
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="w-4 h-4" />
-                            <span>Proses Presensi Mengajar</span>
-                          </>
-                        )}
-                      </button>
-                    </form>
-                  </div>
-                )}
-
-                {/* CAMERA SCANNER MODE */}
-                {scanMethod === "camera" && (
-                  <div className="space-y-3 pt-1">
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between items-center">
-                        <label className="text-[11px] font-bold text-gray-700">Pilih Kamera</label>
-                        <button
-                          type="button"
-                          onClick={detectCameras}
-                          className="text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
-                        >
-                          <RefreshCw className="w-3 h-3" /> Refresh
-                        </button>
-                      </div>
-
-                      <select
-                        value={selectedCameraId}
-                        onChange={(e) => {
-                          setSelectedCameraId(e.target.value);
-                          if (cameraActive) {
-                            setCameraActive(false);
-                            setTimeout(() => setCameraActive(true), 200);
+                  <form onSubmit={handleHardwareSubmitMengajar} className="space-y-2">
+                    <div className="relative">
+                      <input
+                        ref={barcodeInputRefMengajar}
+                        type="text"
+                        autoFocus
+                        placeholder="Scan Barcode Guru / Ketik ID Guru..."
+                        value={barcodeInputMengajar}
+                        onChange={(e) => setBarcodeInputMengajar(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && barcodeInputMengajar) {
+                            e.preventDefault();
+                            processScanCode(barcodeInputMengajar, "mengajar");
                           }
                         }}
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2 text-xs font-semibold text-gray-800 focus:outline-none"
-                      >
-                        {availableCameras.length === 0 ? (
-                          <option value="">-- Tidak ada kamera terdeteksi --</option>
-                        ) : (
-                          availableCameras.map(cam => (
-                            <option key={cam.id} value={cam.id}>{cam.label}</option>
-                          ))
-                        )}
-                      </select>
+                        className="w-full bg-slate-900 text-emerald-400 font-mono text-xs px-3.5 py-3 rounded-xl border border-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-10"
+                      />
+                      <Scan className="w-4 h-4 text-emerald-500 absolute right-3 top-3.5 animate-pulse" />
                     </div>
 
-                    <button 
-                      onClick={() => setCameraActive(!cameraActive)}
-                      className={`w-full py-2 rounded-xl font-bold text-xs shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                        cameraActive ? "bg-rose-600 text-white hover:bg-rose-700" : "bg-emerald-600 text-white hover:bg-emerald-700"
-                      }`}
+                    <button
+                      type="submit"
+                      disabled={!barcodeInputMengajar.trim() || isProcessingScan}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2.5 rounded-xl disabled:opacity-50 transition-all cursor-pointer flex items-center justify-center gap-1.5"
                     >
-                      {cameraActive ? (
+                      {isProcessingScan ? (
                         <>
-                          <CameraOff className="w-3.5 h-3.5" />
-                          Stop Kamera
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Memproses Jadwal...</span>
                         </>
                       ) : (
                         <>
-                          <Camera className="w-3.5 h-3.5" />
-                          Start Kamera Mengajar
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Proses Presensi Mengajar</span>
                         </>
                       )}
                     </button>
-
-                    {/* Camera Feed Container */}
-                    <div className="relative bg-slate-900 rounded-xl overflow-hidden aspect-[4/3] min-h-[180px] border border-slate-800 flex flex-col items-center justify-center">
-                      {cameraActive ? (
-                        <>
-                          <div id="qr-external-camera-frame" className="w-full h-full object-cover"></div>
-                          <div className="absolute inset-0 border-2 border-emerald-500/40 m-4 pointer-events-none rounded-lg">
-                            <div className="w-full h-[2px] bg-emerald-400 absolute top-0 left-0 animate-bounce-slow shadow-lg shadow-emerald-500"></div>
-                          </div>
-                          <div className="absolute bottom-2 left-2 bg-slate-950/80 backdrop-blur-sm px-2 py-0.5 rounded text-[9px] text-emerald-400 font-mono flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                            SCANNER MENGAJAR LIVE • {selectedDay}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="text-center p-4 text-slate-500 space-y-1">
-                          <Camera className="w-8 h-8 mx-auto text-slate-600 stroke-[1.5]" />
-                          <p className="text-[11px] font-bold text-slate-400">Kamera Mengajar Nonaktif</p>
-                          <p className="text-[10px]">Klik tombol di atas untuk menyalakan pemindai QR kamera.</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
+                  </form>
+                </div>
 
                 {/* Quick Helper Badge */}
                 <div className="bg-emerald-50 border border-emerald-200/80 p-3 rounded-xl space-y-1 text-[11px] text-emerald-900">
