@@ -311,10 +311,11 @@ export function callMock(action: string, args: any[] = []): any {
         if (typeof item === "string") {
           return { nama_kelas: item, wali_kelas: "-" };
         }
-        const waliVal = item.wali_kelas || item.wali || item.waliKelas || item["Wali Kelas"] || "-";
+        const rawWali = item.wali_kelas || item.wali || item.waliKelas || item["Wali Kelas"] || item["wali_kelas"] || "-";
+        const cleanWali = isInvalidWali(rawWali) ? "-" : String(rawWali).trim();
         return {
           nama_kelas: item.nama_kelas || item.kelas || String(item),
-          wali_kelas: waliVal
+          wali_kelas: cleanWali
         };
       });
       return { success: true, data: normalized };
@@ -325,7 +326,8 @@ export function callMock(action: string, args: any[] = []): any {
       let kelas = getStorage("data_kelas");
       if (!Array.isArray(kelas)) kelas = [];
       const obj = (typeof payloadObj === "object" && payloadObj !== null) ? payloadObj : {};
-      const chosenWali = (typeof waliKelas === "string" && waliKelas !== "wali kelas" && waliKelas !== "wali_kelas" ? waliKelas : (obj.wali_kelas || obj.wali || obj.nama_guru || obj.waliKelas || "-"));
+      const rawWali = typeof waliKelas === "string" ? waliKelas : (obj.wali_kelas || obj.wali || obj.nama_guru || obj.waliKelas || "-");
+      const chosenWali = isInvalidWali(rawWali) ? "-" : String(rawWali).trim();
       const idx = kelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === namaKelas);
       if (idx === -1) {
         kelas.push({ nama_kelas: namaKelas, wali_kelas: chosenWali });
@@ -356,7 +358,8 @@ export function callMock(action: string, args: any[] = []): any {
       if (!Array.isArray(kelas)) kelas = [];
       const idx = kelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === kelasLama);
       const obj = (typeof payloadObj === "object" && payloadObj !== null) ? payloadObj : {};
-      const chosenWali = (typeof waliKelasBaru === "string" && waliKelasBaru !== "wali kelas" && waliKelasBaru !== "wali_kelas" ? waliKelasBaru : (obj.wali_kelas || obj.wali || obj.nama_guru || obj.waliKelas || "-"));
+      const rawWali = typeof waliKelasBaru === "string" ? waliKelasBaru : (obj.wali_kelas || obj.wali || obj.nama_guru || obj.waliKelas || "-");
+      const chosenWali = isInvalidWali(rawWali) ? "-" : String(rawWali).trim();
       if (idx !== -1) {
         kelas[idx] = {
           nama_kelas: kelasBaru,
@@ -378,7 +381,8 @@ export function callMock(action: string, args: any[] = []): any {
       if (!Array.isArray(kelas)) kelas = [];
       const idx = kelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === namaKelas);
       const obj = (typeof payloadObj === "object" && payloadObj !== null) ? payloadObj : {};
-      const chosenWali = (typeof waliKelas === "string" && waliKelas !== "wali kelas" && waliKelas !== "wali_kelas" ? waliKelas : (obj.wali_kelas || obj.wali || obj.nama_guru || obj.waliKelas || "-"));
+      const rawWali = typeof waliKelas === "string" ? waliKelas : (obj.wali_kelas || obj.wali || obj.nama_guru || obj.waliKelas || "-");
+      const chosenWali = isInvalidWali(rawWali) ? "-" : String(rawWali).trim();
       if (idx !== -1) {
         kelas[idx] = {
           nama_kelas: typeof kelas[idx] === "string" ? kelas[idx] : (kelas[idx].nama_kelas || namaKelas),
@@ -1496,6 +1500,46 @@ export function callMock(action: string, args: any[] = []): any {
   }
 }
 
+export function isInvalidWali(s: any): boolean {
+  if (!s) return true;
+  const str = String(s).trim().toLowerCase();
+  return (
+    str === "" ||
+    str === "-" ||
+    str === "wali" ||
+    str === "wali kelas" ||
+    str === "wali_kelas" ||
+    str === "walikelas" ||
+    str === "pilih wali" ||
+    str.indexOf("pilih wali") !== -1 ||
+    str.indexOf("-- pilih") !== -1
+  );
+}
+
+export function cleanTimeHHMM(val: any): string {
+  if (!val || val === "-") return "";
+  let str = String(val).trim();
+  if (str.indexOf("T") !== -1) {
+    try {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        const hh = String(d.getHours()).padStart(2, "0");
+        const mm = String(d.getMinutes()).padStart(2, "0");
+        return `${hh}:${mm}`;
+      }
+    } catch (e) {}
+    const timePart = str.split("T")[1];
+    if (timePart) str = timePart.substring(0, 5);
+  }
+  const match = str.match(/(\d{1,2}):(\d{2})/);
+  if (match) {
+    const h = match[1].padStart(2, "0");
+    const m = match[2];
+    return `${h}:${m}`;
+  }
+  return str;
+}
+
 // Main bridge function to invoke Apps Script Web App actions
 export async function callGas(action: string, args: any[] = []): Promise<any> {
   if (isUsingMock()) {
@@ -1511,23 +1555,40 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
   try {
     const bodyObj: any = { action, args, token };
     if (args && args.length > 0) {
-      if (typeof args[0] === "string") {
-        bodyObj.nama_kelas = args[0];
-        bodyObj.kelas = args[0];
-        bodyObj.kelasLama = args[0];
-      }
-      if (typeof args[1] === "string") {
-        bodyObj.wali_kelas = args[1];
-        bodyObj.wali = args[1];
-        bodyObj.waliKelas = args[1];
-        bodyObj.nama_guru = args[1];
-        bodyObj.kelasBaru = args[1];
-      }
-      if (typeof args[2] === "string") {
-        bodyObj.wali_kelas = args[2];
-        bodyObj.wali = args[2];
-        bodyObj.waliKelas = args[2];
-        bodyObj.nama_guru = args[2];
+      if (action === "editKelas") {
+        if (typeof args[0] === "string") bodyObj.kelasLama = args[0];
+        if (typeof args[1] === "string") {
+          bodyObj.kelasBaru = args[1];
+          bodyObj.nama_kelas = args[1];
+          bodyObj.kelas = args[1];
+        }
+        if (typeof args[2] === "string") {
+          const w = isInvalidWali(args[2]) ? "-" : args[2];
+          bodyObj.wali_kelas = w;
+          bodyObj.wali = w;
+          bodyObj.waliKelas = w;
+          bodyObj.nama_guru = w;
+        }
+      } else if (action === "simpanWaliKelas" || action === "tambahKelas") {
+        if (typeof args[0] === "string") {
+          bodyObj.nama_kelas = args[0];
+          bodyObj.kelas = args[0];
+        }
+        if (typeof args[1] === "string") {
+          const w = isInvalidWali(args[1]) ? "-" : args[1];
+          bodyObj.wali_kelas = w;
+          bodyObj.wali = w;
+          bodyObj.waliKelas = w;
+          bodyObj.nama_guru = w;
+        }
+      } else {
+        if (typeof args[0] === "string") {
+          bodyObj.nama_kelas = args[0];
+          bodyObj.kelas = args[0];
+        }
+        if (typeof args[1] === "string") {
+          bodyObj.wali_kelas = isInvalidWali(args[1]) ? "-" : args[1];
+        }
       }
       for (const a of args) {
         if (typeof a === "object" && a !== null && !Array.isArray(a)) {
@@ -1584,26 +1645,29 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
             for (const item of rawObj) {
               if (typeof item === "object" && item) {
                 const k = String(item.kunci || item.key || item.parameter || item.nama || item.kategori || "").toLowerCase();
-                const v = String(item.nilai || item.value || item.isi || "");
-                if (k.includes("masuk_mulai") || k.includes("masuk_awal") || k.includes("masukmulai") || k === "jam_masuk") jMulai = v;
-                if (k.includes("masuk_batas") || k.includes("terlambat") || k.includes("masukbatas") || k === "jam_batas") jBatas = v;
-                if (k.includes("pulang_mulai") || k.includes("pulang_awal") || k.includes("pulangmulai") || k === "jam_pulang") jPulang = v;
+                const rawV = item.nilai || item.value || item.isi || "";
+                const v = cleanTimeHHMM(rawV);
+                if (v) {
+                  if (k.includes("masuk_mulai") || k.includes("masuk_awal")) jMulai = v;
+                  if (k.includes("masuk_batas") || k.includes("terlambat")) jBatas = v;
+                  if (k.includes("pulang_mulai") || k.includes("pulang_awal")) jPulang = v;
+                }
               }
             }
           } else if (rawObj && typeof rawObj === "object") {
-            jMulai = rawObj.jam_masuk_mulai || rawObj.jamMasukMulai || rawObj.jam_masuk || rawObj.jam_masuk_awal || "";
-            jBatas = rawObj.jam_masuk_batas || rawObj.jamMasukBatas || rawObj.jam_batas || rawObj.jam_terlambat || "";
-            jPulang = rawObj.jam_pulang_mulai || rawObj.jamPulangMulai || rawObj.jam_pulang || "";
+            jMulai = cleanTimeHHMM(rawObj.jam_masuk_mulai || rawObj.jam_masuk);
+            jBatas = cleanTimeHHMM(rawObj.jam_masuk_batas || rawObj.jam_batas);
+            jPulang = cleanTimeHHMM(rawObj.jam_pulang_mulai || rawObj.jam_pulang);
           }
-
-          const existingCfg = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
-          const newCfg = {
-            ...existingCfg,
-            jam_masuk_mulai: jMulai || existingCfg.jam_masuk_mulai || "06:00",
-            jam_masuk_batas: jBatas || existingCfg.jam_masuk_batas || "07:15",
-            jam_pulang_mulai: jPulang || existingCfg.jam_pulang_mulai || "15:30"
-          };
-          localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify(newCfg));
+          if (jMulai || jBatas || jPulang) {
+            const savedCfg = {
+              jam_masuk_mulai: jMulai || "06:00",
+              jam_masuk_batas: jBatas || "07:15",
+              jam_pulang_mulai: jPulang || "15:30"
+            };
+            localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify(savedCfg));
+            localStorage.setItem(getStorageKey("pengaturan_jam"), JSON.stringify(savedCfg));
+          }
         } else if (action === "getDataMaster") {
           const cat = args[0];
           const list = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : null);
