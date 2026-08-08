@@ -23,7 +23,7 @@ import {
   Filter,
   Eye
 } from "lucide-react";
-import { callGas, callMock, getStorageKey, setStorage, extractArrayData } from "../lib/gasApi";
+import { callGas, callMock, getStorageKey, setStorage, getStorage, extractArrayData } from "../lib/gasApi";
 import { ScheduleLessonItem, JamPelajaranItem, AbsensiMengajarItem, TeacherItem } from "../types";
 
 interface ExtendedTeacherItem {
@@ -184,9 +184,21 @@ export default function JadwalGuru({ session }: { session?: any }) {
       }
 
       // 4. Fetch Classes Master Data
-      const resKelas = await callGas("getKelasSemua");
-      const kList = extractArrayData(resKelas);
-      const parsedKelas = kList.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
+      let parsedKelas: string[] = [];
+      try {
+        const resKelas = await callGas("getKelasSemua");
+        const kList = extractArrayData(resKelas);
+        parsedKelas = kList.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
+      } catch (e) {
+        console.error("Fetch classes error", e);
+      }
+      if (!parsedKelas || parsedKelas.length === 0) {
+        const stored = getStorage("data_kelas") || [];
+        parsedKelas = stored.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
+      }
+      if (!parsedKelas || parsedKelas.length === 0) {
+        parsedKelas = ["X RPL 1", "X RPL 2", "XI RPL 1", "XI RPL 2", "XII RPL 1"];
+      }
       setClassList(parsedKelas);
       if (parsedKelas.length > 0) {
         setScheduleForm(prev => ({ ...prev, kelas: prev.kelas || parsedKelas[0] }));
