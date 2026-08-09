@@ -602,7 +602,9 @@ export function callMock(action: string, args: any[] = []): any {
                 const [hM, mM] = jamMulai.split(":").map(Number);
                 const [hN, mN] = jam.split(":").map(Number);
                 if (!isNaN(hM) && !isNaN(mM) && !isNaN(hN) && !isNaN(mN)) {
-                  if (hN * 60 + mN > hM * 60 + mM + 15) {
+                  const savedCfg = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
+                  const toleransiGuruVal = Number(savedCfg.toleransi_guru ?? savedCfg.toleransi_mengajar_guru ?? 15);
+                  if (hN * 60 + mN > hM * 60 + mM + toleransiGuruVal) {
                     statusMengajar = "Terlambat Masuk Kelas";
                   }
                 }
