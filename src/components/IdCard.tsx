@@ -22,9 +22,9 @@ export const IdCard: React.FC<IdCardProps> = ({ item, kategori, side = "both" })
   const jabatanLabel = isSiswa ? "Jurusan" : "Jabatan";
   const jabatanValue = isSiswa ? (item as Siswa).jurusan : (item as Guru).jabatan_tugas;
 
-  const schoolName = localStorage.getItem(getStorageKey('cardSchoolName')) || 'SMK AL-HIKAM KREJENGAN';
-  const schoolAddress = localStorage.getItem(getStorageKey('cardSchoolAddress')) || 'Krejengan Kec. Krejengan Kab. Probolinggo';
-  const principalName = localStorage.getItem(getStorageKey('cardPrincipalName')) || 'Fulan, S.Pd';
+  const schoolName = localStorage.getItem(getStorageKey('cardSchoolName')) || 'SMP AL-HIKAM SENDANG MULYO';
+  const schoolAddress = localStorage.getItem(getStorageKey('cardSchoolAddress')) || 'Sendang Mulyo, Sendang Agung, Lampung Tengah';
+  const principalName = localStorage.getItem(getStorageKey('cardPrincipalName')) || 'Khoirul Malik';
   const signatureUrl = localStorage.getItem(getStorageKey('cardSignatureUrl')) || '';
   const logoLeftUrl = localStorage.getItem(getStorageKey('cardLogoLeftUrl')) || '';
   const logoRightUrl = localStorage.getItem(getStorageKey('cardLogoRightUrl')) || '';
