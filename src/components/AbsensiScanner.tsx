@@ -137,6 +137,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
   const [absensiMengajarLogs, setAbsensiMengajarLogs] = useState<AbsensiMengajarItem[]>([]);
   const [teachersList, setTeachersList] = useState<any[]>([]);
   const [jamSlots, setJamSlots] = useState<JamPelajaranItem[]>([]);
+  const [toleransiGuru, setToleransiGuru] = useState<number>(15);
   const [isLoadingMengajar, setIsLoadingMengajar] = useState(false);
 
   const getTodayHari = () => {
@@ -419,6 +420,21 @@ export default function AbsensiScanner({ session }: { session?: any }) {
         ? resJam
         : (resJam && Array.isArray(resJam.data) ? resJam.data : (resJam?.data || []));
       setJamSlots(jams);
+
+      try {
+        const resCfg = await callGas("getPengaturanSemua");
+        const cfg = resCfg?.data || resCfg;
+        if (cfg) {
+          const val = Number(cfg.toleransi_guru ?? cfg.toleransi_mengajar_guru);
+          if (!isNaN(val) && val >= 0) setToleransiGuru(val);
+        } else {
+          const savedLocal = localStorage.getItem(getStorageKey("MOCK_pengaturan_jam"));
+          if (savedLocal) {
+            const parsed = JSON.parse(savedLocal);
+            if (parsed.toleransi_guru !== undefined) setToleransiGuru(Number(parsed.toleransi_guru) || 15);
+          }
+        }
+      } catch (e) {}
     } catch (err) {
       console.error("Gagal memuat data presensi mengajar:", err);
     } finally {
@@ -463,8 +479,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
         if (!isNaN(hM) && !isNaN(mM) && !isNaN(hN) && !isNaN(mN)) {
           const startMin = hM * 60 + mM;
           const nowMin = hN * 60 + mN;
-          // Toleransi keterlambatan 15 menit
-          if (nowMin > startMin + 15) {
+          // Toleransi keterlambatan presensi mengajar guru
+          if (nowMin > startMin + toleransiGuru) {
             autoStatus = "Terlambat Masuk Kelas";
           }
         }
@@ -663,8 +679,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
         if (!isNaN(hM) && !isNaN(mM) && !isNaN(hN) && !isNaN(mN)) {
           const startMin = hM * 60 + mM;
           const nowMin = hN * 60 + mN;
-          // Toleransi keterlambatan 15 menit
-          if (nowMin > startMin + 15) {
+          // Toleransi keterlambatan presensi mengajar guru
+          if (nowMin > startMin + toleransiGuru) {
             autoStatus = "Terlambat Masuk Kelas";
           }
         }
