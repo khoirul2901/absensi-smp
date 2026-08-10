@@ -138,11 +138,11 @@ function initMockDb() {
   }
   if (!localStorage.getItem(getKey("data_kelas"))) {
     localStorage.setItem(getKey("data_kelas"), JSON.stringify([
-      { nama_kelas: "X RPL 1", wali_kelas: "Bahrul Ulum, S.Kom" },
-      { nama_kelas: "X RPL 2", wali_kelas: "-" },
-      { nama_kelas: "XI RPL 1", wali_kelas: "Eka Rahmawati, S.Pd" },
-      { nama_kelas: "XI RPL 2", wali_kelas: "-" },
-      { nama_kelas: "XII RPL 1", wali_kelas: "-" }
+      { nama_kelas: "X RPL 1", id_guru: "G-001", wali_kelas: "Bahrul Ulum, S.Kom" },
+      { nama_kelas: "X RPL 2", id_guru: "-", wali_kelas: "-" },
+      { nama_kelas: "XI RPL 1", id_guru: "G-002", wali_kelas: "Eka Rahmawati, S.Pd" },
+      { nama_kelas: "XI RPL 2", id_guru: "-", wali_kelas: "-" },
+      { nama_kelas: "XII RPL 1", id_guru: "-", wali_kelas: "-" }
     ]));
   }
   if (!localStorage.getItem(getKey("jam_pelajaran"))) {
@@ -364,12 +364,15 @@ export function callMock(action: string, args: any[] = []): any {
       if (!Array.isArray(data)) data = [];
       const normalized = data.map((item: any) => {
         if (typeof item === "string") {
-          return { nama_kelas: item, wali_kelas: "-" };
+          return { nama_kelas: item, id_guru: "-", wali_kelas: "-" };
         }
         const rawWali = item.wali_kelas || item.wali || item.waliKelas || item["Wali Kelas"] || item["wali_kelas"] || "-";
         const cleanWali = isInvalidWali(rawWali) ? "-" : String(rawWali).trim();
+        const rawId = item.id_guru || item.id_wali || item.idGuru || "-";
+        const cleanId = String(rawId || "-").trim();
         return {
           nama_kelas: item.nama_kelas || item.kelas || String(item),
+          id_guru: cleanId,
           wali_kelas: cleanWali
         };
       });
@@ -377,17 +380,20 @@ export function callMock(action: string, args: any[] = []): any {
     }
 
     case "tambahKelas": {
-      const [namaKelas, waliKelas, payloadObj] = args;
+      const [namaKelas, waliKelas, idGuruParam, payloadObjParam] = args;
+      let payloadObj = typeof payloadObjParam === "object" ? payloadObjParam : (typeof idGuruParam === "object" ? idGuruParam : {});
       let kelas = getStorage("data_kelas");
       if (!Array.isArray(kelas)) kelas = [];
-      const obj = (typeof payloadObj === "object" && payloadObj !== null) ? payloadObj : {};
-      const rawWali = typeof waliKelas === "string" ? waliKelas : (obj.wali_kelas || obj.wali || obj.nama_guru || obj.waliKelas || "-");
+      
+      const rawWali = typeof waliKelas === "string" ? waliKelas : (payloadObj.wali_kelas || payloadObj.wali || payloadObj.nama_guru || "-");
       const chosenWali = isInvalidWali(rawWali) ? "-" : String(rawWali).trim();
+      const chosenIdGuru = payloadObj.id_guru || payloadObj.id_wali || (typeof idGuruParam === "string" ? idGuruParam : "-");
+
       const idx = kelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === namaKelas);
       if (idx === -1) {
-        kelas.push({ nama_kelas: namaKelas, wali_kelas: chosenWali });
+        kelas.push({ nama_kelas: namaKelas, id_guru: chosenIdGuru, wali_kelas: chosenWali });
       } else {
-        kelas[idx] = { nama_kelas: namaKelas, wali_kelas: chosenWali };
+        kelas[idx] = { nama_kelas: namaKelas, id_guru: chosenIdGuru, wali_kelas: chosenWali };
       }
       setStorage("data_kelas", kelas);
       return { success: true, message: "Kelas ditambahkan (SIMULASI)." };
@@ -408,21 +414,26 @@ export function callMock(action: string, args: any[] = []): any {
     }
 
     case "editKelas": {
-      const [kelasLama, kelasBaru, waliKelasBaru, payloadObj] = args;
+      const [kelasLama, kelasBaru, waliKelasBaru, idGuruParam, payloadObjParam] = args;
+      let payloadObj = typeof payloadObjParam === "object" ? payloadObjParam : (typeof idGuruParam === "object" ? idGuruParam : {});
       let kelas = getStorage("data_kelas");
       if (!Array.isArray(kelas)) kelas = [];
       const idx = kelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === kelasLama);
-      const obj = (typeof payloadObj === "object" && payloadObj !== null) ? payloadObj : {};
-      const rawWali = typeof waliKelasBaru === "string" ? waliKelasBaru : (obj.wali_kelas || obj.wali || obj.nama_guru || obj.waliKelas || "-");
+      
+      const rawWali = typeof waliKelasBaru === "string" ? waliKelasBaru : (payloadObj.wali_kelas || payloadObj.wali || payloadObj.nama_guru || "-");
       const chosenWali = isInvalidWali(rawWali) ? "-" : String(rawWali).trim();
+      const chosenIdGuru = payloadObj.id_guru || payloadObj.id_wali || (typeof idGuruParam === "string" ? idGuruParam : "-");
+
       if (idx !== -1) {
         kelas[idx] = {
           nama_kelas: kelasBaru,
+          id_guru: chosenIdGuru,
           wali_kelas: chosenWali
         };
       } else {
         kelas.push({
           nama_kelas: kelasBaru,
+          id_guru: chosenIdGuru,
           wali_kelas: chosenWali
         });
       }
@@ -431,20 +442,24 @@ export function callMock(action: string, args: any[] = []): any {
     }
 
     case "simpanWaliKelas": {
-      const [namaKelas, waliKelas, payloadObj] = args;
+      const [namaKelas, waliKelas, idGuruParam, payloadObjParam] = args;
+      let payloadObj = typeof payloadObjParam === "object" ? payloadObjParam : (typeof idGuruParam === "object" ? idGuruParam : {});
       let kelas = getStorage("data_kelas");
       if (!Array.isArray(kelas)) kelas = [];
       const idx = kelas.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === namaKelas);
-      const obj = (typeof payloadObj === "object" && payloadObj !== null) ? payloadObj : {};
-      const rawWali = typeof waliKelas === "string" ? waliKelas : (obj.wali_kelas || obj.wali || obj.nama_guru || obj.waliKelas || "-");
+      
+      const rawWali = typeof waliKelas === "string" ? waliKelas : (payloadObj.wali_kelas || payloadObj.wali || payloadObj.nama_guru || "-");
       const chosenWali = isInvalidWali(rawWali) ? "-" : String(rawWali).trim();
+      const chosenIdGuru = payloadObj.id_guru || payloadObj.id_wali || (typeof idGuruParam === "string" ? idGuruParam : "-");
+
       if (idx !== -1) {
         kelas[idx] = {
           nama_kelas: typeof kelas[idx] === "string" ? kelas[idx] : (kelas[idx].nama_kelas || namaKelas),
+          id_guru: chosenIdGuru,
           wali_kelas: chosenWali
         };
       } else {
-        kelas.push({ nama_kelas: namaKelas, wali_kelas: chosenWali });
+        kelas.push({ nama_kelas: namaKelas, id_guru: chosenIdGuru, wali_kelas: chosenWali });
       }
       setStorage("data_kelas", kelas);
       return { success: true, message: `Wali kelas untuk ${namaKelas} berhasil disimpan!` };
@@ -1652,12 +1667,16 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
         const kBaru = typeof args[1] === "string" ? args[1] : (args[1]?.nama_kelas || args[1]?.kelas || kLama);
         const wRaw = typeof args[2] === "string" ? args[2] : (args[2]?.wali_kelas || args[2]?.wali || args[2]?.waliKelas || args[2]?.nama_guru || args[2]?.guru_wali || "-");
         const wVal = isInvalidWali(wRaw) ? "-" : String(wRaw).trim();
+        const idG = typeof args[3] === "string" ? args[3] : (args[2]?.id_guru || args[4]?.id_guru || "-");
 
         bodyObj.kelasLama = kLama;
         bodyObj.kelasBaru = kBaru;
         bodyObj.nama_kelas = kBaru;
         bodyObj.kelas = kBaru;
         bodyObj.namaKelas = kBaru;
+        bodyObj.id_guru = idG;
+        bodyObj.idGuru = idG;
+        bodyObj.id_wali = idG;
         bodyObj.wali_kelas = wVal;
         bodyObj.wali = wVal;
         bodyObj.waliKelas = wVal;
@@ -1672,19 +1691,23 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
         if (!Array.isArray(currentK)) currentK = [];
         const idx = currentK.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === kLama);
         if (idx !== -1) {
-          currentK[idx] = { nama_kelas: kBaru, wali_kelas: wVal };
+          currentK[idx] = { nama_kelas: kBaru, id_guru: idG, wali_kelas: wVal };
         } else {
-          currentK.push({ nama_kelas: kBaru, wali_kelas: wVal });
+          currentK.push({ nama_kelas: kBaru, id_guru: idG, wali_kelas: wVal });
         }
         setStorage("data_kelas", currentK);
       } else if (action === "simpanWaliKelas" || action === "tambahKelas") {
         const kNama = typeof args[0] === "string" ? args[0] : (args[0]?.nama_kelas || args[0]?.kelas || "");
         const wRaw = typeof args[1] === "string" ? args[1] : (args[1]?.wali_kelas || args[1]?.wali || args[1]?.waliKelas || args[1]?.nama_guru || args[1]?.guru_wali || "-");
         const wVal = isInvalidWali(wRaw) ? "-" : String(wRaw).trim();
+        const idG = typeof args[2] === "string" ? args[2] : (args[1]?.id_guru || args[3]?.id_guru || "-");
 
         bodyObj.nama_kelas = kNama;
         bodyObj.kelas = kNama;
         bodyObj.namaKelas = kNama;
+        bodyObj.id_guru = idG;
+        bodyObj.idGuru = idG;
+        bodyObj.id_wali = idG;
         bodyObj.wali_kelas = wVal;
         bodyObj.wali = wVal;
         bodyObj.waliKelas = wVal;
@@ -1699,9 +1722,9 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
         if (!Array.isArray(currentK)) currentK = [];
         const idx = currentK.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === kNama);
         if (idx !== -1) {
-          currentK[idx] = { nama_kelas: kNama, wali_kelas: wVal };
+          currentK[idx] = { nama_kelas: kNama, id_guru: idG, wali_kelas: wVal };
         } else {
-          currentK.push({ nama_kelas: kNama, wali_kelas: wVal });
+          currentK.push({ nama_kelas: kNama, id_guru: idG, wali_kelas: wVal });
         }
         setStorage("data_kelas", currentK);
       } else if (action === "editDataMaster" || action === "tambahDataMaster") {
@@ -1711,10 +1734,14 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
           const kNama = itemObj.nama_kelas || itemObj.kelas || (typeof args[1] === "string" ? args[1] : "");
           const wRaw = itemObj.wali_kelas || itemObj.wali || itemObj.waliKelas || itemObj.nama_guru || itemObj.guru_wali || "-";
           const wVal = isInvalidWali(wRaw) ? "-" : String(wRaw).trim();
+          const idG = itemObj.id_guru || itemObj.idGuru || itemObj.id_wali || "-";
 
           bodyObj.nama_kelas = kNama;
           bodyObj.kelas = kNama;
           bodyObj.namaKelas = kNama;
+          bodyObj.id_guru = idG;
+          bodyObj.idGuru = idG;
+          bodyObj.id_wali = idG;
           bodyObj.wali_kelas = wVal;
           bodyObj.wali = wVal;
           bodyObj.waliKelas = wVal;
@@ -1728,9 +1755,9 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
           if (!Array.isArray(currentK)) currentK = [];
           const idx = currentK.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === kNama);
           if (idx !== -1) {
-            currentK[idx] = { nama_kelas: kNama, wali_kelas: wVal };
+            currentK[idx] = { nama_kelas: kNama, id_guru: idG, wali_kelas: wVal };
           } else {
-            currentK.push({ nama_kelas: kNama, wali_kelas: wVal });
+            currentK.push({ nama_kelas: kNama, id_guru: idG, wali_kelas: wVal });
           }
           setStorage("data_kelas", currentK);
         }
@@ -1821,18 +1848,19 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
           const list = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : null);
           if (list) {
             const existing = getStorage("data_kelas") || [];
-            const mergedMap = new Map<string, string>();
+            const mergedMap = new Map<string, { id_guru: string; wali_kelas: string }>();
 
             // 1. Add existing local entries
             for (const ex of existing) {
               if (typeof ex === "string") {
-                if (!mergedMap.has(ex)) mergedMap.set(ex, "-");
+                if (!mergedMap.has(ex)) mergedMap.set(ex, { id_guru: "-", wali_kelas: "-" });
               } else if (typeof ex === "object" && ex) {
                 const name = String(ex.nama_kelas || ex.kelas || "").trim();
                 const wali = String(ex.wali_kelas || ex.wali || ex.waliKelas || ex["Wali Kelas"] || "-").trim();
+                const idG = String(ex.id_guru || ex.id_wali || ex.idGuru || "-").trim();
                 if (name) {
-                  if (!mergedMap.has(name) || (mergedMap.get(name) === "-" && wali !== "-")) {
-                    mergedMap.set(name, wali);
+                  if (!mergedMap.has(name) || (mergedMap.get(name)?.wali_kelas === "-" && wali !== "-")) {
+                    mergedMap.set(name, { id_guru: idG, wali_kelas: wali });
                   }
                 }
               }
@@ -1842,17 +1870,20 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
             for (const item of list) {
               const name = String(typeof item === "string" ? item : (item.nama_kelas || item.kelas || "")).trim();
               const waliFromApi = String(typeof item === "object" && item ? (item.wali_kelas || item.wali || item.waliKelas || item.guru_wali || item.nama_guru || item.wali_kelas_nama || item["Wali Kelas"] || "-") : "-").trim();
+              const idGFromApi = String(typeof item === "object" && item ? (item.id_guru || item.id_wali || item.idGuru || "-") : "-").trim();
               if (name) {
-                const existingWali = mergedMap.get(name) || "-";
+                const existingObj = mergedMap.get(name) || { id_guru: "-", wali_kelas: "-" };
                 const cleanWaliFromApi = isInvalidWali(waliFromApi) ? "-" : waliFromApi;
-                const finalWali = (cleanWaliFromApi && cleanWaliFromApi !== "-") ? cleanWaliFromApi : existingWali;
-                mergedMap.set(name, finalWali);
+                const finalWali = (cleanWaliFromApi && cleanWaliFromApi !== "-") ? cleanWaliFromApi : existingObj.wali_kelas;
+                const finalIdG = (idGFromApi && idGFromApi !== "-") ? idGFromApi : existingObj.id_guru;
+                mergedMap.set(name, { id_guru: finalIdG, wali_kelas: finalWali });
               }
             }
 
-            const merged = Array.from(mergedMap.entries()).map(([nama_kelas, wali_kelas]) => ({
+            const merged = Array.from(mergedMap.entries()).map(([nama_kelas, val]) => ({
               nama_kelas,
-              wali_kelas
+              id_guru: val.id_guru,
+              wali_kelas: val.wali_kelas
             }));
 
             setStorage("data_kelas", merged);
