@@ -29,7 +29,8 @@ import {
   FileJson,
   ShieldCheck,
   UserCheck,
-  ArrowRight
+  ArrowRight,
+  Loader2
 } from "lucide-react";
 import { callGas, getStorageKey, setStorage, getStorage, extractArrayData, cleanTimeHHMM } from "../lib/gasApi";
 import { ConfigJam, HariLibur } from "../types";
@@ -38,6 +39,7 @@ export default function Settings() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<"profil" | "jam" | "keamanan" | "backup">("profil");
   const [loading, setLoading] = useState(false);
+  const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem(getStorageKey("SIAS_SESSION"));
@@ -177,6 +179,7 @@ export default function Settings() {
 
     try {
       setLoading(true);
+      setLoadingAction("Sedang menyimpan konfigurasi ke database...");
       const res = await callGas("simpanPengaturanCustom", [fullObj]);
       await callGas("simpanPengaturanJam", [fullObj]);
       return res;
@@ -185,6 +188,7 @@ export default function Settings() {
       return { success: false, message: String(err) };
     } finally {
       setLoading(false);
+      setLoadingAction(null);
     }
   };
 
@@ -1174,6 +1178,22 @@ export default function Settings() {
                   />
                 </label>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Global Loading Overlay */}
+      {loadingAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 border border-gray-100 flex flex-col items-center gap-3 max-w-sm w-full mx-4 text-center">
+            <div className="relative flex items-center justify-center w-14 h-14">
+              <div className="absolute inset-0 rounded-full border-4 border-indigo-100 animate-pulse"></div>
+              <div className="absolute inset-0 rounded-full border-t-4 border-indigo-600 animate-spin"></div>
+              <Loader2 className="w-6 h-6 text-indigo-600 animate-spin relative z-10" />
+            </div>
+            <div>
+              <h4 className="font-bold text-gray-800 text-sm">{loadingAction}</h4>
+              <p className="text-xs text-gray-400 mt-1">Mohon tunggu sebentar, sedang menyimpan pengaturan...</p>
             </div>
           </div>
         </div>
