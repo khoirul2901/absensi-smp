@@ -270,9 +270,23 @@ export default function DataMaster() {
   const openEdit = (item: any) => {
     if (kategori === "Kelas") {
       setEditId(item.nama_kelas || item.kelas);
+      const rawWali = item.wali_kelas || item.wali || item.waliKelas || item.guru_wali || item.nama_guru || item["Wali Kelas"] || "-";
+      const cleanWali = isInvalidWali(rawWali) ? "-" : String(rawWali).trim();
+      
+      let matchedGuruName = cleanWali;
+      if (cleanWali !== "-") {
+        const foundG = guruList.find((g: any) => {
+          const gName = (g.nama_guru || g.nama || g.name || "").trim().toLowerCase();
+          return gName === cleanWali.toLowerCase() || gName.includes(cleanWali.toLowerCase()) || cleanWali.toLowerCase().includes(gName);
+        });
+        if (foundG) {
+          matchedGuruName = (foundG.nama_guru || foundG.nama || foundG.name || "").trim();
+        }
+      }
+
       setFormData({
         nama_kelas: item.nama_kelas || item.kelas || "",
-        wali_kelas: item.wali_kelas || item.wali || "-"
+        wali_kelas: matchedGuruName
       });
     } else {
       setEditId(kategori === "Siswa" ? item.id_siswa : (kategori === "Guru" ? item.id_guru : item.username));
@@ -422,7 +436,10 @@ export default function DataMaster() {
     const matchesSearch = name.includes(searchQuery.toLowerCase()) || id.includes(searchQuery.toLowerCase());
     
     if (kategori === "Siswa" && selectedKelas !== "Semua") {
-      return matchesSearch && item.kelas === selectedKelas;
+      const studentClass = `${item.kelas || ""} ${item.jurusan || ""} ${item.kelas_jurusan || ""}`.replace(/[\s-]+/g, "").toLowerCase();
+      const targetClass = selectedKelas.replace(/[\s-]+/g, "").toLowerCase();
+      const classMatch = studentClass.includes(targetClass) || targetClass.includes(studentClass);
+      return matchesSearch && classMatch;
     }
     return matchesSearch;
   });
