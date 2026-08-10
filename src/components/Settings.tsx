@@ -30,9 +30,11 @@ import {
   ShieldCheck,
   UserCheck,
   ArrowRight,
-  Loader2
+  Loader2,
+  Code
 } from "lucide-react";
 import { callGas, getStorageKey, setStorage, getStorage, extractArrayData, cleanTimeHHMM } from "../lib/gasApi";
+import { KODE_GS_SCRIPT } from "../lib/kodeGs";
 import { ConfigJam, HariLibur } from "../types";
 
 export default function Settings() {
@@ -96,6 +98,8 @@ export default function Settings() {
   });
   const [showToken, setShowToken] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
+  const [copiedGs, setCopiedGs] = useState(false);
+  const [showGsCode, setShowGsCode] = useState(false);
 
   // Backup & Restore State
   const [backupMode, setBackupMode] = useState<"manual" | "otomatis">("manual");
@@ -935,6 +939,66 @@ export default function Settings() {
               </button>
             </div>
           </form>
+
+          {/* Script Google Apps Script (Kode.gs) */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 md:p-8 space-y-6">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-blue-50 rounded-xl text-blue-600">
+                  <Code className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-extrabold text-gray-900">Script Google Apps Script Backend (Kode.gs)</h2>
+                  <p className="text-xs text-gray-500">Salin kode ini ke ekstensi Google Apps Script di Google Spreadsheet Anda untuk sinkronisasi database lengkap (termasuk id_guru)</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(KODE_GS_SCRIPT);
+                  setCopiedGs(true);
+                  setTimeout(() => setCopiedGs(false), 2000);
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+              >
+                {copiedGs ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedGs ? "Kode Tersalin!" : "Salin Kode GS"}</span>
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-700">Preview Script Apps Script (Updated with id_guru & wali_kelas)</span>
+                <button
+                  type="button"
+                  onClick={() => setShowGsCode(!showGsCode)}
+                  className="text-xs text-blue-600 hover:underline font-semibold"
+                >
+                  {showGsCode ? "Sembunyikan Kode" : "Tampilkan Kode Lengkap"}
+                </button>
+              </div>
+
+              {showGsCode && (
+                <textarea
+                  readOnly
+                  rows={15}
+                  value={KODE_GS_SCRIPT}
+                  className="w-full bg-slate-900 text-slate-100 p-4 rounded-xl text-xs font-mono border border-slate-800 focus:outline-none"
+                />
+              )}
+
+              <div className="p-4 bg-blue-50/60 rounded-xl border border-blue-100 space-y-1.5">
+                <p className="text-xs font-bold text-blue-900">Petunjuk Deployment Google Apps Script:</p>
+                <ol className="list-decimal list-inside text-xs text-blue-800 space-y-1">
+                  <li>Buka Google Sheets database SIAS Anda, lalu klik menu <span className="font-bold">Ekstensi &gt; Apps Script</span>.</li>
+                  <li>Hapus seluruh isi file <span className="font-mono font-bold">Kode.gs</span>, lalu paste kode dari tombol di atas.</li>
+                  <li>Klik <span className="font-bold">Deploy &gt; Deploy baru</span> (atau kelola deployment), pilih jenis <span className="font-bold">Aplikasi Web</span>.</li>
+                  <li>Atur <span className="font-bold">Yang memiliki akses</span> menjadi <span className="font-bold">Siapa saja</span> (Anyone).</li>
+                  <li>Klik Deploy dan salin URL Web App ke menu Pengaturan &gt; Koneksi Database.</li>
+                </ol>
+              </div>
+            </div>
+          </div>
 
           {/* Form Ubah Password User */}
           <form onSubmit={handleUbahPassword} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 md:p-8 space-y-6">
