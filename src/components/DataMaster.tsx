@@ -148,8 +148,22 @@ export default function DataMaster() {
           if (cleanWali === "-" && storedMap.has(name)) {
             cleanWali = storedMap.get(name)!;
           }
+          const rawIdGuru = typeof item === "object" && item ? (item.id_guru || item.id_wali || item.idGuru || "-") : "-";
+          let cleanIdGuru = String(rawIdGuru || "-").trim();
+
+          if ((cleanIdGuru === "-" || !cleanIdGuru) && cleanWali !== "-") {
+            const foundG = gList.find((g: any) => {
+              const gName = (g.nama_guru || g.nama || g.name || "").trim().toLowerCase();
+              return gName === cleanWali.toLowerCase() || gName.includes(cleanWali.toLowerCase()) || cleanWali.toLowerCase().includes(gName);
+            });
+            if (foundG && foundG.id_guru) {
+              cleanIdGuru = foundG.id_guru;
+            }
+          }
+
           return {
             nama_kelas: name,
+            id_guru: cleanIdGuru,
             wali_kelas: cleanWali
           };
         }).filter((k: any) => Boolean(k.nama_kelas));
@@ -192,10 +206,15 @@ export default function DataMaster() {
         const namaKls = (formData.nama_kelas || "").trim();
         const rawWali = formData.wali_kelas || "-";
         const cleanWali = isInvalidWali(rawWali) ? "-" : String(rawWali).trim();
+        const cleanIdGuru = formData.id_guru || "-";
+
         const payloadObj = {
           nama_kelas: namaKls,
           kelas: namaKls,
           namaKelas: namaKls,
+          id_guru: cleanIdGuru,
+          idGuru: cleanIdGuru,
+          id_wali: cleanIdGuru,
           wali_kelas: cleanWali,
           wali: cleanWali,
           waliKelas: cleanWali,
@@ -207,12 +226,12 @@ export default function DataMaster() {
         };
 
         if (editId) {
-          res = await callGas("editKelas", [editId, namaKls, cleanWali, payloadObj]);
+          res = await callGas("editKelas", [editId, namaKls, cleanWali, cleanIdGuru, payloadObj]);
         } else {
-          res = await callGas("tambahKelas", [namaKls, cleanWali, payloadObj]);
+          res = await callGas("tambahKelas", [namaKls, cleanWali, cleanIdGuru, payloadObj]);
         }
         // Also call simpanWaliKelas as secondary sync
-        callGas("simpanWaliKelas", [namaKls, cleanWali, payloadObj]).catch(() => {});
+        callGas("simpanWaliKelas", [namaKls, cleanWali, cleanIdGuru, payloadObj]).catch(() => {});
       } else {
         if (editId) {
           // Edit record
@@ -272,6 +291,8 @@ export default function DataMaster() {
       setEditId(item.nama_kelas || item.kelas);
       const rawWali = item.wali_kelas || item.wali || item.waliKelas || item.guru_wali || item.nama_guru || item["Wali Kelas"] || "-";
       const cleanWali = isInvalidWali(rawWali) ? "-" : String(rawWali).trim();
+      const rawIdGuru = item.id_guru || item.id_wali || item.idGuru || "-";
+      let cleanIdGuru = String(rawIdGuru || "-").trim();
       
       let matchedGuruName = cleanWali;
       if (cleanWali !== "-") {
@@ -281,11 +302,15 @@ export default function DataMaster() {
         });
         if (foundG) {
           matchedGuruName = (foundG.nama_guru || foundG.nama || foundG.name || "").trim();
+          if ((cleanIdGuru === "-" || !cleanIdGuru) && foundG.id_guru) {
+            cleanIdGuru = foundG.id_guru;
+          }
         }
       }
 
       setFormData({
         nama_kelas: item.nama_kelas || item.kelas || "",
+        id_guru: cleanIdGuru,
         wali_kelas: matchedGuruName
       });
     } else {
@@ -319,6 +344,7 @@ export default function DataMaster() {
     } else if (kategori === "Kelas") {
       setFormData({
         nama_kelas: "",
+        id_guru: "-",
         wali_kelas: "-"
       });
     } else {
@@ -584,6 +610,7 @@ export default function DataMaster() {
                   ) : kategori === "Kelas" ? (
                     <>
                       <th className="py-3.5 px-6">Nama Kelas</th>
+                      <th className="py-3.5 px-6">ID Guru Wali</th>
                       <th className="py-3.5 px-6">Wali Kelas</th>
                       <th className="py-3.5 px-6">Jumlah Siswa</th>
                       <th className="py-3.5 px-6">Status Wali</th>
@@ -657,6 +684,9 @@ export default function DataMaster() {
                             <Building2 className="w-4 h-4 text-emerald-600" />
                             <span>{item.nama_kelas}</span>
                           </div>
+                        </td>
+                        <td className="py-3.5 px-6 font-mono font-bold text-gray-500">
+                          {item.id_guru || "-"}
                         </td>
                         <td className="py-3.5 px-6 font-semibold text-gray-800">
                           {hasWali ? (
@@ -1013,22 +1043,42 @@ export default function DataMaster() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-gray-500">Pilih Wali Kelas</label>
+                    <label className="text-xs font-bold text-gray-500">Pilih Wali Kelas (Guru)</label>
                     <select 
-                      value={formData.wali_kelas || "-"}
-                      onChange={(e) => setFormData({ ...formData, wali_kelas: e.target.value })}
+                      value={formData.id_guru || (formData.wali_kelas ? (guruList.find((g: any) => (g.nama_guru || g.nama || g.name) === formData.wali_kelas)?.id_guru || "-") : "-")}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "-") {
+                          setFormData({ ...formData, id_guru: "-", wali_kelas: "-" });
+                        } else {
+                          const selectedGuru = guruList.find((g: any) => g.id_guru === val || (g.nama_guru || g.nama || g.name) === val);
+                          const gName = selectedGuru ? (selectedGuru.nama_guru || selectedGuru.nama || selectedGuru.name) : val;
+                          const gId = selectedGuru ? selectedGuru.id_guru : val;
+                          setFormData({ ...formData, id_guru: gId, wali_kelas: gName });
+                        }
+                      }}
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-semibold"
                     >
                       <option value="-">-- Belum Ada Wali Kelas --</option>
                       {guruList.map((g: any, idx: number) => {
                         const nameG = g.nama_guru || g.nama || g.name;
+                        const idG = g.id_guru || `G-${idx + 1}`;
                         return (
-                          <option key={idx} value={nameG}>
-                            {nameG} {g.jabatan_tugas ? `(${g.jabatan_tugas})` : ""}
+                          <option key={idx} value={idG}>
+                            [{idG}] {nameG} {g.jabatan_tugas ? `(${g.jabatan_tugas})` : ""}
                           </option>
                         );
                       })}
                     </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-gray-500">ID Guru Wali Kelas</label>
+                    <input 
+                      type="text"
+                      readOnly
+                      value={formData.id_guru || "-"}
+                      className="w-full bg-gray-100 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-500 font-mono font-bold"
+                    />
                   </div>
                 </>
               ) : (
