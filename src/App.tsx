@@ -21,7 +21,7 @@ import {
   Calendar,
   ScanLine
 } from "lucide-react";
-import { callGas, isUsingMock, getGasUrl, getStorageKey, extractArrayData, getStorage } from "./lib/gasApi";
+import { callGas, isUsingMock, getGasUrl, getStorageKey, extractArrayData, getStorage, isInvalidWali } from "./lib/gasApi";
 import { User as UserType } from "./types";
 
 // Component imports
@@ -128,11 +128,15 @@ export default function App() {
     }
   };
 
-  const isGuru = session?.role === "Guru";
+  const isGuru = session?.role === "Guru" || session?.role === "Wali Kelas";
   const [isWaliKelas, setIsWaliKelas] = useState<boolean>(false);
 
   useEffect(() => {
-    if (session && session.role === "Guru") {
+    if (session && (session.role === "Guru" || session.role === "Wali Kelas")) {
+      if (session.role === "Wali Kelas") {
+        setIsWaliKelas(true);
+        return;
+      }
       Promise.all([
         callGas("getKelasSemua"),
         callGas("getDataMaster", ["Guru"])
@@ -153,8 +157,8 @@ export default function App() {
         const targetIdLoggedIn = currentGuru?.id_guru || session.target_id || "";
         
         const matchedWali = kelasData.some((k: any) => {
-          const wk = typeof k === 'object' ? (k.wali_kelas || k.wali || "") : "";
-          if (!wk || wk === "-") return false;
+          const wk = typeof k === 'object' ? (k.wali_kelas || k.wali || k.waliKelas || k.guru_wali || k.nama_guru || k["Wali Kelas"] || "") : "";
+          if (!wk || isInvalidWali(wk)) return false;
           return wk.toLowerCase().includes(namaGuruLoggedIn.toLowerCase()) || 
                  (targetIdLoggedIn && wk.toLowerCase().includes(targetIdLoggedIn.toLowerCase()));
         });
@@ -164,8 +168,8 @@ export default function App() {
         console.error("Error checking wali kelas:", err);
         const storedKelas = getStorage("data_kelas") || [];
         const matchedWali = storedKelas.some((k: any) => {
-          const wk = typeof k === 'object' ? (k.wali_kelas || k.wali || "") : "";
-          if (!wk || wk === "-") return false;
+          const wk = typeof k === 'object' ? (k.wali_kelas || k.wali || k.waliKelas || k.guru_wali || k.nama_guru || k["Wali Kelas"] || "") : "";
+          if (!wk || isInvalidWali(wk)) return false;
           return wk.toLowerCase().includes((session.username || "").toLowerCase());
         });
         setIsWaliKelas(matchedWali);
@@ -243,7 +247,7 @@ export default function App() {
             <div className="w-14 h-14 bg-blue-600/10 border border-blue-500/20 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-3">
               <GraduationCap className="w-7 h-7" />
             </div>
-            <h1 className="text-xl font-extrabold text-white tracking-tight">SIAS SMP AL-HIKAM</h1>
+            <h1 className="text-xl font-extrabold text-white tracking-tight">AL-HIKAM SCHOOL</h1>
             <p className="text-xs text-slate-400">Sistem Informasi Absensi Sekolah Modern</p>
           </div>
 
@@ -352,7 +356,7 @@ export default function App() {
               <GraduationCap className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-extrabold text-white tracking-tight uppercase leading-none">SMP Al-Hikam</h2>
+              <h2 className="text-sm font-extrabold text-white tracking-tight uppercase leading-none">AL-HIKAM SCHOOL</h2>
               <span className="text-[10px] text-slate-500 font-semibold tracking-wider uppercase">SIAS PANEL v2.0</span>
             </div>
           </div>
@@ -408,7 +412,7 @@ export default function App() {
         <header className="bg-slate-950 text-slate-400 p-4 border-b border-slate-800 flex justify-between items-center relative z-20">
           <div className="flex items-center gap-2.5">
             <GraduationCap className="w-6 h-6 text-blue-500" />
-            <h2 className="text-xs font-black text-white uppercase tracking-wider">SMP AL-HIKAM SIAS</h2>
+            <h2 className="text-xs font-black text-white uppercase tracking-wider">AL-HIKAM SCHOOL</h2>
           </div>
           <button 
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -428,7 +432,7 @@ export default function App() {
                     <GraduationCap className="w-4.5 h-4.5" />
                   </div>
                   <div>
-                    <h2 className="text-xs font-extrabold text-white uppercase tracking-tight">SMP AL-HIKAM</h2>
+                    <h2 className="text-xs font-extrabold text-white uppercase tracking-tight">AL-HIKAM  SCHOOL</h2>
                   </div>
                 </div>
 
@@ -500,7 +504,7 @@ export default function App() {
           <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold">
             <span>Sistem Informasi Absensi Sekolah</span>
             <span>&bull;</span>
-            <span className="text-slate-600">SMP AL-HIKAM SENDANG MULYO</span>
+            <span className="text-slate-600">AL-HIKAM  SCHOOL SENDANG AGUNG</span>
           </div>
 
           <div className="flex items-center gap-4">
