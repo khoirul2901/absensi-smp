@@ -137,6 +137,9 @@ export default function AbsensiScanner({ session }: { session?: any }) {
   const [absensiMengajarLogs, setAbsensiMengajarLogs] = useState<AbsensiMengajarItem[]>([]);
   const [teachersList, setTeachersList] = useState<any[]>([]);
   const [jamSlots, setJamSlots] = useState<JamPelajaranItem[]>([]);
+  const [batasiJamJadwal, setBatasiJamJadwal] = useState<boolean>(true);
+  const [toleransiAwal, setToleransiAwal] = useState<number>(15);
+  const [toleransiAkhir, setToleransiAkhir] = useState<number>(30);
   const [toleransiGuru, setToleransiGuru] = useState<number>(15);
   const [isLoadingMengajar, setIsLoadingMengajar] = useState(false);
 
@@ -424,13 +427,19 @@ export default function AbsensiScanner({ session }: { session?: any }) {
       try {
         const resCfg = await callGas("getPengaturanSemua");
         const cfg = resCfg?.data || resCfg;
-        if (cfg) {
+        if (cfg && typeof cfg === "object") {
+          if (cfg.batasi_jam_jadwal !== undefined) setBatasiJamJadwal(Boolean(cfg.batasi_jam_jadwal));
+          if (cfg.toleransi_awal_menit !== undefined) setToleransiAwal(Number(cfg.toleransi_awal_menit) || 15);
+          if (cfg.toleransi_akhir_menit !== undefined) setToleransiAkhir(Number(cfg.toleransi_akhir_menit) || 30);
           const val = Number(cfg.toleransi_guru ?? cfg.toleransi_mengajar_guru);
           if (!isNaN(val) && val >= 0) setToleransiGuru(val);
         } else {
           const savedLocal = localStorage.getItem(getStorageKey("MOCK_pengaturan_jam"));
           if (savedLocal) {
             const parsed = JSON.parse(savedLocal);
+            if (parsed.batasi_jam_jadwal !== undefined) setBatasiJamJadwal(Boolean(parsed.batasi_jam_jadwal));
+            if (parsed.toleransi_awal_menit !== undefined) setToleransiAwal(Number(parsed.toleransi_awal_menit) || 15);
+            if (parsed.toleransi_akhir_menit !== undefined) setToleransiAkhir(Number(parsed.toleransi_akhir_menit) || 30);
             if (parsed.toleransi_guru !== undefined) setToleransiGuru(Number(parsed.toleransi_guru) || 15);
           }
         }
@@ -509,6 +518,27 @@ export default function AbsensiScanner({ session }: { session?: any }) {
     if (!mengajarForm.nama_guru || !mengajarForm.kelas) {
       alert("Nama guru dan kelas harus terisi.");
       return;
+    }
+
+    // Check time range if restriction is enabled
+    if (batasiJamJadwal && mengajarForm.jam_mulai_jadwal && mengajarForm.jam_mulai_jadwal !== "-" && mengajarForm.jam_selesai_jadwal && mengajarForm.jam_selesai_jadwal !== "-") {
+      const [hM, mM] = mengajarForm.jam_mulai_jadwal.split(":").map(Number);
+      const [hS, mS] = mengajarForm.jam_selesai_jadwal.split(":").map(Number);
+      const [hN, mN] = mengajarForm.waktu_absen.split(":").map(Number);
+      if (!isNaN(hM) && !isNaN(mM) && !isNaN(hS) && !isNaN(mS) && !isNaN(hN) && !isNaN(mN)) {
+        const startMin = hM * 60 + mM;
+        const endMin = hS * 60 + mS;
+        const nowMin = hN * 60 + mN;
+
+        if (nowMin < startMin - toleransiAwal) {
+          alert(`Gagal: Belum waktunya presensi untuk jadwal ini. Jam pelajaran ${mengajarForm.mapel} (${mengajarForm.kelas}) dimulai pukul ${mengajarForm.jam_mulai_jadwal}. Saat ini jam ${mengajarForm.waktu_absen}.`);
+          return;
+        }
+        if (nowMin > endMin + toleransiAkhir) {
+          alert(`Gagal: Presensi mengajar ditolak. Waktu absen (${mengajarForm.waktu_absen}) di luar jam jadwal pelajaran (${mengajarForm.jam_mulai_jadwal} - ${mengajarForm.jam_selesai_jadwal}).`);
+          return;
+        }
+      }
     }
 
     setIsSubmittingMengajar(true);
@@ -682,6 +712,54 @@ export default function AbsensiScanner({ session }: { session?: any }) {
           // Toleransi keterlambatan presensi mengajar guru
           if (nowMin > startMin + toleransiGuru) {
             autoStatus = "Terlambat Masuk Kelas";
+          }
+        }
+      }
+
+      // Check Schedule Time restriction if enabled
+      if (batasiJamJadwal && slotMulai && slotMulai !== "-" && slotSelesai && slotSelesai !== "-") {
+        const [hM, mM] = slotMulai.split(":").map(Number);
+        const [hS, mS] = slotSelesai.split(":").map(Number);
+        const [hN, mN] = nowTime.split(":").map(Number);
+        if (!isNaN(hM) && !isNaN(mM) && !isNaN(hS) && !isNaN(mS) && !isNaN(hN) && !isNaN(mN)) {
+          const startMin = hM * 60 + mM;
+          const endMin = hS * 60 + mS;
+          const nowMin = hN * 60 + mN;
+
+          if (nowMin < startMin - toleransiAwal) {
+            setScanStatus({
+              type: "error",
+              msg: `Presensi Mengajar Ditolak (Belum Waktunya)`,
+              details: `Jadwal ${targetSched.mapel} (${targetSched.kelas}) dimulai jam ${slotMulai}. Saat ini jam ${nowTime}`
+            });
+            playBeep(false);
+            triggerFlash("error");
+            if (speechEnabled) speakText("Absen ditolak. Belum waktunya.");
+            if (queueId) {
+              setScanQueue(prev => prev.map(item =>
+                item.id === queueId ? { ...item, status: "error", message: "Belum waktunya" } : item
+              ));
+            }
+            setIsProcessingScan(false);
+            return;
+          }
+
+          if (nowMin > endMin + toleransiAkhir) {
+            setScanStatus({
+              type: "error",
+              msg: `Presensi Mengajar Ditolak (Di Luar Jam Jadwal)`,
+              details: `Jadwal ${targetSched.mapel} (${targetSched.kelas}) telah selesai jam ${slotSelesai}. Saat ini jam ${nowTime}`
+            });
+            playBeep(false);
+            triggerFlash("error");
+            if (speechEnabled) speakText("Absen ditolak. Di luar jam jadwal.");
+            if (queueId) {
+              setScanQueue(prev => prev.map(item =>
+                item.id === queueId ? { ...item, status: "error", message: "Di luar jam jadwal" } : item
+              ));
+            }
+            setIsProcessingScan(false);
+            return;
           }
         }
       }
@@ -979,6 +1057,46 @@ export default function AbsensiScanner({ session }: { session?: any }) {
           return;
         }
 
+        // Find active schedules within current time window if restriction is enabled
+        const nowTimeStr = new Date().toTimeString().slice(0, 5);
+        const [hNow, mNow] = nowTimeStr.split(":").map(Number);
+        const nowMin = hNow * 60 + mNow;
+
+        const activeSchedMatches = teacherSchedMatch.filter(s => {
+          const { mulai, selesai } = getJamSlotTime(s.jam_ke, s.jam_mulai, s.jam_selesai);
+          if (!mulai || mulai === "-" || !selesai || selesai === "-") return true;
+          const [hM, mM] = mulai.split(":").map(Number);
+          const [hS, mS] = selesai.split(":").map(Number);
+          if (isNaN(hM) || isNaN(mM) || isNaN(hS) || isNaN(mS)) return true;
+          const startMin = hM * 60 + mM;
+          const endMin = hS * 60 + mS;
+          return nowMin >= startMin - toleransiAwal && nowMin <= endMin + toleransiAkhir;
+        });
+
+        if (batasiJamJadwal && activeSchedMatches.length === 0) {
+          const schedListTimes = teacherSchedMatch.map(s => {
+            const { mulai, selesai } = getJamSlotTime(s.jam_ke, s.jam_mulai, s.jam_selesai);
+            return `Jam ${s.jam_ke} (${s.mapel} ${s.kelas}: ${mulai} - ${selesai})`;
+          }).join("; ");
+
+          const errorMsg = `Presensi Mengajar Ditolak: Di luar jam jadwal pelajaran.`;
+          const detailMsg = `Guru '${guruNama}' (jam ${nowTimeStr}) tidak memiliki jadwal aktif saat ini. Jadwal hari ${selectedDay}: ${schedListTimes}`;
+
+          setScanStatus({
+            type: "error",
+            msg: errorMsg,
+            details: detailMsg
+          });
+          playBeep(false);
+          triggerFlash("error");
+          if (speechEnabled) speakText("Absen ditolak. Di luar jam jadwal.");
+
+          setScanQueue(prev => prev.map(item => 
+            item.id === queueId ? { ...item, status: "error", message: "Di luar jam jadwal" } : item
+          ));
+          return;
+        }
+
         // Find first schedule not yet logged today
         const todayStr = filterTanggal || new Date().toISOString().split("T")[0];
         const loggedScheduleJamSet = new Set(
@@ -987,7 +1105,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
             .map(l => `${l.kelas}_${l.jam_ke}`)
         );
 
-        const targetSched = teacherSchedMatch.find(s => !loggedScheduleJamSet.has(`${s.kelas}_${s.jam_ke}`)) || teacherSchedMatch[0];
+        const candidateSchedules = activeSchedMatches.length > 0 ? activeSchedMatches : teacherSchedMatch;
+        const targetSched = candidateSchedules.find(s => !loggedScheduleJamSet.has(`${s.kelas}_${s.jam_ke}`)) || candidateSchedules[0];
 
         // Automatically record attendance without popup modal
         await autoSaveAbsensiMengajar(targetSched, guruNama, queueId);
