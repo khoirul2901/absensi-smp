@@ -287,9 +287,56 @@ export function callMock(action: string, args: any[] = []): any {
     case "simpanPengaturanJam":
     case "simpanPengaturan": {
       const [jamMasukMulai, jamMasukBatas, jamPulangMulai] = args;
-      const cfg = { jam_masuk_mulai: jamMasukMulai, jam_masuk_batas: jamMasukBatas, jam_pulang_mulai: jamPulangMulai };
-      localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify(cfg));
-      return { success: true, message: "Pengaturan Jam Operasional disimpan!" };
+      const current = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
+      const merged = {
+        ...current,
+        jam_masuk_mulai: jamMasukMulai || current.jam_masuk_mulai || "06:00",
+        jam_masuk_batas: jamMasukBatas || current.jam_masuk_batas || "07:15",
+        jam_pulang_mulai: jamPulangMulai || current.jam_pulang_mulai || "15:30"
+      };
+      localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify(merged));
+      return { success: true, message: "Pengaturan Jam Operasional disimpan!", data: merged };
+    }
+
+    case "backupDatabaseToDrive": {
+      const [folderId] = args;
+      const currentConfig = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
+      const now = new Date().toISOString();
+      const updated = {
+        ...currentConfig,
+        lastBackupTime: now,
+        driveFolderId: folderId || currentConfig.driveFolderId || ""
+      };
+      localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify(updated));
+      return { 
+        success: true, 
+        message: `Backup database berhasil diunggah ke Google Drive (Folder ID: ${folderId || "Utama"})!`,
+        lastBackupTime: now
+      };
+    }
+
+    case "restoreDatabaseJSON": {
+      const [jsonData] = args;
+      if (!jsonData || typeof jsonData !== "object") {
+        return { success: false, message: "Format file JSON backup tidak valid!" };
+      }
+      try {
+        if (jsonData.users && Array.isArray(jsonData.users)) setStorage("users", jsonData.users);
+        if (jsonData.data_siswa && Array.isArray(jsonData.data_siswa)) setStorage("data_siswa", jsonData.data_siswa);
+        if (jsonData.data_guru && Array.isArray(jsonData.data_guru)) setStorage("data_guru", jsonData.data_guru);
+        if (jsonData.data_kelas && Array.isArray(jsonData.data_kelas)) setStorage("data_kelas", jsonData.data_kelas);
+        if (jsonData.jam_pelajaran && Array.isArray(jsonData.jam_pelajaran)) setStorage("jam_pelajaran", jsonData.jam_pelajaran);
+        if (jsonData.jadwal_pelajaran && Array.isArray(jsonData.jadwal_pelajaran)) setStorage("jadwal_pelajaran", jsonData.jadwal_pelajaran);
+        if (jsonData.absensi_mengajar_guru && Array.isArray(jsonData.absensi_mengajar_guru)) setStorage("absensi_mengajar_guru", jsonData.absensi_mengajar_guru);
+        if (jsonData.hari_libur && Array.isArray(jsonData.hari_libur)) setStorage("hari_libur", jsonData.hari_libur);
+        if (jsonData.pengaturan && typeof jsonData.pengaturan === "object") {
+          const current = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
+          localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify({ ...current, ...jsonData.pengaturan }));
+        }
+        return { success: true, message: "Restore database dari backup berhasil diselesaikan!" };
+      } catch (e: any) {
+        return { success: false, message: "Gagal memproses restore: " + e.toString() };
+      }
     }
 
     case "getHariLiburSemua": {
