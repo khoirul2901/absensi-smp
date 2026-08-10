@@ -1774,8 +1774,8 @@ export default function JadwalGuru({ session }: { session?: any }) {
 
       {/* MODAL 3: TEACHER CLASS ATTENDANCE FORM */}
       {showAbsensiModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl max-w-lg w-full overflow-hidden">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 sm:p-6 pt-4 sm:pt-10 overflow-y-auto z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl max-w-lg w-full overflow-hidden my-auto sm:my-0">
             <div className="p-5 bg-emerald-600 text-white flex justify-between items-center">
               <h3 className="font-extrabold text-sm tracking-tight flex items-center gap-2">
                 <CheckCircle2 className="w-4.5 h-4.5" />
@@ -1902,6 +1902,7 @@ export default function JadwalGuru({ session }: { session?: any }) {
                   <option value="Izin">Izin</option>
                   <option value="Sakit">Sakit</option>
                   <option value="Tugas Luar">Tugas Luar / Dinas</option>
+                  <option value="Tidak Hadir">Tidak Hadir</option>
                 </select>
               </div>
 
