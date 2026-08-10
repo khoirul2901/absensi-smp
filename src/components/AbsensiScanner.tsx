@@ -48,7 +48,7 @@ import {
   Layers
 } from "lucide-react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
-import { callGas, getStorageKey, setStorage, getStorage, extractArrayData } from "../lib/gasApi";
+import { callGas, getStorageKey, setStorage, getStorage, extractArrayData, isInvalidWali } from "../lib/gasApi";
 import { LiveAbsen, ScheduleLessonItem, AbsensiMengajarItem, JamPelajaranItem } from "../types";
 
 const HARI_LIST = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
@@ -281,6 +281,28 @@ export default function AbsensiScanner({ session }: { session?: any }) {
           parsed = ["X RPL 1", "X RPL 2", "XI RPL 1", "XI RPL 2", "XII RPL 1"];
         }
         setClassList(parsed);
+
+        // Auto select assigned class if logged in as Wali Kelas
+        if (currentUser) {
+          const uName = (currentUser.nama_guru || currentUser.username || currentUser.nama || "").toLowerCase();
+          const uTargetId = (currentUser.target_id || currentUser.id_guru || "").toLowerCase();
+          
+          const storedKelas = getStorage("data_kelas") || [];
+          const myClass = storedKelas.find((c: any) => {
+            const w = (c.wali_kelas || c.wali || c.waliKelas || c.guru_wali || c.nama_guru || "").toLowerCase();
+            if (!w || isInvalidWali(w)) return false;
+            return (uName && w.includes(uName)) || (uTargetId && w.includes(uTargetId));
+          });
+
+          if (myClass && myClass.nama_kelas) {
+            setFilterKelas(myClass.nama_kelas);
+          } else if (currentUser.role === "Wali Kelas" && currentUser.target_id && currentUser.target_id !== "-") {
+            const targetClass = parsed.find((c: string) => c.toLowerCase().replace(/[\s-]+/g, "") === currentUser.target_id.toLowerCase().replace(/[\s-]+/g, ""));
+            if (targetClass) {
+              setFilterKelas(targetClass);
+            }
+          }
+        }
       } catch (e) {
         const stored = getStorage("data_kelas") || [];
         let parsed = stored.map((item: any) => typeof item === 'string' ? item : (item.nama_kelas || item.kelas || String(item))).filter(Boolean);
@@ -291,7 +313,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
       }
     }
     fetchClasses();
-  }, []);
+  }, [currentUser]);
 
   // Load live logs based on selected date, category, and class filter
   const loadLiveLogs = async (targetDate = filterTanggal, currentKelas = filterKelas) => {
@@ -325,12 +347,13 @@ export default function AbsensiScanner({ session }: { session?: any }) {
         // Filter masterData by currentKelas if category is Siswa and currentKelas !== "Semua"
         let filteredMaster = masterData;
         if (kategori === "Siswa" && currentKelas && currentKelas !== "Semua") {
-          const kFilter = String(currentKelas).toLowerCase().replace(/\s+/g, "");
+          const kFilter = String(currentKelas).toLowerCase().replace(/[\s-]+/g, "");
           filteredMaster = masterData.filter((m: any) => {
-            const kVal = String(m.kelas || "").toLowerCase().replace(/\s+/g, "");
-            const jVal = String(m.jurusan || "").toLowerCase().replace(/\s+/g, "");
-            const kjVal = String(m.kelas_jurusan || "").toLowerCase().replace(/\s+/g, "");
-            return kjVal.includes(kFilter) || kVal.includes(kFilter) || kFilter.includes(kVal);
+            const kVal = String(m.kelas || "").toLowerCase().replace(/[\s-]+/g, "");
+            const jVal = String(m.jurusan || "").toLowerCase().replace(/[\s-]+/g, "");
+            const kjVal = String(m.kelas_jurusan || "").toLowerCase().replace(/[\s-]+/g, "");
+            const combined = `${kVal}${jVal}`;
+            return kjVal.includes(kFilter) || kFilter.includes(kjVal) || kVal.includes(kFilter) || kFilter.includes(kVal) || combined.includes(kFilter) || kFilter.includes(combined);
           });
         }
 
