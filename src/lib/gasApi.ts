@@ -275,6 +275,14 @@ export function callMock(action: string, args: any[] = []): any {
       return { success: true, data: cfg, ...cfg };
     }
 
+    case "simpanPengaturanCustom": {
+      const [customObj] = args;
+      const current = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
+      const merged = { ...current, ...(typeof customObj === "object" ? customObj : {}) };
+      localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify(merged));
+      return { success: true, message: "Pengaturan berhasil diperbarui!", data: merged };
+    }
+
     case "simpanKonfigurasiJam":
     case "simpanPengaturanJam":
     case "simpanPengaturan": {
@@ -1437,6 +1445,36 @@ export function callMock(action: string, args: any[] = []): any {
       }
       if ((!endJadwal || endJadwal === "-") && slot) {
         endJadwal = slot.jam_selesai;
+      }
+
+      // Check Schedule Time Window restriction if enabled
+      const savedCfg = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
+      const batasiJam = savedCfg.batasi_jam_jadwal !== undefined ? Boolean(savedCfg.batasi_jam_jadwal) : true;
+      const tolAwal = Number(savedCfg.toleransi_awal_menit ?? 15);
+      const tolAkhir = Number(savedCfg.toleransi_akhir_menit ?? 30);
+
+      if (batasiJam && startJadwal && startJadwal !== "-" && endJadwal && endJadwal !== "-") {
+        const [hM, mM] = startJadwal.split(":").map(Number);
+        const [hS, mS] = endJadwal.split(":").map(Number);
+        const [hN, mN] = timeStr.split(":").map(Number);
+        if (!isNaN(hM) && !isNaN(mM) && !isNaN(hS) && !isNaN(mS) && !isNaN(hN) && !isNaN(mN)) {
+          const startMin = hM * 60 + mM;
+          const endMin = hS * 60 + mS;
+          const nowMin = hN * 60 + mN;
+
+          if (nowMin < startMin - tolAwal) {
+            return {
+              success: false,
+              message: `Presensi mengajar ditolak: Belum masuk jam jadwal pelajaran (${payload.mapel || "Pelajaran"} ${payload.kelas || ""}). Jam pelajaran dimulai pukul ${startJadwal}. Saat ini jam ${timeStr}.`
+            };
+          }
+          if (nowMin > endMin + tolAkhir) {
+            return {
+              success: false,
+              message: `Presensi mengajar ditolak: Waktu absen (${timeStr}) berada di luar jam jadwal pelajaran (${startJadwal} - ${endJadwal}).`
+            };
+          }
+        }
       }
 
       // Check if already logged for same guru, date, kelas, jam_ke
