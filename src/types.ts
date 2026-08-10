@@ -62,6 +62,12 @@ export interface TeacherItem {
   nip_nuptk: string;
 }
 
+export interface KelasItem {
+  nama_kelas: string;
+  id_guru?: string;
+  wali_kelas?: string;
+}
+
 export interface LaporanRow {
   id_log_siswa?: string;
   id_log_guru?: string;
