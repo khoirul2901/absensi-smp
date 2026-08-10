@@ -135,6 +135,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
   // Presensi Mengajar Guru States
   const [lessonSchedules, setLessonSchedules] = useState<ScheduleLessonItem[]>([]);
   const [absensiMengajarLogs, setAbsensiMengajarLogs] = useState<AbsensiMengajarItem[]>([]);
+  const [itemsPerPageMengajar, setItemsPerPageMengajar] = useState<number>(10);
+  const [currentPageMengajar, setCurrentPageMengajar] = useState<number>(1);
   const [teachersList, setTeachersList] = useState<any[]>([]);
   const [jamSlots, setJamSlots] = useState<JamPelajaranItem[]>([]);
   const [batasiJamJadwal, setBatasiJamJadwal] = useState<boolean>(true);
@@ -2767,19 +2769,37 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                   </div>
                 )}
               </div>
-
-              {/* Table Log Presensi Mengajar Hari Ini */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden space-y-0">
-                <div className="p-4 bg-gray-50/80 border-b border-gray-100 flex justify-between items-center">
+                <div className="p-4 bg-gray-50/80 border-b border-gray-100 flex flex-wrap justify-between items-center gap-2">
                   <div className="flex items-center gap-2">
                     <FileText className="w-4 h-4 text-emerald-600" />
                     <h3 className="font-extrabold text-sm text-gray-900">
                       Riwayat Log Presensi Mengajar ({filterTanggal})
                     </h3>
                   </div>
-                  <span className="text-xs font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                    {absensiMengajarLogs.filter(l => String(l.tanggal || "").split("T")[0] === filterTanggal).length} Records
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-xl px-2.5 py-1">
+                      <span className="text-[11px] font-semibold text-gray-500 shrink-0">Tampilkan:</span>
+                      <select 
+                        value={itemsPerPageMengajar === Infinity ? "all" : itemsPerPageMengajar}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setItemsPerPageMengajar(val === "all" ? Infinity : Number(val));
+                          setCurrentPageMengajar(1);
+                        }}
+                        className="bg-transparent text-xs font-bold text-gray-800 focus:outline-none cursor-pointer"
+                      >
+                        <option value={10}>10</option>
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                        <option value="all">Semua</option>
+                      </select>
+                    </div>
+                    <span className="text-xs font-extrabold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                      {absensiMengajarLogs.filter(l => String(l.tanggal || "").split("T")[0] === filterTanggal).length} Records
+                    </span>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -2796,56 +2816,153 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-gray-700 font-medium">
-                      {absensiMengajarLogs.filter(l => String(l.tanggal || "").split("T")[0] === filterTanggal).length === 0 ? (
-                        <tr>
-                          <td colSpan={isGuru ? 6 : 7} className="p-8 text-center text-gray-400">
-                            Belum ada riwayat presensi mengajar untuk tanggal {filterTanggal}.
-                          </td>
-                        </tr>
-                      ) : (
-                        absensiMengajarLogs
-                          .filter(l => String(l.tanggal || "").split("T")[0] === filterTanggal)
-                          .map((log) => (
-                            <tr key={log.id_log || `${log.kelas}_${log.jam_ke}_${log.waktu_absen}`} className="hover:bg-gray-50/80 transition-colors">
-                              <td className="p-3 font-mono font-bold text-gray-900">{log.waktu_absen || "-"}</td>
-                              <td className="p-3 font-bold text-gray-900">{log.nama_guru}</td>
-                              <td className="p-3">
-                                <span className="font-extrabold text-emerald-700 block">{log.kelas}</span>
-                                <span className="text-gray-500 text-[11px]">{log.mapel}</span>
+                      {(() => {
+                        const filteredMengajar = absensiMengajarLogs.filter(l => String(l.tanggal || "").split("T")[0] === filterTanggal);
+                        const totalPagesMengajar = itemsPerPageMengajar === Infinity ? 1 : Math.ceil(filteredMengajar.length / itemsPerPageMengajar);
+                        const safePage = Math.min(currentPageMengajar, totalPagesMengajar || 1);
+                        const startIdx = itemsPerPageMengajar === Infinity ? 0 : (safePage - 1) * itemsPerPageMengajar;
+                        const endIdx = itemsPerPageMengajar === Infinity ? filteredMengajar.length : startIdx + itemsPerPageMengajar;
+                        const pageLogs = filteredMengajar.slice(startIdx, endIdx);
+
+                        if (filteredMengajar.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={isGuru ? 6 : 7} className="p-8 text-center text-gray-400">
+                                Belum ada riwayat presensi mengajar untuk tanggal {filterTanggal}.
                               </td>
-                              <td className="p-3">
-                                <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded-md text-[10px]">
-                                  Jam ke-{log.jam_ke}
-                                </span>
-                              </td>
-                              <td className="p-3">
-                                <span className={`px-2.5 py-0.5 rounded-full font-extrabold text-[10px] ${
-                                  String(log.status).includes("Terlambat")
-                                    ? "bg-amber-100 text-amber-800 border border-amber-200"
-                                    : "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                                }`}>
-                                  {log.status || "Hadir"}
-                                </span>
-                              </td>
-                              <td className="p-3 text-gray-600 max-w-xs truncate">{log.catatan_materi || "-"}</td>
-                              {!isGuru && (
-                                <td className="p-3 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => log.id_log && handleDeleteMengajar(log.id_log)}
-                                    className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
-                                    title="Hapus catatan"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </td>
-                              )}
                             </tr>
-                          ))
-                      )}
+                          );
+                        }
+
+                        return pageLogs.map((log) => (
+                          <tr key={log.id_log || `${log.kelas}_${log.jam_ke}_${log.waktu_absen}`} className="hover:bg-gray-50/80 transition-colors">
+                            <td className="p-3 font-mono font-bold text-gray-900">{log.waktu_absen || "-"}</td>
+                            <td className="p-3 font-bold text-gray-900">{log.nama_guru}</td>
+                            <td className="p-3">
+                              <span className="font-extrabold text-emerald-700 block">{log.kelas}</span>
+                              <span className="text-gray-500 text-[11px]">{log.mapel}</span>
+                            </td>
+                            <td className="p-3">
+                              <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded-md text-[10px]">
+                                Jam ke-{log.jam_ke}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <span className={`px-2.5 py-0.5 rounded-full font-extrabold text-[10px] ${
+                                String(log.status).includes("Terlambat")
+                                  ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                  : String(log.status).includes("Tidak Hadir")
+                                  ? "bg-rose-100 text-rose-800 border border-rose-200"
+                                  : String(log.status).includes("Izin") || String(log.status).includes("Sakit") || String(log.status).includes("Tugas")
+                                  ? "bg-indigo-100 text-indigo-800 border border-indigo-200"
+                                  : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                              }`}>
+                                {log.status || "Hadir"}
+                              </span>
+                            </td>
+                            <td className="p-3 text-gray-600 max-w-xs truncate">{log.catatan_materi || "-"}</td>
+                            {!isGuru && (
+                              <td className="p-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => log.id_log && handleDeleteMengajar(log.id_log)}
+                                  className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
+                                  title="Hapus catatan"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        ));
+                      })()}
                     </tbody>
                   </table>
                 </div>
+
+                {/* Pagination Controls for Mengajar Logs */}
+                {(() => {
+                  const filteredMengajar = absensiMengajarLogs.filter(l => String(l.tanggal || "").split("T")[0] === filterTanggal);
+                  const totalPagesMengajar = itemsPerPageMengajar === Infinity ? 1 : Math.ceil(filteredMengajar.length / itemsPerPageMengajar);
+                  const safePage = Math.min(currentPageMengajar, totalPagesMengajar || 1);
+                  const startIdx = itemsPerPageMengajar === Infinity ? 0 : (safePage - 1) * itemsPerPageMengajar;
+                  const endIdx = itemsPerPageMengajar === Infinity ? filteredMengajar.length : startIdx + itemsPerPageMengajar;
+
+                  if (itemsPerPageMengajar === Infinity || totalPagesMengajar <= 1) return null;
+
+                  return (
+                    <div className="flex items-center justify-between border-t border-gray-100 bg-white px-4 py-3 sm:px-6">
+                      <div className="flex flex-1 justify-between sm:hidden">
+                        <button
+                          disabled={safePage === 1}
+                          onClick={() => setCurrentPageMengajar(p => Math.max(p - 1, 1))}
+                          className={`relative inline-flex items-center rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-700 ${
+                            safePage === 1 ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50 cursor-pointer"
+                          }`}
+                        >
+                          Sebelumnya
+                        </button>
+                        <button
+                          disabled={safePage === totalPagesMengajar}
+                          onClick={() => setCurrentPageMengajar(p => Math.min(p + 1, totalPagesMengajar))}
+                          className={`relative ml-3 inline-flex items-center rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-700 ${
+                            safePage === totalPagesMengajar ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50 cursor-pointer"
+                          }`}
+                        >
+                          Selanjutnya
+                        </button>
+                      </div>
+                      <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-xs text-gray-500 font-semibold">
+                            Menampilkan <span className="font-bold text-gray-900">{filteredMengajar.length > 0 ? startIdx + 1 : 0}</span> sampai{" "}
+                            <span className="font-bold text-gray-900">
+                              {Math.min(endIdx, filteredMengajar.length)}
+                            </span>{" "}
+                            dari <span className="font-bold text-gray-900">{filteredMengajar.length}</span> data
+                          </p>
+                        </div>
+                        <div>
+                          <nav className="isolate inline-flex -space-x-px rounded-xl gap-1" aria-label="Pagination">
+                            <button
+                              onClick={() => setCurrentPageMengajar(p => Math.max(p - 1, 1))}
+                              disabled={safePage === 1}
+                              className={`relative inline-flex items-center rounded-lg px-2 py-1 text-gray-400 hover:bg-gray-50 ${
+                                safePage === 1 ? "opacity-40 cursor-not-allowed" : "cursor-pointer"
+                              }`}
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            
+                            {Array.from({ length: totalPagesMengajar }, (_, i) => i + 1).map((page) => (
+                              <button
+                                key={page}
+                                onClick={() => setCurrentPageMengajar(page)}
+                                className={`relative inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-bold transition-all duration-150 cursor-pointer ${
+                                  safePage === page
+                                    ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/10"
+                                    : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                                }`}
+                              >
+                                {page}
+                              </button>
+                            ))}
+
+                            <button
+                              onClick={() => setCurrentPageMengajar(p => Math.min(p + 1, totalPagesMengajar))}
+                              disabled={safePage === totalPagesMengajar}
+                              className={`relative inline-flex items-center rounded-lg px-2 py-1 text-gray-400 hover:bg-gray-50 ${
+                                safePage === totalPagesMengajar ? "opacity-40 cursor-not-allowed" : "cursor-pointer"
+                              }`}
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          </nav>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -2854,8 +2971,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
 
       {/* Presensi Mengajar Modal */}
       {showMengajarModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-2xl max-w-md w-full overflow-hidden">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 sm:p-6 pt-4 sm:pt-10 overflow-y-auto z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-2xl max-w-md w-full overflow-hidden my-auto sm:my-0">
             <div className="p-5 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex justify-between items-center">
               <div className="space-y-0.5">
                 <h3 className="font-extrabold text-base flex items-center gap-2">
@@ -2894,7 +3011,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                     required
                     value={mengajarForm.kelas}
                     onChange={(e) => setMengajarForm({ ...mengajarForm, kelas: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold text-emerald-700 focus:outline-none"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 font-bold text-gray-800 focus:outline-none"
                   />
                 </div>
 
@@ -2937,6 +3054,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                     <option value="Izin">Izin</option>
                     <option value="Sakit">Sakit</option>
                     <option value="Tugas Luar">Tugas Luar</option>
+                    <option value="Tidak Hadir">Tidak Hadir</option>
                   </select>
                 </div>
               </div>
@@ -2983,8 +3101,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
 
       {/* Manual Attendance Modal */}
       {showManualModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl max-w-md w-full overflow-hidden">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 sm:p-6 pt-4 sm:pt-10 overflow-y-auto z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl max-w-md w-full overflow-hidden my-auto sm:my-0">
             <div className="p-6 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
               <h3 className="font-extrabold text-gray-900 text-base">{manualEditOriginalDate ? "Edit / Koreksi Presensi" : "Koreksi Absensi Manual"} ({kategori})</h3>
               <button onClick={() => { setShowManualModal(false); setManualEditOriginalDate(null); }} className="text-gray-400 hover:text-gray-600 text-lg font-bold">✕</button>
@@ -3058,6 +3176,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                   <option value="Terlambat">Hadir Terlambat (Paksa)</option>
                   <option value="Sakit">Sakit</option>
                   <option value="Izin">Izin</option>
+                  <option value="Tidak Hadir">Tidak Hadir</option>
                   <option value="Alfa">Alfa (Tanpa Keterangan)</option>
                 </select>
               </div>
