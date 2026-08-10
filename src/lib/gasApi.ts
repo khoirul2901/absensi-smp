@@ -1593,13 +1593,18 @@ export function isInvalidWali(s: any): boolean {
   return (
     str === "" ||
     str === "-" ||
+    str === "null" ||
+    str === "undefined" ||
     str === "wali" ||
     str === "wali kelas" ||
     str === "wali_kelas" ||
     str === "walikelas" ||
     str === "pilih wali" ||
-    str.indexOf("pilih wali") !== -1 ||
-    str.indexOf("-- pilih") !== -1
+    str.includes("pilih wali") ||
+    str.includes("-- pilih") ||
+    str.includes("belum sesuai") ||
+    str.includes("belum ada") ||
+    str.includes("belum ditentukan")
   );
 }
 
@@ -1643,20 +1648,63 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
     const bodyObj: any = { action, args, token };
     if (args && args.length > 0) {
       if (action === "editKelas") {
-        if (typeof args[0] === "string") bodyObj.kelasLama = args[0];
-        if (typeof args[1] === "string") {
-          bodyObj.kelasBaru = args[1];
-          bodyObj.nama_kelas = args[1];
-          bodyObj.kelas = args[1];
+        const kLama = typeof args[0] === "string" ? args[0] : (args[0]?.nama_kelas || args[0]?.kelas || "");
+        const kBaru = typeof args[1] === "string" ? args[1] : (args[1]?.nama_kelas || args[1]?.kelas || kLama);
+        const wRaw = typeof args[2] === "string" ? args[2] : (args[2]?.wali_kelas || args[2]?.wali || args[2]?.waliKelas || args[2]?.nama_guru || args[2]?.guru_wali || "-");
+        const wVal = isInvalidWali(wRaw) ? "-" : String(wRaw).trim();
+
+        bodyObj.kelasLama = kLama;
+        bodyObj.kelasBaru = kBaru;
+        bodyObj.nama_kelas = kBaru;
+        bodyObj.kelas = kBaru;
+        bodyObj.namaKelas = kBaru;
+        bodyObj.wali_kelas = wVal;
+        bodyObj.wali = wVal;
+        bodyObj.waliKelas = wVal;
+        bodyObj.nama_guru = wVal;
+        bodyObj.guru_wali = wVal;
+        bodyObj.walikelas = wVal;
+        bodyObj.guruWali = wVal;
+        bodyObj.wali_kelas_nama = wVal;
+
+        // Synchronize local storage immediately
+        let currentK = getStorage("data_kelas") || [];
+        if (!Array.isArray(currentK)) currentK = [];
+        const idx = currentK.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === kLama);
+        if (idx !== -1) {
+          currentK[idx] = { nama_kelas: kBaru, wali_kelas: wVal };
+        } else {
+          currentK.push({ nama_kelas: kBaru, wali_kelas: wVal });
         }
-        if (typeof args[2] === "string") {
-          const w = isInvalidWali(args[2]) ? "-" : args[2];
-          bodyObj.wali_kelas = w;
-          bodyObj.wali = w;
-          bodyObj.waliKelas = w;
-          bodyObj.nama_guru = w;
-        }
+        setStorage("data_kelas", currentK);
       } else if (action === "simpanWaliKelas" || action === "tambahKelas") {
+        const kNama = typeof args[0] === "string" ? args[0] : (args[0]?.nama_kelas || args[0]?.kelas || "");
+        const wRaw = typeof args[1] === "string" ? args[1] : (args[1]?.wali_kelas || args[1]?.wali || args[1]?.waliKelas || args[1]?.nama_guru || args[1]?.guru_wali || "-");
+        const wVal = isInvalidWali(wRaw) ? "-" : String(wRaw).trim();
+
+        bodyObj.nama_kelas = kNama;
+        bodyObj.kelas = kNama;
+        bodyObj.namaKelas = kNama;
+        bodyObj.wali_kelas = wVal;
+        bodyObj.wali = wVal;
+        bodyObj.waliKelas = wVal;
+        bodyObj.nama_guru = wVal;
+        bodyObj.guru_wali = wVal;
+        bodyObj.walikelas = wVal;
+        bodyObj.guruWali = wVal;
+        bodyObj.wali_kelas_nama = wVal;
+
+        // Synchronize local storage immediately
+        let currentK = getStorage("data_kelas") || [];
+        if (!Array.isArray(currentK)) currentK = [];
+        const idx = currentK.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === kNama);
+        if (idx !== -1) {
+          currentK[idx] = { nama_kelas: kNama, wali_kelas: wVal };
+        } else {
+          currentK.push({ nama_kelas: kNama, wali_kelas: wVal });
+        }
+        setStorage("data_kelas", currentK);
+      } else {
         if (typeof args[0] === "string") {
           bodyObj.nama_kelas = args[0];
           bodyObj.kelas = args[0];
@@ -1667,14 +1715,7 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
           bodyObj.wali = w;
           bodyObj.waliKelas = w;
           bodyObj.nama_guru = w;
-        }
-      } else {
-        if (typeof args[0] === "string") {
-          bodyObj.nama_kelas = args[0];
-          bodyObj.kelas = args[0];
-        }
-        if (typeof args[1] === "string") {
-          bodyObj.wali_kelas = isInvalidWali(args[1]) ? "-" : args[1];
+          bodyObj.guru_wali = w;
         }
       }
       for (const a of args) {
@@ -1783,10 +1824,11 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
             // 2. Add/merge API list
             for (const item of list) {
               const name = String(typeof item === "string" ? item : (item.nama_kelas || item.kelas || "")).trim();
-              const waliFromApi = String(typeof item === "object" && item ? (item.wali_kelas || item.wali || item.waliKelas || item.guru_wali || item["Wali Kelas"] || "-") : "-").trim();
+              const waliFromApi = String(typeof item === "object" && item ? (item.wali_kelas || item.wali || item.waliKelas || item.guru_wali || item.nama_guru || item.wali_kelas_nama || item["Wali Kelas"] || "-") : "-").trim();
               if (name) {
                 const existingWali = mergedMap.get(name) || "-";
-                const finalWali = (waliFromApi && waliFromApi !== "-") ? waliFromApi : existingWali;
+                const cleanWaliFromApi = isInvalidWali(waliFromApi) ? "-" : waliFromApi;
+                const finalWali = (cleanWaliFromApi && cleanWaliFromApi !== "-") ? cleanWaliFromApi : existingWali;
                 mergedMap.set(name, finalWali);
               }
             }
