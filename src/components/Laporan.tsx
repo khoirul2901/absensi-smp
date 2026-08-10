@@ -297,7 +297,7 @@ export default function Laporan() {
         setMengajarLogs(filtered);
 
         // Compute group rekap for Mengajar
-        const guruGroup: Record<string, { id_guru: string; nama_guru: string; total: number; tepat: number; terlambat: number; izinSakit: number }> = {};
+        const guruGroup: Record<string, { id_guru: string; nama_guru: string; total: number; tepat: number; terlambat: number; izinSakit: number; tidakHadir: number }> = {};
         filtered.forEach((item) => {
           const key = item.id_guru || item.nama_guru || "GURU";
           if (!guruGroup[key]) {
@@ -307,7 +307,8 @@ export default function Laporan() {
               total: 0,
               tepat: 0,
               terlambat: 0,
-              izinSakit: 0
+              izinSakit: 0,
+              tidakHadir: 0
             };
           }
           guruGroup[key].total += 1;
@@ -316,6 +317,8 @@ export default function Laporan() {
             guruGroup[key].tepat += 1;
           } else if (st.includes("Terlambat")) {
             guruGroup[key].terlambat += 1;
+          } else if (st.includes("Tidak Hadir") || st.includes("Alfa")) {
+            guruGroup[key].tidakHadir += 1;
           } else {
             guruGroup[key].izinSakit += 1;
           }
@@ -1445,6 +1448,7 @@ export default function Laporan() {
                       paginatedMengajarLogs.map((row, idx) => {
                         const isTepat = String(row.status || "").includes("Tepat");
                         const isTerlambat = String(row.status || "").includes("Terlambat");
+                        const isTidakHadir = String(row.status || "").includes("Tidak Hadir") || String(row.status || "").includes("Alfa");
                         
                         return (
                           <tr key={row.id_log_mengajar || idx} className="hover:bg-slate-50/50 transition-all duration-150">
@@ -1470,6 +1474,7 @@ export default function Laporan() {
                               <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                                 isTepat ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
                                 isTerlambat ? "bg-amber-50 text-amber-700 border border-amber-200" :
+                                isTidakHadir ? "bg-rose-50 text-rose-700 border border-rose-200" :
                                 "bg-indigo-50 text-indigo-700 border border-indigo-200"
                               }`}>
                                 {row.status}
@@ -1583,13 +1588,14 @@ export default function Laporan() {
                       <th className="py-3.5 px-6 text-center">Tepat Waktu</th>
                       <th className="py-3.5 px-6 text-center">Terlambat</th>
                       <th className="py-3.5 px-6 text-center">Izin / Sakit / Tugas</th>
+                      <th className="py-3.5 px-6 text-center">Tidak Hadir</th>
                       <th className="py-3.5 px-6 text-right">Persentase Kehadiran</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 text-xs text-gray-700 print:divide-slate-300">
                     {filteredRekapMengajarRows.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="py-8 text-center text-gray-400 font-medium">
+                        <td colSpan={8} className="py-8 text-center text-gray-400 font-medium">
                           Tidak ada data rekap presensi mengajar
                         </td>
                       </tr>
@@ -1611,6 +1617,9 @@ export default function Laporan() {
                             </td>
                             <td className="py-3.5 px-6 text-center">
                               <span className="bg-indigo-50 text-indigo-800 font-bold px-2 py-1 rounded-lg border border-indigo-100">{row.izinSakit}</span>
+                            </td>
+                            <td className="py-3.5 px-6 text-center">
+                              <span className="bg-rose-50 text-rose-800 font-bold px-2 py-1 rounded-lg border border-rose-100">{row.tidakHadir || 0}</span>
                             </td>
                             <td className="py-3.5 px-6 text-right font-extrabold text-sm">
                               <div className="flex items-center justify-end gap-1.5">
