@@ -20,15 +20,19 @@ import {
   AlertTriangle,
   Printer,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Building2,
+  UserCheck
 } from "lucide-react";
-import { callGas, getStorageKey, extractArrayData, getStorage, setStorage } from "../lib/gasApi";
+import { callGas, getStorageKey, extractArrayData, getStorage, setStorage, isInvalidWali } from "../lib/gasApi";
 import { Siswa, Guru } from "../types";
 import { IdCard } from "./IdCard";
 
 export default function DataMaster() {
-  const [kategori, setKategori] = useState<"Siswa" | "Guru" | "User">("Siswa");
+  const [kategori, setKategori] = useState<"Siswa" | "Guru" | "Kelas" | "User">("Siswa");
   const [dataList, setDataList] = useState<any[]>([]);
+  const [guruList, setGuruList] = useState<any[]>([]);
+  const [siswaList, setSiswaList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -108,6 +112,34 @@ export default function DataMaster() {
         } else {
           setError(res?.message || "Gagal memuat data user");
         }
+      } else if (kategori === "Kelas") {
+        let [resKelas, resGuru, resSiswa] = await Promise.all([
+          callGas("getKelasSemua"),
+          callGas("getDataMaster", ["Guru"]),
+          callGas("getDataMaster", ["Siswa"])
+        ]);
+        let kList = extractArrayData(resKelas);
+        let gList = extractArrayData(resGuru);
+        let sList = extractArrayData(resSiswa);
+
+        if (!kList || kList.length === 0) kList = getStorage("data_kelas") || [];
+        if (!gList || gList.length === 0) gList = getStorage("data_guru") || [];
+        if (!sList || sList.length === 0) sList = getStorage("data_siswa") || [];
+
+        setGuruList(gList);
+        setSiswaList(sList);
+
+        const normalizedKelas = kList.map((item: any) => {
+          const name = String(typeof item === "string" ? item : (item.nama_kelas || item.kelas || "")).trim();
+          const rawWali = typeof item === "object" && item ? (item.wali_kelas || item.wali || item.waliKelas || item["Wali Kelas"] || "-") : "-";
+          const cleanWali = isInvalidWali(rawWali) ? "-" : String(rawWali).trim();
+          return {
+            nama_kelas: name,
+            wali_kelas: cleanWali
+          };
+        }).filter((k: any) => Boolean(k.nama_kelas));
+
+        setDataList(normalizedKelas);
       } else {
         const res = await callGas("getDataMaster", [kategori]);
         if (res && res.success) {
@@ -139,6 +171,14 @@ export default function DataMaster() {
         } else {
           res = await callGas("tambahUserData", [formData]);
         }
+      } else if (kategori === "Kelas") {
+        const namaKls = (formData.nama_kelas || "").trim();
+        const waliKls = formData.wali_kelas || "-";
+        if (editId) {
+          res = await callGas("editKelas", [editId, namaKls, waliKls, { nama_kelas: namaKls, wali_kelas: waliKls }]);
+        } else {
+          res = await callGas("tambahKelas", [namaKls, waliKls, { nama_kelas: namaKls, wali_kelas: waliKls }]);
+        }
       } else {
         if (editId) {
           // Edit record
@@ -166,12 +206,14 @@ export default function DataMaster() {
 
   // Delete Record
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus permanen data: ${name} (${id})?`)) return;
+    if (!confirm(`Apakah Anda yakin ingin menghapus permanen data: ${name}?`)) return;
     try {
       setLoading(true);
       let res;
       if (kategori === "User") {
         res = await callGas("hapusUserData", [id]);
+      } else if (kategori === "Kelas") {
+        res = await callGas("hapusKelas", [id, { nama_kelas: id }]);
       } else {
         res = await callGas("hapusDataMaster", [kategori, id]);
       }
@@ -189,8 +231,16 @@ export default function DataMaster() {
 
   // Open Form for editing
   const openEdit = (item: any) => {
-    setEditId(kategori === "Siswa" ? item.id_siswa : (kategori === "Guru" ? item.id_guru : item.username));
-    setFormData(item);
+    if (kategori === "Kelas") {
+      setEditId(item.nama_kelas || item.kelas);
+      setFormData({
+        nama_kelas: item.nama_kelas || item.kelas || "",
+        wali_kelas: item.wali_kelas || item.wali || "-"
+      });
+    } else {
+      setEditId(kategori === "Siswa" ? item.id_siswa : (kategori === "Guru" ? item.id_guru : item.username));
+      setFormData(item);
+    }
     setShowFormModal(true);
   };
 
@@ -214,6 +264,11 @@ export default function DataMaster() {
         jabatan_tugas: "Guru Mapel",
         no_hp: "",
         password: "guru123"
+      });
+    } else if (kategori === "Kelas") {
+      setFormData({
+        nama_kelas: "",
+        wali_kelas: "-"
       });
     } else {
       setFormData({
@@ -373,6 +428,13 @@ export default function DataMaster() {
               Guru
             </button>
             <button 
+              onClick={() => setKategori("Kelas")}
+              className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all duration-150 ${kategori === "Kelas" ? "bg-white text-emerald-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+            >
+              <Building2 className="w-4 h-4 text-emerald-600" />
+              Kelas & Wali
+            </button>
+            <button 
               onClick={() => setKategori("User")}
               className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all duration-150 ${kategori === "User" ? "bg-white text-amber-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
             >
@@ -465,6 +527,13 @@ export default function DataMaster() {
                       <th className="py-3.5 px-6">Hak Akses (Role)</th>
                       <th className="py-3.5 px-6">Target ID Guru</th>
                     </>
+                  ) : kategori === "Kelas" ? (
+                    <>
+                      <th className="py-3.5 px-6">Nama Kelas</th>
+                      <th className="py-3.5 px-6">Wali Kelas</th>
+                      <th className="py-3.5 px-6">Jumlah Siswa</th>
+                      <th className="py-3.5 px-6">Status Wali</th>
+                    </>
                   ) : (
                     <>
                       <th className="py-3.5 px-6">ID</th>
@@ -509,6 +578,67 @@ export default function DataMaster() {
                               onClick={() => handleDelete(item.username, item.username)}
                               className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-all duration-150"
                               title="Hapus User"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  if (kategori === "Kelas") {
+                    const studentCount = siswaList.filter((s: any) => {
+                      const kls = String(s.kelas || "").trim();
+                      const jur = String(s.jurusan || "").trim();
+                      const full = `${kls} ${jur}`.trim();
+                      return kls === item.nama_kelas || full === item.nama_kelas || jur === item.nama_kelas;
+                    }).length;
+                    const hasWali = item.wali_kelas && item.wali_kelas !== "-" && !isInvalidWali(item.wali_kelas);
+
+                    return (
+                      <tr key={item.nama_kelas} className="hover:bg-slate-50/80 transition-all duration-150">
+                        <td className="py-3.5 px-6 font-bold text-gray-900">
+                          <div className="flex items-center gap-2">
+                            <Building2 className="w-4 h-4 text-emerald-600" />
+                            <span>{item.nama_kelas}</span>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-6 font-semibold text-gray-800">
+                          {hasWali ? (
+                            <span className="flex items-center gap-1.5 text-slate-800">
+                              <UserCheck className="w-3.5 h-3.5 text-blue-600" />
+                              {item.wali_kelas}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 italic">Belum Ditentukan</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-6">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700">
+                            {studentCount} Siswa
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-6">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            hasWali ? "bg-emerald-50 text-emerald-700 border border-emerald-100" : "bg-amber-50 text-amber-700 border border-amber-100"
+                          }`}>
+                            {hasWali ? "Ada Wali Kelas" : "Belum Ada Wali"}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-6 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button 
+                              onClick={() => openEdit(item)}
+                              className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-all duration-150"
+                              title="Edit Kelas & Wali Kelas"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => handleDelete(item.nama_kelas, item.nama_kelas)}
+                              className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-all duration-150"
+                              title="Hapus Kelas"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -813,6 +943,38 @@ export default function DataMaster() {
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-mono"
                       placeholder="Sandi login guru (default: guru123)"
                     />
+                  </div>
+                </>
+              ) : kategori === "Kelas" ? (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-gray-500">Nama Kelas</label>
+                    <input 
+                      type="text"
+                      required
+                      value={formData.nama_kelas || ""}
+                      onChange={(e) => setFormData({ ...formData, nama_kelas: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold"
+                      placeholder="Contoh: X RPL 1, XI TKJ 2"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-gray-500">Pilih Wali Kelas</label>
+                    <select 
+                      value={formData.wali_kelas || "-"}
+                      onChange={(e) => setFormData({ ...formData, wali_kelas: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-semibold"
+                    >
+                      <option value="-">-- Belum Ada Wali Kelas --</option>
+                      {guruList.map((g: any, idx: number) => {
+                        const nameG = g.nama_guru || g.nama || g.name;
+                        return (
+                          <option key={idx} value={nameG}>
+                            {nameG} {g.jabatan_tugas ? `(${g.jabatan_tugas})` : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
                   </div>
                 </>
               ) : (
