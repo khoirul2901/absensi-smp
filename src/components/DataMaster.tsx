@@ -129,10 +129,23 @@ export default function DataMaster() {
         setGuruList(gList);
         setSiswaList(sList);
 
+        const storedKelas = getStorage("data_kelas") || [];
+        const storedMap = new Map<string, string>();
+        storedKelas.forEach((sk: any) => {
+          if (typeof sk === "object" && sk) {
+            const n = String(sk.nama_kelas || sk.kelas || "").trim();
+            const w = String(sk.wali_kelas || sk.wali || sk.waliKelas || sk.guru_wali || sk.nama_guru || "").trim();
+            if (n && w && !isInvalidWali(w)) storedMap.set(n, w);
+          }
+        });
+
         const normalizedKelas = kList.map((item: any) => {
           const name = String(typeof item === "string" ? item : (item.nama_kelas || item.kelas || "")).trim();
-          const rawWali = typeof item === "object" && item ? (item.wali_kelas || item.wali || item.waliKelas || item["Wali Kelas"] || "-") : "-";
-          const cleanWali = isInvalidWali(rawWali) ? "-" : String(rawWali).trim();
+          const rawWali = typeof item === "object" && item ? (item.wali_kelas || item.wali || item.waliKelas || item.guru_wali || item.nama_guru || item.wali_kelas_nama || item["Wali Kelas"] || "-") : "-";
+          let cleanWali = isInvalidWali(rawWali) ? "-" : String(rawWali).trim();
+          if (cleanWali === "-" && storedMap.has(name)) {
+            cleanWali = storedMap.get(name)!;
+          }
           return {
             nama_kelas: name,
             wali_kelas: cleanWali
@@ -173,12 +186,29 @@ export default function DataMaster() {
         }
       } else if (kategori === "Kelas") {
         const namaKls = (formData.nama_kelas || "").trim();
-        const waliKls = formData.wali_kelas || "-";
+        const rawWali = formData.wali_kelas || "-";
+        const cleanWali = isInvalidWali(rawWali) ? "-" : String(rawWali).trim();
+        const payloadObj = {
+          nama_kelas: namaKls,
+          kelas: namaKls,
+          namaKelas: namaKls,
+          wali_kelas: cleanWali,
+          wali: cleanWali,
+          waliKelas: cleanWali,
+          nama_guru: cleanWali,
+          guru_wali: cleanWali,
+          wali_kelas_nama: cleanWali,
+          walikelas: cleanWali,
+          guruWali: cleanWali
+        };
+
         if (editId) {
-          res = await callGas("editKelas", [editId, namaKls, waliKls, { nama_kelas: namaKls, wali_kelas: waliKls }]);
+          res = await callGas("editKelas", [editId, namaKls, cleanWali, payloadObj]);
         } else {
-          res = await callGas("tambahKelas", [namaKls, waliKls, { nama_kelas: namaKls, wali_kelas: waliKls }]);
+          res = await callGas("tambahKelas", [namaKls, cleanWali, payloadObj]);
         }
+        // Also call simpanWaliKelas as secondary sync
+        callGas("simpanWaliKelas", [namaKls, cleanWali, payloadObj]).catch(() => {});
       } else {
         if (editId) {
           // Edit record
