@@ -83,7 +83,10 @@ export default function JadwalGuru({ session }: { session?: any }) {
   // Flex schedules (legacy special entry/exit limit per teacher)
   const [flexSchedules, setFlexSchedules] = useState<any[]>([]);
 
-  // Toleransi Keterlambatan Presensi Mengajar Guru (in minutes)
+  // Settings for Schedule Restriction & Tolerances
+  const [batasiJamJadwal, setBatasiJamJadwal] = useState<boolean>(true);
+  const [toleransiAwal, setToleransiAwal] = useState<number>(15);
+  const [toleransiAkhir, setToleransiAkhir] = useState<number>(30);
   const [toleransiGuru, setToleransiGuru] = useState<number>(15);
   const [toleransiGuruInput, setToleransiGuruInput] = useState<number>(15);
   const [savingToleransi, setSavingToleransi] = useState<boolean>(false);
@@ -219,11 +222,14 @@ export default function JadwalGuru({ session }: { session?: any }) {
       const flexData = extractArrayData(resFlex);
       setFlexSchedules(flexData);
 
-      // 7. Fetch Toleransi Keterlambatan Presensi Guru
+      // 7. Fetch Toleransi & Pembatasan Jam Presensi Guru
       try {
         const resCfg = await callGas("getPengaturanSemua");
         const cfg = resCfg?.data || resCfg;
-        if (cfg) {
+        if (cfg && typeof cfg === "object") {
+          if (cfg.batasi_jam_jadwal !== undefined) setBatasiJamJadwal(Boolean(cfg.batasi_jam_jadwal));
+          if (cfg.toleransi_awal_menit !== undefined) setToleransiAwal(Number(cfg.toleransi_awal_menit) || 15);
+          if (cfg.toleransi_akhir_menit !== undefined) setToleransiAkhir(Number(cfg.toleransi_akhir_menit) || 30);
           const val = Number(cfg.toleransi_guru ?? cfg.toleransi_mengajar_guru);
           if (!isNaN(val) && val >= 0) {
             setToleransiGuru(val);
@@ -238,7 +244,7 @@ export default function JadwalGuru({ session }: { session?: any }) {
     }
   };
 
-  // Save Teacher Attendance Tolerance Settings
+  // Save Teacher Attendance Settings & Restrictions
   const handleSaveToleransi = async (e: FormEvent) => {
     e.preventDefault();
     setSavingToleransi(true);
@@ -249,8 +255,14 @@ export default function JadwalGuru({ session }: { session?: any }) {
         currentCfg = {};
       }
       const valNum = Math.max(0, Number(toleransiGuruInput));
+      const valAwal = Math.max(0, Number(toleransiAwal));
+      const valAkhir = Math.max(0, Number(toleransiAkhir));
+
       const updated = {
         ...currentCfg,
+        batasi_jam_jadwal: batasiJamJadwal,
+        toleransi_awal_menit: valAwal,
+        toleransi_akhir_menit: valAkhir,
         toleransi_guru: valNum,
         toleransi_mengajar_guru: valNum
       };
@@ -259,13 +271,16 @@ export default function JadwalGuru({ session }: { session?: any }) {
 
       const savedLocal = localStorage.getItem(getStorageKey("MOCK_pengaturan_jam"));
       const parsedLocal = savedLocal ? JSON.parse(savedLocal) : {};
+      parsedLocal.batasi_jam_jadwal = batasiJamJadwal;
+      parsedLocal.toleransi_awal_menit = valAwal;
+      parsedLocal.toleransi_akhir_menit = valAkhir;
       parsedLocal.toleransi_guru = valNum;
       parsedLocal.toleransi_mengajar_guru = valNum;
       localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify(parsedLocal));
 
-      alert(`Batas waktu toleransi presensi mengajar guru berhasil disimpan: ${valNum} menit setelah jam mulai pelajaran.`);
+      alert(`Pengaturan & pembatasan jam presensi mengajar guru berhasil disimpan!\n• Status Pembatasan Jam: ${batasiJamJadwal ? "AKTIF" : "NONAKTIF"}\n• Toleransi Sebelum Jam Mulai: ${valAwal} Menit\n• Toleransi Setelah Jam Selesai: ${valAkhir} Menit\n• Toleransi Terlambat: ${valNum} Menit`);
     } catch (err: any) {
-      alert("Gagal menyimpan batas toleransi: " + err.toString());
+      alert("Gagal menyimpan pengaturan: " + err.toString());
     } finally {
       setSavingToleransi(false);
     }
@@ -470,6 +485,28 @@ export default function JadwalGuru({ session }: { session?: any }) {
       alert("Pilih guru terlebih dahulu!");
       return;
     }
+
+    // Validate Schedule Time Window if restricted
+    if (batasiJamJadwal && absensiForm.jam_mulai_jadwal && absensiForm.jam_mulai_jadwal !== "-" && absensiForm.jam_selesai_jadwal && absensiForm.jam_selesai_jadwal !== "-") {
+      const [hM, mM] = absensiForm.jam_mulai_jadwal.split(":").map(Number);
+      const [hS, mS] = absensiForm.jam_selesai_jadwal.split(":").map(Number);
+      const [hN, mN] = absensiForm.waktu_absen.split(":").map(Number);
+      if (!isNaN(hM) && !isNaN(mM) && !isNaN(hS) && !isNaN(mS) && !isNaN(hN) && !isNaN(mN)) {
+        const startMin = hM * 60 + mM;
+        const endMin = hS * 60 + mS;
+        const nowMin = hN * 60 + mN;
+
+        if (nowMin < startMin - toleransiAwal) {
+          alert(`Gagal: Belum waktunya absen untuk jadwal ini. Jam pelajaran ${absensiForm.mapel} (${absensiForm.kelas}) dimulai pukul ${absensiForm.jam_mulai_jadwal}. Saat ini jam ${absensiForm.waktu_absen}.`);
+          return;
+        }
+        if (nowMin > endMin + toleransiAkhir) {
+          alert(`Gagal: Presensi mengajar ditolak. Waktu absen (${absensiForm.waktu_absen}) di luar jam jadwal pelajaran (${absensiForm.jam_mulai_jadwal} - ${absensiForm.jam_selesai_jadwal}).`);
+          return;
+        }
+      }
+    }
+
     const selectedTeacher = teachers.find(t => t.id_guru === absensiForm.id_guru);
 
     const payload = {
@@ -526,17 +563,38 @@ export default function JadwalGuru({ session }: { session?: any }) {
     const jamMulai = slot ? slot.jam_mulai : (sch.jam_mulai || "07:00");
     const jamSelesai = slot ? slot.jam_selesai : (sch.jam_selesai || "07:45");
 
-      // Check if late (more than toleransiGuru mins after start time)
-      let autoStatus: "Hadir Tepat Waktu" | "Terlambat Masuk Kelas" = "Hadir Tepat Waktu";
-      if (jamMulai && jamMulai !== "-") {
-        const [hM, mM] = jamMulai.split(":").map(Number);
-        const [hN, mN] = timeNow.split(":").map(Number);
+    // Check Schedule Time restriction if enabled
+    if (batasiJamJadwal && jamMulai && jamMulai !== "-" && jamSelesai && jamSelesai !== "-") {
+      const [hM, mM] = jamMulai.split(":").map(Number);
+      const [hS, mS] = jamSelesai.split(":").map(Number);
+      const [hN, mN] = timeNow.split(":").map(Number);
+      if (!isNaN(hM) && !isNaN(mM) && !isNaN(hS) && !isNaN(mS) && !isNaN(hN) && !isNaN(mN)) {
         const startMin = hM * 60 + mM;
+        const endMin = hS * 60 + mS;
         const nowMin = hN * 60 + mN;
-        if (nowMin > startMin + toleransiGuru) {
-          autoStatus = "Terlambat Masuk Kelas";
+
+        if (nowMin < startMin - toleransiAwal) {
+          alert(`Presensi mengajar belum dibuka! Jam pelajaran ${sch.mapel} (${sch.kelas}) dimulai pukul ${jamMulai} (toleransi awal ${toleransiAwal} menit). Saat ini pukul ${timeNow}.`);
+          return;
+        }
+        if (nowMin > endMin + toleransiAkhir) {
+          alert(`Presensi mengajar ditolak! Jadwal pelajaran ${sch.mapel} (${sch.kelas}) telah selesai pada pukul ${jamSelesai} (toleransi akhir ${toleransiAkhir} menit). Saat ini pukul ${timeNow}.`);
+          return;
         }
       }
+    }
+
+    // Check if late (more than toleransiGuru mins after start time)
+    let autoStatus: "Hadir Tepat Waktu" | "Terlambat Masuk Kelas" = "Hadir Tepat Waktu";
+    if (jamMulai && jamMulai !== "-") {
+      const [hM, mM] = jamMulai.split(":").map(Number);
+      const [hN, mN] = timeNow.split(":").map(Number);
+      const startMin = hM * 60 + mM;
+      const nowMin = hN * 60 + mN;
+      if (nowMin > startMin + toleransiGuru) {
+        autoStatus = "Terlambat Masuk Kelas";
+      }
+    }
 
     setAbsensiForm({
       tanggal: todayStr,
@@ -1122,47 +1180,125 @@ export default function JadwalGuru({ session }: { session?: any }) {
             </div>
           </div>
 
-          {/* TOLERANSI WAKTU MAKSIMAL PRESENSI GURU FORM */}
-          <div className="bg-white rounded-2xl border border-amber-200/80 shadow-sm p-6 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-amber-600" />
-                <h3 className="font-extrabold text-gray-900 text-sm">
-                  Toleransi Waktu Maksimal Presensi Mengajar Guru
-                </h3>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
-                  Saat ini: {toleransiGuru} Menit
-                </span>
+          {/* PEMBATASAN DAN TOLERANSI WAKTU PRESENSI GURU FORM */}
+          <form onSubmit={handleSaveToleransi} className="bg-white rounded-2xl border border-amber-200/80 shadow-sm p-6 space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-100">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-amber-600" />
+                  <h3 className="font-extrabold text-gray-900 text-sm">
+                    Aturan & Pembatasan Jam Presensi Mengajar Guru
+                  </h3>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                    batasiJamJadwal 
+                      ? "bg-emerald-100 text-emerald-900 border-emerald-300" 
+                      : "bg-amber-100 text-amber-900 border-amber-300"
+                  }`}>
+                    {batasiJamJadwal ? "PEMBATASAN JAM AKTIF" : "PEMBATASAN BEBAS (NONAKTIF)"}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 font-medium mt-1 max-w-2xl">
+                  Konfigurasi pembatasan waktu agar guru <strong>tidak dapat melakukan presensi mengajar di luar jam jadwal pelajaran</strong> yang telah ditentukan.
+                </p>
               </div>
-              <p className="text-xs text-gray-500 font-medium mt-1 max-w-xl">
-                Batas waktu keterlambatan (dalam menit) setelah jam mulai jadwal pelajaran/jam ke-1 untuk setiap guru. Jika absen melebihi batas ini, status otomatis diset <strong>Terlambat Masuk Kelas</strong>.
-              </p>
+
+              <div className="flex items-center gap-3 bg-amber-50/70 border border-amber-200/80 rounded-xl px-4 py-2.5">
+                <span className="text-xs font-extrabold text-amber-950">Batasi Presensi Pada Jam Jadwal:</span>
+                <button
+                  type="button"
+                  onClick={() => setBatasiJamJadwal(!batasiJamJadwal)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    batasiJamJadwal ? "bg-amber-600" : "bg-gray-300"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      batasiJamJadwal ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
 
-            <form onSubmit={handleSaveToleransi} className="flex items-center gap-3 shrink-0">
-              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 focus-within:border-amber-500">
-                <label className="text-xs font-bold text-gray-600">Maksimal:</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="120"
-                  value={toleransiGuruInput}
-                  onChange={(e) => setToleransiGuruInput(Math.max(0, Number(e.target.value)))}
-                  className="w-16 bg-transparent text-center font-black text-sm text-amber-900 focus:outline-none"
-                  required
-                />
-                <span className="text-xs font-bold text-gray-500">Menit</span>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Toleransi Awal */}
+              <div className="bg-gray-50/80 rounded-xl p-4 border border-gray-200/80 space-y-2">
+                <label className="text-xs font-bold text-gray-800 block">
+                  Buka Absen Sebelum Jam Mulai:
+                </label>
+                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 focus-within:border-amber-500">
+                  <input
+                    type="number"
+                    min="0"
+                    max="120"
+                    value={toleransiAwal}
+                    onChange={(e) => setToleransiAwal(Math.max(0, Number(e.target.value)))}
+                    className="w-full bg-transparent font-black text-sm text-gray-900 focus:outline-none"
+                    required
+                  />
+                  <span className="text-xs font-extrabold text-gray-500">Menit</span>
+                </div>
+                <p className="text-[11px] text-gray-500">
+                  Akses absen dibuka N menit sebelum jam mulai jadwal.
+                </p>
               </div>
+
+              {/* Toleransi Akhir */}
+              <div className="bg-gray-50/80 rounded-xl p-4 border border-gray-200/80 space-y-2">
+                <label className="text-xs font-bold text-gray-800 block">
+                  Batas Absen Setelah Jam Selesai:
+                </label>
+                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 focus-within:border-amber-500">
+                  <input
+                    type="number"
+                    min="0"
+                    max="180"
+                    value={toleransiAkhir}
+                    onChange={(e) => setToleransiAkhir(Math.max(0, Number(e.target.value)))}
+                    className="w-full bg-transparent font-black text-sm text-gray-900 focus:outline-none"
+                    required
+                  />
+                  <span className="text-xs font-extrabold text-gray-500">Menit</span>
+                </div>
+                <p className="text-[11px] text-gray-500">
+                  Batas waktu toleransi maksimal setelah jam pelajaran berakhir.
+                </p>
+              </div>
+
+              {/* Toleransi Terlambat */}
+              <div className="bg-gray-50/80 rounded-xl p-4 border border-gray-200/80 space-y-2">
+                <label className="text-xs font-bold text-gray-800 block">
+                  Batas Toleransi Terlambat Masuk:
+                </label>
+                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 focus-within:border-amber-500">
+                  <input
+                    type="number"
+                    min="0"
+                    max="120"
+                    value={toleransiGuruInput}
+                    onChange={(e) => setToleransiGuruInput(Math.max(0, Number(e.target.value)))}
+                    className="w-full bg-transparent font-black text-sm text-amber-900 focus:outline-none"
+                    required
+                  />
+                  <span className="text-xs font-extrabold text-gray-500">Menit</span>
+                </div>
+                <p className="text-[11px] text-gray-500">
+                  Lewat dari ini, status otomatis diset <strong>Terlambat Masuk Kelas</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
               <button
                 type="submit"
                 disabled={savingToleransi}
-                className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-5 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 <Check className="w-4 h-4" />
-                {savingToleransi ? "Menyimpan..." : "Simpan Toleransi"}
+                {savingToleransi ? "Menyimpan..." : "Simpan Pengaturan Jam"}
               </button>
-            </form>
-          </div>
+            </div>
+          </form>
 
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col md:flex-row items-center justify-between gap-4">
             <div>
