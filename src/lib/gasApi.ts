@@ -1704,18 +1704,35 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
           currentK.push({ nama_kelas: kNama, wali_kelas: wVal });
         }
         setStorage("data_kelas", currentK);
-      } else {
-        if (typeof args[0] === "string") {
-          bodyObj.nama_kelas = args[0];
-          bodyObj.kelas = args[0];
-        }
-        if (typeof args[1] === "string") {
-          const w = isInvalidWali(args[1]) ? "-" : args[1];
-          bodyObj.wali_kelas = w;
-          bodyObj.wali = w;
-          bodyObj.waliKelas = w;
-          bodyObj.nama_guru = w;
-          bodyObj.guru_wali = w;
+      } else if (action === "editDataMaster" || action === "tambahDataMaster") {
+        const cat = args[0];
+        if (cat === "Kelas") {
+          const itemObj = typeof args[1] === "object" ? args[1] : (typeof args[2] === "object" ? args[2] : {});
+          const kNama = itemObj.nama_kelas || itemObj.kelas || (typeof args[1] === "string" ? args[1] : "");
+          const wRaw = itemObj.wali_kelas || itemObj.wali || itemObj.waliKelas || itemObj.nama_guru || itemObj.guru_wali || "-";
+          const wVal = isInvalidWali(wRaw) ? "-" : String(wRaw).trim();
+
+          bodyObj.nama_kelas = kNama;
+          bodyObj.kelas = kNama;
+          bodyObj.namaKelas = kNama;
+          bodyObj.wali_kelas = wVal;
+          bodyObj.wali = wVal;
+          bodyObj.waliKelas = wVal;
+          bodyObj.nama_guru = wVal;
+          bodyObj.guru_wali = wVal;
+          bodyObj.walikelas = wVal;
+          bodyObj.guruWali = wVal;
+          bodyObj.wali_kelas_nama = wVal;
+
+          let currentK = getStorage("data_kelas") || [];
+          if (!Array.isArray(currentK)) currentK = [];
+          const idx = currentK.findIndex((k: any) => (typeof k === "string" ? k : (k.nama_kelas || k.kelas)) === kNama);
+          if (idx !== -1) {
+            currentK[idx] = { nama_kelas: kNama, wali_kelas: wVal };
+          } else {
+            currentK.push({ nama_kelas: kNama, wali_kelas: wVal });
+          }
+          setStorage("data_kelas", currentK);
         }
       }
       for (const a of args) {
