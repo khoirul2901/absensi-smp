@@ -150,7 +150,7 @@ export interface AbsensiMengajarItem {
   jam_ke: number;
   jam_mulai_jadwal: string;
   jam_selesai_jadwal: string;
-  status: "Hadir Tepat Waktu" | "Terlambat Masuk Kelas" | "Izin" | "Sakit" | "Tugas Luar";
+  status: "Hadir Tepat Waktu" | "Terlambat Masuk Kelas" | "Izin" | "Sakit" | "Tugas Luar" | "Tidak Hadir" | string;
   catatan_materi?: string;
 }
 
