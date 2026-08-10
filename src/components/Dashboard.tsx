@@ -16,7 +16,13 @@ import {
   Printer,
   Download,
   CreditCard,
-  Loader2
+  Loader2,
+  PieChart as PieIcon,
+  BarChart2,
+  Activity,
+  Check,
+  XCircle,
+  UserCheck
 } from "lucide-react";
 import { 
   AreaChart, 
@@ -25,7 +31,13 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  ResponsiveContainer 
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  Legend
 } from "recharts";
 import { toPng } from "html-to-image";
 import { callGas, getStorageKey } from "../lib/gasApi";
@@ -233,6 +245,36 @@ export default function Dashboard() {
     "Hadir Masuk": metrics.chartData[index] || 0,
   }));
 
+  // Donut Chart Data for Siswa Status
+  const exactSiswaTepat = metrics.siswaTepatInt ? Math.round((metrics.siswaTepatInt * metrics.siswaMasuk) / 100) : metrics.siswaMasuk;
+  const exactSiswaTelat = Math.max(0, metrics.siswaMasuk - exactSiswaTepat);
+  const exactSiswaAlfa = Math.max(0, metrics.totalSiswa - metrics.siswaMasuk);
+
+  const siswaPieData = [
+    { name: "Tepat Waktu", value: exactSiswaTepat, color: "#10b981" },
+    { name: "Terlambat", value: exactSiswaTelat, color: "#f59e0b" },
+    { name: "Absen / Alpha", value: exactSiswaAlfa, color: "#f43f5e" }
+  ].filter(d => d.value > 0);
+
+  // Donut Chart Data for Guru Status
+  const exactGuruTepat = metrics.guruTepatInt ? Math.round((metrics.guruTepatInt * metrics.guruMasuk) / 100) : metrics.guruMasuk;
+  const exactGuruTelat = Math.max(0, metrics.guruMasuk - exactGuruTepat);
+  const exactGuruAbsen = Math.max(0, metrics.totalGuru - metrics.guruMasuk);
+
+  const guruPieData = [
+    { name: "Tepat Waktu", value: exactGuruTepat, color: "#6366f1" },
+    { name: "Terlambat", value: exactGuruTelat, color: "#f97316" },
+    { name: "Belum Absen", value: exactGuruAbsen, color: "#a855f7" }
+  ].filter(d => d.value > 0);
+
+  // Comparison Bar Chart Data
+  const comparisonBarData = [
+    { category: "Total Data", Siswa: metrics.totalSiswa, Guru: metrics.totalGuru },
+    { category: "Total Hadir", Siswa: metrics.siswaMasuk, Guru: metrics.guruMasuk },
+    { category: "Tepat Waktu", Siswa: exactSiswaTepat, Guru: exactGuruTepat },
+    { category: "Absen/Alpha", Siswa: exactSiswaAlfa, Guru: exactGuruAbsen }
+  ];
+
   const cardsSiswa = [
     {
       title: "Total Siswa",
@@ -321,7 +363,7 @@ export default function Dashboard() {
             <span className="bg-indigo-800/60 text-indigo-200 text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wider">
               Monitoring Real-Time
             </span>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">SIAS SMP Al-Hikam</h1>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">SIAS SMK Al-Hikam</h1>
             <p className="text-blue-100/80 text-sm md:text-base leading-relaxed">
               Sistem Informasi Absensi Sekolah modern yang terintegrasi langsung dengan database Google Spreadsheet. Pantau kehadiran siswa dan guru hari ini.
             </p>
@@ -498,14 +540,157 @@ export default function Dashboard() {
           </>
         )}
 
+        {/* Section Diagram / Charts Interactive */}
+        <div className="space-y-6">
+          <div className="flex items-center gap-2">
+            <PieIcon className="w-5 h-5 text-blue-600" />
+            <h2 className="text-lg font-bold text-gray-800 tracking-tight">Diagram Visualisasi Data Absensi</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Donut Chart: Komposisi Kehadiran Siswa */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-bold text-gray-800 text-sm flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    Diagram Status Siswa
+                  </h3>
+                  <span className="text-[11px] font-semibold text-gray-400 bg-gray-50 px-2 py-0.5 rounded-md">Hari Ini</span>
+                </div>
+                <p className="text-xs text-gray-500 mb-3">Proporsi ketepatan waktu & alpha siswa</p>
+                <div className="h-[200px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={siswaPieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={75}
+                        paddingAngle={4}
+                        dataKey="value"
+                      >
+                        {siswaPieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: "#1e293b", borderRadius: "10px", color: "#fff", border: "none", fontSize: "12px" }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-1 pt-2 border-t border-gray-100 text-center">
+                <div>
+                  <div className="text-[10px] text-gray-400 font-medium">Tepat</div>
+                  <div className="text-sm font-extrabold text-emerald-600">{exactSiswaTepat}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-gray-400 font-medium">Terlambat</div>
+                  <div className="text-sm font-extrabold text-amber-600">{exactSiswaTelat}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-gray-400 font-medium">Alpha</div>
+                  <div className="text-sm font-extrabold text-rose-600">{exactSiswaAlfa}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Donut Chart: Komposisi Kehadiran Guru */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-bold text-gray-800 text-sm flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                    Diagram Status Guru
+                  </h3>
+                  <span className="text-[11px] font-semibold text-gray-400 bg-gray-50 px-2 py-0.5 rounded-md">Hari Ini</span>
+                </div>
+                <p className="text-xs text-gray-500 mb-3">Proporsi ketepatan waktu & absen guru</p>
+                <div className="h-[200px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={guruPieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={75}
+                        paddingAngle={4}
+                        dataKey="value"
+                      >
+                        {guruPieData.map((entry, index) => (
+                          <Cell key={`cell-guru-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: "#1e293b", borderRadius: "10px", color: "#fff", border: "none", fontSize: "12px" }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-1 pt-2 border-t border-gray-100 text-center">
+                <div>
+                  <div className="text-[10px] text-gray-400 font-medium">Tepat</div>
+                  <div className="text-sm font-extrabold text-indigo-600">{exactGuruTepat}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-gray-400 font-medium">Terlambat</div>
+                  <div className="text-sm font-extrabold text-orange-600">{exactGuruTelat}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-gray-400 font-medium">Absen</div>
+                  <div className="text-sm font-extrabold text-purple-600">{exactGuruAbsen}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Bar Chart: Komparasi Siswa vs Guru */}
+            <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm flex flex-col justify-between md:col-span-2 lg:col-span-1">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-bold text-gray-800 text-sm flex items-center gap-1.5">
+                    <BarChart2 className="w-4 h-4 text-blue-600" />
+                    Komparasi Siswa & Guru
+                  </h3>
+                  <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">Matriks</span>
+                </div>
+                <p className="text-xs text-gray-500 mb-3">Diagram perbandingan data keseluruhan</p>
+                <div className="h-[200px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={comparisonBarData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="category" stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
+                      <Tooltip contentStyle={{ backgroundColor: "#1e293b", borderRadius: "10px", color: "#fff", border: "none", fontSize: "11px" }} />
+                      <Legend wrapperStyle={{ fontSize: "11px" }} />
+                      <Bar dataKey="Siswa" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Guru" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <div className="text-[11px] text-gray-500 text-center pt-2 border-t border-gray-100">
+                Visualisasi komparatif antara jumlah siswa dan guru.
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Analytics Chart & Detail */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Chart */}
+          {/* Chart Area: Tren Kehadiran */}
           <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm lg:col-span-2">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="font-bold text-gray-800 text-lg">Tren Kehadiran Siswa</h3>
-                <p className="text-xs text-gray-500">Jumlah siswa hadir masuk dalam 6 hari terakhir</p>
+                <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-blue-600" />
+                  Diagram Tren Kehadiran Siswa
+                </h3>
+                <p className="text-xs text-gray-500">Fluktuasi siswa hadir masuk dalam 6 hari belajar terakhir</p>
               </div>
               <span className="bg-blue-50 text-blue-700 text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1">
                 <CalendarDays className="w-3.5 h-3.5" />
@@ -517,7 +702,7 @@ export default function Dashboard() {
                 <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorHadir" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#2563eb" stopOpacity={0.2}/>
+                      <stop offset="5%" stopColor="#2563eb" stopOpacity={0.25}/>
                       <stop offset="95%" stopColor="#2563eb" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
@@ -528,7 +713,7 @@ export default function Dashboard() {
                     contentStyle={{ backgroundColor: "#1e293b", borderColor: "#1e293b", borderRadius: "12px", color: "#fff" }}
                     labelStyle={{ fontWeight: "bold" }}
                   />
-                  <Area type="monotone" dataKey="Hadir Masuk" stroke="#2563eb" strokeWidth={2.5} fillOpacity={1} fill="url(#colorHadir)" />
+                  <Area type="monotone" dataKey="Hadir Masuk" stroke="#2563eb" strokeWidth={3} fillOpacity={1} fill="url(#colorHadir)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -546,7 +731,7 @@ export default function Dashboard() {
                     <span>Kehadiran Tepat Waktu (Siswa)</span>
                     <span>{metrics.siswaTepat}</span>
                   </div>
-                  <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                  <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
                     <div className="bg-emerald-500 h-full rounded-full transition-all duration-500" style={{ width: `${metrics.siswaTepatInt}%` }}></div>
                   </div>
                 </div>
@@ -557,7 +742,7 @@ export default function Dashboard() {
                       <span>Kehadiran Tepat Waktu (Guru)</span>
                       <span>{metrics.guruTepat}</span>
                     </div>
-                    <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                    <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
                       <div className="bg-indigo-500 h-full rounded-full transition-all duration-500" style={{ width: `${metrics.guruTepatInt}%` }}></div>
                     </div>
                   </div>
@@ -565,7 +750,7 @@ export default function Dashboard() {
 
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs font-semibold text-gray-700">
-                    <span>Rata-rata Tingkat Kehadiran</span>
+                    <span>Rata-rata Kehadiran Keseluruhan</span>
                     <span>
                       {isGuru 
                         ? `${Math.round((metrics.siswaMasuk / Math.max(1, metrics.totalSiswa)) * 100)}%`
@@ -573,7 +758,7 @@ export default function Dashboard() {
                       }
                     </span>
                   </div>
-                  <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                  <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
                     <div className="bg-blue-600 h-full rounded-full transition-all duration-500" style={{ 
                       width: isGuru 
                         ? `${Math.round((metrics.siswaMasuk / Math.max(1, metrics.totalSiswa)) * 100)}%`
