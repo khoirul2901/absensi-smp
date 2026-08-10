@@ -313,27 +313,51 @@ export default function AbsensiScanner({ session }: { session?: any }) {
         ? res 
         : (res && Array.isArray(res.data) ? res.data : (res?.data || []));
 
-      // 3. Fallback merge if live log is empty/missing but master data exists
-      if ((!list || list.length === 0) && masterData.length > 0) {
+      // 3. Merge master data with attendance list so ALL students/teachers appear in the table
+      if (masterData.length > 0) {
         const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
         const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
-        const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
-        const reports = getStorage(reportsKey) || [];
 
-        const reportMap = new Map<string, any>();
-        if (Array.isArray(reports)) {
-          for (const r of reports) {
-            if (r.tanggal === targetDate) {
-              const rId = r[idKey] || r.id_siswa || r.id_guru || r.id_target;
-              if (rId) reportMap.set(String(rId), r);
+        // Filter masterData by currentKelas if category is Siswa and currentKelas !== "Semua"
+        let filteredMaster = masterData;
+        if (kategori === "Siswa" && currentKelas && currentKelas !== "Semua") {
+          const kFilter = String(currentKelas).toLowerCase().replace(/\s+/g, "");
+          filteredMaster = masterData.filter((m: any) => {
+            const kVal = String(m.kelas || "").toLowerCase().replace(/\s+/g, "");
+            const jVal = String(m.jurusan || "").toLowerCase().replace(/\s+/g, "");
+            const kjVal = String(m.kelas_jurusan || "").toLowerCase().replace(/\s+/g, "");
+            return kjVal.includes(kFilter) || kVal.includes(kFilter) || kFilter.includes(kVal);
+          });
+        }
+
+        // Map live attendance records by id_target
+        const logMap = new Map<string, any>();
+        if (Array.isArray(list)) {
+          for (const item of list) {
+            const itemKey = String(item.id_target || item.id_siswa || item.id_guru || "").trim().toLowerCase();
+            if (itemKey) logMap.set(itemKey, item);
+          }
+        }
+
+        // Also check local storage reports as backup
+        const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
+        const localReports = getStorage(reportsKey) || [];
+        if (Array.isArray(localReports)) {
+          for (const r of localReports) {
+            if (String(r.tanggal || "").split("T")[0] === targetDate) {
+              const rId = String(r[idKey] || r.id_siswa || r.id_guru || r.id_target || "").trim().toLowerCase();
+              if (rId && !logMap.has(rId)) {
+                logMap.set(rId, r);
+              }
             }
           }
         }
 
-        list = masterData.map((m: any) => {
-          const idTarget = m[idKey] || m.id || m.nisn || m.nip_nuptk || "";
+        // Generate full list combining master data + attendance logs
+        const mergedList = filteredMaster.map((m: any) => {
+          const idTarget = String(m[idKey] || m.id || m.nisn || m.nip_nuptk || "").trim();
           const namaTarget = m[nameKey] || m.nama || m.name || "Tanpa Nama";
-          
+
           let kelasStr = "-";
           if (kategori === "Siswa") {
             const kVal = String(m.kelas || "").trim();
@@ -351,30 +375,51 @@ export default function AbsensiScanner({ session }: { session?: any }) {
             }
           }
 
-          const rep = reportMap.get(String(idTarget)) || {};
+          const existingLog = logMap.get(idTarget.toLowerCase());
+
+          if (existingLog && ((existingLog.jam_masuk && existingLog.jam_masuk !== "-") || (existingLog.status_masuk && existingLog.status_masuk !== "-" && existingLog.status_masuk !== "Belum Absen") || (existingLog.jam_pulang && existingLog.jam_pulang !== "-"))) {
+            return {
+              ...existingLog,
+              id_target: existingLog.id_target || idTarget,
+              nama_target: existingLog.nama_target || namaTarget,
+              kelas_jurusan: existingLog.kelas_jurusan || kelasStr,
+              tanggal: targetDate,
+              status_masuk: existingLog.status_masuk && existingLog.status_masuk !== "-" ? existingLog.status_masuk : "Belum Absen",
+              status_pulang: existingLog.status_pulang && existingLog.status_pulang !== "-" ? existingLog.status_pulang : "-"
+            };
+          }
 
           return {
             id_target: idTarget,
             nama_target: namaTarget,
             kelas_jurusan: kelasStr,
             tanggal: targetDate,
-            jam_masuk: rep.jam_masuk || "-",
-            status_masuk: rep.status_masuk || "-",
-            jam_pulang: rep.jam_pulang || "-",
-            status_pulang: rep.status_pulang || "-",
+            jam_masuk: "-",
+            status_masuk: "Belum Absen",
+            jam_pulang: "-",
+            status_pulang: "-",
             no_hp_ortu: m.no_hp_ortu || m.no_hp || "-",
             kategori: kategori,
-            ket: rep.ket || "-"
+            ket: "-"
           };
         });
 
-        if (kategori === "Siswa" && currentKelas && currentKelas !== "Semua") {
-          const kFilter = String(currentKelas).toLowerCase().replace(/\s+/g, "");
-          list = list.filter((item: any) => {
-            const kTarget = String(item.kelas_jurusan || "").toLowerCase().replace(/\s+/g, "");
-            return kTarget.includes(kFilter) || kFilter.includes(kTarget);
-          });
+        // Include any scanned records that were not in filteredMaster
+        if (Array.isArray(list)) {
+          const matchedIds = new Set(filteredMaster.map((m: any) => String(m[idKey] || m.id || m.nisn || m.nip_nuptk || "").trim().toLowerCase()));
+          for (const item of list) {
+            const itemKey = String(item.id_target || item.id_siswa || item.id_guru || "").trim().toLowerCase();
+            if (itemKey && !matchedIds.has(itemKey)) {
+              mergedList.push({
+                ...item,
+                tanggal: targetDate,
+                status_masuk: item.status_masuk && item.status_masuk !== "-" ? item.status_masuk : "Belum Absen"
+              });
+            }
+          }
         }
+
+        list = mergedList;
       }
 
       setRecentLogs(list);
@@ -1424,7 +1469,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
   // Statistics
   const totalRecords = filteredLogs.length;
   const countMasuk = filteredLogs.filter(l => l.jam_masuk && l.jam_masuk !== "-").length;
-  const countTepat = filteredLogs.filter(l => l.status_masuk.includes("Tepat")).length;
+  const countBelum = filteredLogs.filter(l => !l.jam_masuk || l.jam_masuk === "-" || l.status_masuk === "Belum Absen").length;
+  const countTepat = filteredLogs.filter(l => l.status_masuk && l.status_masuk.includes("Tepat")).length;
   const countPulang = filteredLogs.filter(l => l.jam_pulang && l.jam_pulang !== "-").length;
 
   const toggleSelectId = (id: string) => {
@@ -1994,17 +2040,23 @@ export default function AbsensiScanner({ session }: { session?: any }) {
           )}
 
           {/* Today's Metrics Summary Cards */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-1">
-              <span className="text-[11px] text-gray-500 font-bold uppercase">Total Terekam</span>
+              <span className="text-[11px] text-gray-500 font-bold uppercase">Total {kategori}</span>
               <p className="text-2xl font-black text-gray-900">{totalRecords}</p>
+              <p className="text-[10px] text-gray-400 font-semibold">{filterKelas !== "Semua" ? `Kelas ${filterKelas}` : "Semua Entitas"}</p>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-emerald-100 bg-emerald-50/20 shadow-sm space-y-1">
+              <span className="text-[11px] text-emerald-700 font-bold uppercase">Sudah Absen</span>
+              <p className="text-2xl font-black text-emerald-600">{countMasuk}</p>
               <p className="text-[10px] text-emerald-600 font-semibold">{countTepat} tepat waktu</p>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-1">
-              <span className="text-[11px] text-gray-500 font-bold uppercase">Absen Masuk / Pulang</span>
-              <p className="text-2xl font-black text-blue-600">{countMasuk} / {countPulang}</p>
-              <p className="text-[10px] text-gray-400 font-medium">Rekap Presensi ({filterTanggal})</p>
+            <div className="bg-white p-4 rounded-2xl border border-rose-100 bg-rose-50/20 shadow-sm space-y-1">
+              <span className="text-[11px] text-rose-700 font-bold uppercase">Belum Absen</span>
+              <p className="text-2xl font-black text-rose-600">{countBelum}</p>
+              <p className="text-[10px] text-rose-500 font-medium">Per {filterTanggal}</p>
             </div>
           </div>
         </div>
@@ -2032,6 +2084,26 @@ export default function AbsensiScanner({ session }: { session?: any }) {
             
             {/* Table Filters */}
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              {/* Limit Selector Top */}
+              <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-1.5">
+                <span className="text-xs font-semibold text-gray-500 shrink-0">Tampilkan:</span>
+                <select 
+                  value={itemsPerPage === Infinity ? "all" : itemsPerPage}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setItemsPerPage(val === "all" ? Infinity : Number(val));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-transparent text-xs font-bold text-gray-800 focus:outline-none cursor-pointer"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value="all">Semua</option>
+                </select>
+              </div>
+
               {/* Filter Tanggal */}
               <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-2.5 py-1.5">
                 <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
@@ -2197,19 +2269,19 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                           <td className="py-3 px-4 text-gray-500 font-medium">{log.kelas_jurusan}</td>
                         )}
                         <td className="py-3 px-4">
-                          <div className="font-bold">{log.jam_masuk}</div>
+                          <div className="font-bold text-gray-800">{log.jam_masuk && log.jam_masuk !== "-" ? log.jam_masuk : "-"}</div>
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold mt-1 ${
                             log.status_masuk.includes("Tepat") || log.status_masuk.includes("Hadir") ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
                             log.status_masuk.includes("Terlambat") ? "bg-amber-50 text-amber-700 border border-amber-100" :
-                            log.status_masuk === "-" ? "text-gray-400" : "bg-rose-50 text-rose-700 border border-rose-100"
+                            log.status_masuk === "-" || log.status_masuk === "Belum Absen" ? "bg-gray-100 text-gray-500 border border-gray-200" : "bg-rose-50 text-rose-700 border border-rose-100"
                           }`}>
-                            {log.status_masuk}
+                            {log.status_masuk === "-" ? "Belum Absen" : log.status_masuk}
                           </span>
                         </td>
                         <td className="py-3 px-4">
-                          <div className="font-bold">{log.jam_pulang}</div>
+                          <div className="font-bold text-gray-800">{log.jam_pulang && log.jam_pulang !== "-" ? log.jam_pulang : "-"}</div>
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold mt-1 ${
-                            log.status_pulang.includes("Tepat") || log.status_pulang.includes("Hadir") ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
+                            log.status_pulang.includes("Tepat") || log.status_pulang.includes("Hadir") || log.status_pulang.includes("Pulang") ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
                             log.status_pulang === "-" ? "text-gray-400" : "bg-blue-50 text-blue-700 border border-blue-100"
                           }`}>
                             {log.status_pulang}
@@ -2252,6 +2324,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                 >
                   <option value={10}>10</option>
                   <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
                   <option value="all">Semua</option>
                 </select>
                 <span className="text-gray-400">|</span>
