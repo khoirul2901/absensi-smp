@@ -137,6 +137,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
   const [absensiMengajarLogs, setAbsensiMengajarLogs] = useState<AbsensiMengajarItem[]>([]);
   const [itemsPerPageMengajar, setItemsPerPageMengajar] = useState<number>(10);
   const [currentPageMengajar, setCurrentPageMengajar] = useState<number>(1);
+  const [itemsPerPageJadwal, setItemsPerPageJadwal] = useState<number>(6);
+  const [currentPageJadwal, setCurrentPageJadwal] = useState<number>(1);
   const [teachersList, setTeachersList] = useState<any[]>([]);
   const [jamSlots, setJamSlots] = useState<JamPelajaranItem[]>([]);
   const [batasiJamJadwal, setBatasiJamJadwal] = useState<boolean>(true);
@@ -2634,7 +2636,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
             <div className="lg:col-span-8 space-y-6">
               {/* Cards Grid for Today's Schedules */}
               <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-                <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                <div className="flex flex-wrap justify-between items-center border-b border-gray-100 pb-3 gap-2">
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-emerald-600" />
                     <h3 className="font-extrabold text-sm text-gray-900">
@@ -2645,14 +2647,35 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                     </span>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={fetchMengajarData}
-                    className="text-xs text-emerald-700 hover:text-emerald-900 font-bold flex items-center gap-1 cursor-pointer"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingMengajar ? "animate-spin" : ""}`} />
-                    <span>Muat Ulang</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-2 py-1">
+                      <span className="text-[11px] font-semibold text-gray-500 shrink-0">Tampilkan:</span>
+                      <select 
+                        value={itemsPerPageJadwal === Infinity ? "all" : itemsPerPageJadwal}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setItemsPerPageJadwal(val === "all" ? Infinity : Number(val));
+                          setCurrentPageJadwal(1);
+                        }}
+                        className="bg-transparent text-xs font-bold text-gray-800 focus:outline-none cursor-pointer"
+                      >
+                        <option value={6}>6</option>
+                        <option value={10}>10</option>
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                        <option value="all">Semua</option>
+                      </select>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={fetchMengajarData}
+                      className="text-xs text-emerald-700 hover:text-emerald-900 font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isLoadingMengajar ? "animate-spin" : ""}`} />
+                      <span>Muat Ulang</span>
+                    </button>
+                  </div>
                 </div>
 
                 {isLoadingMengajar ? (
@@ -2660,114 +2683,202 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                     <Loader2 className="w-6 h-6 animate-spin text-emerald-600 mx-auto" />
                     <p className="text-xs text-gray-500 font-medium">Memuat jadwal pelajaran dari database...</p>
                   </div>
-                ) : lessonSchedules.filter(s => (s.hari || "").toLowerCase() === selectedDay.toLowerCase() && (filterMengajarKelas === "Semua" || s.kelas === filterMengajarKelas)).length === 0 ? (
-                  <div className="py-12 text-center space-y-2 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
-                    <BookMarked className="w-8 h-8 text-gray-300 mx-auto" />
-                    <p className="text-xs font-bold text-gray-600">Tidak ada jadwal pelajaran untuk hari {selectedDay}</p>
-                    <p className="text-[11px] text-gray-400">Silakan tambahkan jadwal di menu Jadwal Pelajaran.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {lessonSchedules
-                      .filter(s => {
-                        const matchHari = (s.hari || "").toLowerCase() === selectedDay.toLowerCase();
-                        const matchKelas = filterMengajarKelas === "Semua" || s.kelas === filterMengajarKelas;
-                        const matchGuru = filterMengajarGuru === "Semua" || s.id_guru === filterMengajarGuru || s.nama_guru === filterMengajarGuru;
-                        const matchQuery = !filterMengajarSearch ||
-                          s.mapel.toLowerCase().includes(filterMengajarSearch.toLowerCase()) ||
-                          s.nama_guru.toLowerCase().includes(filterMengajarSearch.toLowerCase()) ||
-                          s.kelas.toLowerCase().includes(filterMengajarSearch.toLowerCase());
-                        return matchHari && matchKelas && matchGuru && matchQuery;
-                      })
-                      .map((sched) => {
-                        // Check if already logged for filterTanggal
-                        const existingLog = absensiMengajarLogs.find((l) => {
-                          const logDate = String(l.tanggal || "").split("T")[0];
+                ) : (() => {
+                  const filteredSchedules = lessonSchedules.filter(s => {
+                    const matchHari = (s.hari || "").toLowerCase() === selectedDay.toLowerCase();
+                    const matchKelas = filterMengajarKelas === "Semua" || s.kelas === filterMengajarKelas;
+                    const matchGuru = filterMengajarGuru === "Semua" || s.id_guru === filterMengajarGuru || s.nama_guru === filterMengajarGuru;
+                    const matchQuery = !filterMengajarSearch ||
+                      s.mapel.toLowerCase().includes(filterMengajarSearch.toLowerCase()) ||
+                      s.nama_guru.toLowerCase().includes(filterMengajarSearch.toLowerCase()) ||
+                      s.kelas.toLowerCase().includes(filterMengajarSearch.toLowerCase());
+                    return matchHari && matchKelas && matchGuru && matchQuery;
+                  });
+
+                  if (filteredSchedules.length === 0) {
+                    return (
+                      <div className="py-12 text-center space-y-2 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+                        <BookMarked className="w-8 h-8 text-gray-300 mx-auto" />
+                        <p className="text-xs font-bold text-gray-600">Tidak ada jadwal pelajaran untuk hari {selectedDay}</p>
+                        <p className="text-[11px] text-gray-400">Silakan tambahkan jadwal di menu Jadwal Pelajaran.</p>
+                      </div>
+                    );
+                  }
+
+                  const totalPagesJadwal = itemsPerPageJadwal === Infinity ? 1 : Math.ceil(filteredSchedules.length / itemsPerPageJadwal);
+                  const safePageJadwal = Math.min(currentPageJadwal, totalPagesJadwal || 1);
+                  const startIdxJadwal = itemsPerPageJadwal === Infinity ? 0 : (safePageJadwal - 1) * itemsPerPageJadwal;
+                  const endIdxJadwal = itemsPerPageJadwal === Infinity ? filteredSchedules.length : startIdxJadwal + itemsPerPageJadwal;
+                  const pageSchedules = filteredSchedules.slice(startIdxJadwal, endIdxJadwal);
+
+                  return (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {pageSchedules.map((sched) => {
+                          // Check if already logged for filterTanggal
+                          const existingLog = absensiMengajarLogs.find((l) => {
+                            const logDate = String(l.tanggal || "").split("T")[0];
+                            return (
+                              logDate === filterTanggal &&
+                              l.kelas === sched.kelas &&
+                              Number(l.jam_ke) === Number(sched.jam_ke)
+                            );
+                          });
+
+                          const { mulai: schedMulai, selesai: schedSelesai } = getJamSlotTime(sched.jam_ke, sched.jam_mulai, sched.jam_selesai);
+
                           return (
-                            logDate === filterTanggal &&
-                            l.kelas === sched.kelas &&
-                            Number(l.jam_ke) === Number(sched.jam_ke)
-                          );
-                        });
+                            <div
+                              key={sched.id_jadwal || `${sched.kelas}_${sched.jam_ke}_${sched.hari}`}
+                              className={`p-4 rounded-xl border transition-all space-y-3 ${
+                                existingLog
+                                  ? "bg-emerald-50/40 border-emerald-200/80 shadow-sm"
+                                  : "bg-white border-gray-200 hover:border-emerald-300 hover:shadow-md"
+                              }`}
+                            >
+                              <div className="flex justify-between items-start gap-2">
+                                <div className="space-y-0.5">
+                                  <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
+                                    Jam Ke-{sched.jam_ke} • {schedMulai} - {schedSelesai}
+                                  </span>
+                                  <h4 className="font-black text-sm text-gray-900">{sched.mapel}</h4>
+                                  <p className="text-xs font-bold text-emerald-700">{sched.kelas}</p>
+                                </div>
 
-                        const { mulai: schedMulai, selesai: schedSelesai } = getJamSlotTime(sched.jam_ke, sched.jam_mulai, sched.jam_selesai);
-
-                        return (
-                          <div
-                            key={sched.id_jadwal || `${sched.kelas}_${sched.jam_ke}_${sched.hari}`}
-                            className={`p-4 rounded-xl border transition-all space-y-3 ${
-                              existingLog
-                                ? "bg-emerald-50/40 border-emerald-200/80 shadow-sm"
-                                : "bg-white border-gray-200 hover:border-emerald-300 hover:shadow-md"
-                            }`}
-                          >
-                            <div className="flex justify-between items-start gap-2">
-                              <div className="space-y-0.5">
-                                <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block">
-                                  Jam Ke-{sched.jam_ke} • {schedMulai} - {schedSelesai}
+                                <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-md border border-slate-200">
+                                  {sched.ruangan || "R.Kelas"}
                                 </span>
-                                <h4 className="font-black text-sm text-gray-900">{sched.mapel}</h4>
-                                <p className="text-xs font-bold text-emerald-700">{sched.kelas}</p>
                               </div>
 
-                              <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-md border border-slate-200">
-                                {sched.ruangan || "R.Kelas"}
-                              </span>
-                            </div>
+                              <div className="text-xs text-gray-600 font-medium flex items-center gap-1.5 pt-1 border-t border-gray-100">
+                                <UserCheck className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                <span className="truncate">{sched.nama_guru}</span>
+                              </div>
 
-                            <div className="text-xs text-gray-600 font-medium flex items-center gap-1.5 pt-1 border-t border-gray-100">
-                              <UserCheck className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                              <span className="truncate">{sched.nama_guru}</span>
-                            </div>
-
-                            {/* Action Button & Status */}
-                            {existingLog ? (
-                              <div className="pt-2 border-t border-emerald-100/80 space-y-2">
-                                <div className="flex justify-between items-center text-[11px]">
-                                  <span className="bg-emerald-600 text-white font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                                    <Check className="w-3 h-3" /> {existingLog.status || "Hadir"}
-                                  </span>
-                                  <span className="font-mono text-emerald-800 font-bold">
-                                    {existingLog.waktu_absen || "-"}
-                                  </span>
+                              {/* Action Button & Status */}
+                              {existingLog ? (
+                                <div className="pt-2 border-t border-emerald-100/80 space-y-2">
+                                  <div className="flex justify-between items-center text-[11px]">
+                                    <span className="bg-emerald-600 text-white font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                                      <Check className="w-3 h-3" /> {existingLog.status || "Hadir"}
+                                    </span>
+                                    <span className="font-mono text-emerald-800 font-bold">
+                                      {existingLog.waktu_absen || "-"}
+                                    </span>
+                                  </div>
+                                  {existingLog.catatan_materi && (
+                                    <p className="text-[11px] text-gray-600 bg-white/80 p-2 rounded-lg border border-emerald-100 italic line-clamp-2">
+                                      "{existingLog.catatan_materi}"
+                                    </p>
+                                  )}
+                                  {!isGuru && (
+                                    <button
+                                      type="button"
+                                      onClick={() => openModalForSchedule(sched, existingLog)}
+                                      className="w-full text-center text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-white border border-emerald-300 py-1.5 rounded-lg hover:bg-emerald-50 transition-all cursor-pointer flex items-center justify-center gap-1"
+                                    >
+                                      <Edit3 className="w-3 h-3" /> Edit Presensi / Materi
+                                    </button>
+                                  )}
                                 </div>
-                                {existingLog.catatan_materi && (
-                                  <p className="text-[11px] text-gray-600 bg-white/80 p-2 rounded-lg border border-emerald-100 italic line-clamp-2">
-                                    "{existingLog.catatan_materi}"
-                                  </p>
-                                )}
-                                {!isGuru && (
+                              ) : (
+                                !isGuru ? (
                                   <button
                                     type="button"
-                                    onClick={() => openModalForSchedule(sched, existingLog)}
-                                    className="w-full text-center text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-white border border-emerald-300 py-1.5 rounded-lg hover:bg-emerald-50 transition-all cursor-pointer flex items-center justify-center gap-1"
+                                    onClick={() => openModalForSchedule(sched)}
+                                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2 rounded-xl transition-all shadow-sm shadow-emerald-600/20 cursor-pointer flex items-center justify-center gap-1.5"
                                   >
-                                    <Edit3 className="w-3 h-3" /> Edit Presensi / Materi
+                                    <Plus className="w-3.5 h-3.5" />
+                                    <span>Presensi Mengajar</span>
                                   </button>
-                                )}
-                              </div>
-                            ) : (
-                              !isGuru ? (
-                                <button
-                                  type="button"
-                                  onClick={() => openModalForSchedule(sched)}
-                                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2 rounded-xl transition-all shadow-sm shadow-emerald-600/20 cursor-pointer flex items-center justify-center gap-1.5"
-                                >
-                                  <Plus className="w-3.5 h-3.5" />
-                                  <span>Presensi Mengajar</span>
-                                </button>
-                              ) : (
-                                <div className="w-full text-center text-[11px] font-semibold text-slate-400 bg-slate-50 py-2 rounded-xl border border-slate-200/60 flex items-center justify-center gap-1.5">
-                                  <Clock className="w-3.5 h-3.5" />
-                                  <span>Belum Presensi (Otomatis via Scan)</span>
-                                </div>
-                              )
-                            )}
+                                ) : (
+                                  <div className="w-full text-center text-[11px] font-semibold text-slate-400 bg-slate-50 py-2 rounded-xl border border-slate-200/60 flex items-center justify-center gap-1.5">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    <span>Belum Presensi (Otomatis via Scan)</span>
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Pagination Controls for Schedules */}
+                      {itemsPerPageJadwal !== Infinity && totalPagesJadwal > 1 && (
+                        <div className="flex items-center justify-between border-t border-gray-100 bg-white pt-3">
+                          <div className="flex flex-1 justify-between sm:hidden">
+                            <button
+                              disabled={safePageJadwal === 1}
+                              onClick={() => setCurrentPageJadwal(p => Math.max(p - 1, 1))}
+                              className={`relative inline-flex items-center rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-700 ${
+                                safePageJadwal === 1 ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50 cursor-pointer"
+                              }`}
+                            >
+                              Sebelumnya
+                            </button>
+                            <button
+                              disabled={safePageJadwal === totalPagesJadwal}
+                              onClick={() => setCurrentPageJadwal(p => Math.min(p + 1, totalPagesJadwal))}
+                              className={`relative ml-3 inline-flex items-center rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-700 ${
+                                safePageJadwal === totalPagesJadwal ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50 cursor-pointer"
+                              }`}
+                            >
+                              Selanjutnya
+                            </button>
                           </div>
-                        );
-                      })}
-                  </div>
-                )}
+                          <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                            <div>
+                              <p className="text-xs text-gray-500 font-semibold">
+                                Menampilkan <span className="font-bold text-gray-900">{filteredSchedules.length > 0 ? startIdxJadwal + 1 : 0}</span> sampai{" "}
+                                <span className="font-bold text-gray-900">
+                                  {Math.min(endIdxJadwal, filteredSchedules.length)}
+                                </span>{" "}
+                                dari <span className="font-bold text-gray-900">{filteredSchedules.length}</span> sesi
+                              </p>
+                            </div>
+                            <div>
+                              <nav className="isolate inline-flex -space-x-px rounded-xl gap-1" aria-label="Pagination">
+                                <button
+                                  onClick={() => setCurrentPageJadwal(p => Math.max(p - 1, 1))}
+                                  disabled={safePageJadwal === 1}
+                                  className={`relative inline-flex items-center rounded-lg px-2 py-1 text-gray-400 hover:bg-gray-50 ${
+                                    safePageJadwal === 1 ? "opacity-40 cursor-not-allowed" : "cursor-pointer"
+                                  }`}
+                                >
+                                  <ChevronLeft className="w-4 h-4" />
+                                </button>
+                                
+                                {Array.from({ length: totalPagesJadwal }, (_, i) => i + 1).map((page) => (
+                                  <button
+                                    key={page}
+                                    onClick={() => setCurrentPageJadwal(page)}
+                                    className={`relative inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-bold transition-all duration-150 cursor-pointer ${
+                                      safePageJadwal === page
+                                        ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/10"
+                                        : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                                    }`}
+                                  >
+                                    {page}
+                                  </button>
+                                ))}
+
+                                <button
+                                  onClick={() => setCurrentPageJadwal(p => Math.min(p + 1, totalPagesJadwal))}
+                                  disabled={safePageJadwal === totalPagesJadwal}
+                                  className={`relative inline-flex items-center rounded-lg px-2 py-1 text-gray-400 hover:bg-gray-50 ${
+                                    safePageJadwal === totalPagesJadwal ? "opacity-40 cursor-not-allowed" : "cursor-pointer"
+                                  }`}
+                                >
+                                  <ChevronRight className="w-4 h-4" />
+                                </button>
+                              </nav>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden space-y-0">
                 <div className="p-4 bg-gray-50/80 border-b border-gray-100 flex flex-wrap justify-between items-center gap-2">
