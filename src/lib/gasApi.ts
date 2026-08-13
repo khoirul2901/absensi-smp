@@ -3,6 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { KODE_GS_SCRIPT } from "./kodeGs";
+export { KODE_GS_SCRIPT };
+
 // Key for storing the GAS URL
 export const GAS_URL_STORAGE_KEY = "SIAS_GAS_URL";
 export const GAS_TOKEN_STORAGE_KEY = "SIAS_GAS_TOKEN";
