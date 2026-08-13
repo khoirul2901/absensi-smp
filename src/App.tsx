@@ -27,12 +27,13 @@ import { User as UserType } from "./types";
 // Component imports
 import Dashboard from "./components/Dashboard";
 import AbsensiScanner from "./components/AbsensiScanner";
+import AutoScannerBoard from "./components/AutoScannerBoard";
 import DataMaster from "./components/DataMaster";
 import Laporan from "./components/Laporan";
 import Settings from "./components/Settings";
 import JadwalGuru from "./components/JadwalGuru";
 
-type TabType = "dashboard" | "absensi" | "data_master" | "jadwal_guru" | "laporan" | "settings";
+type TabType = "dashboard" | "absensi" | "scanner_auto" | "data_master" | "jadwal_guru" | "laporan" | "settings";
 
 export default function App() {
   const [session, setSession] = useState<UserType | null>(null);
@@ -186,6 +187,8 @@ export default function App() {
         return <Dashboard />;
       case "absensi":
         return <AbsensiScanner session={session} />;
+      case "scanner_auto":
+        return <AutoScannerBoard session={session} />;
       case "data_master":
         if (isGuru) return <Dashboard />;
         return <DataMaster />;
@@ -204,7 +207,8 @@ export default function App() {
 
   const allNavItems = [
     { id: "dashboard" as TabType, label: "Dashboard", icon: LayoutDashboard, color: "text-blue-500 hover:bg-blue-50/50" },
-    { id: "absensi" as TabType, label: "Absensi", icon: ScanQrCode, color: "text-emerald-500 hover:bg-emerald-50/50" },
+    { id: "absensi" as TabType, label: "Absensi Manual", icon: ScanQrCode, color: "text-emerald-500 hover:bg-emerald-50/50" },
+    { id: "scanner_auto" as TabType, label: "Auto Scanner", icon: ScanLine, color: "text-rose-500 hover:bg-rose-50/50" },
     { id: "data_master" as TabType, label: "Data Master", icon: Database, color: "text-indigo-500 hover:bg-indigo-50/50" },
     { id: "jadwal_guru" as TabType, label: "Jadwal Guru", icon: Calendar, color: "text-amber-500 hover:bg-amber-50/50" },
     { id: "laporan" as TabType, label: "Laporan & Rekap", icon: FilePieChart, color: "text-purple-500 hover:bg-purple-50/50" },
@@ -216,7 +220,7 @@ export default function App() {
       if (item.id === "laporan") {
         return isWaliKelas;
       }
-      return item.id === "dashboard" || item.id === "absensi" || item.id === "jadwal_guru" || item.id === "settings";
+      return item.id === "dashboard" || item.id === "absensi" || item.id === "scanner_auto" || item.id === "jadwal_guru" || item.id === "settings";
     }
     if (session?.role === "TU") {
       return item.id !== "settings";
@@ -432,7 +436,7 @@ export default function App() {
                     <GraduationCap className="w-4.5 h-4.5" />
                   </div>
                   <div>
-                    <h2 className="text-xs font-extrabold text-white uppercase tracking-tight">AL-HIKAM  SCHOOL</h2>
+                    <h2 className="text-xs font-extrabold text-white uppercase tracking-tight">AL-HIKAM SCHOOL</h2>
                   </div>
                 </div>
 
@@ -504,7 +508,7 @@ export default function App() {
           <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold">
             <span>Sistem Informasi Absensi Sekolah</span>
             <span>&bull;</span>
-            <span className="text-slate-600">AL-HIKAM  SCHOOL SENDANG AGUNG</span>
+            <span className="text-slate-600">AL-HIKAM SCHOOL SENDANG AGUNG</span>
           </div>
 
           <div className="flex items-center gap-4">
