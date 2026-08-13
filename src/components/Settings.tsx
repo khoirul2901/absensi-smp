@@ -33,7 +33,7 @@ import {
   Loader2,
   Code
 } from "lucide-react";
-import { callGas, getStorageKey, setStorage, getStorage, extractArrayData, cleanTimeHHMM } from "../lib/gasApi";
+import { callGas, getStorageKey, setStorage, getStorage, extractArrayData, cleanTimeHHMM, getSchoolProfile, setSchoolProfile } from "../lib/gasApi";
 import { ConfigJam, HariLibur } from "../types";
 
 export default function Settings() {
@@ -59,9 +59,10 @@ export default function Settings() {
   const [passError, setPassError] = useState<string | null>(null);
 
   // Card & Identity Settings State
+  const schoolProf = getSchoolProfile();
   const [cardConfig, setCardConfig] = useState({
-    schoolName: localStorage.getItem(getStorageKey('cardSchoolName')) || 'SMK AL-HIKAM KREJENGAN',
-    schoolAddress: localStorage.getItem(getStorageKey('cardSchoolAddress')) || 'Krejengan Kec. Krejengan Kab. Probolinggo',
+    schoolName: localStorage.getItem(getStorageKey('cardSchoolName')) || schoolProf.namaSekolah || 'AL-HIKAM SCHOOL',
+    schoolAddress: localStorage.getItem(getStorageKey('cardSchoolAddress')) || schoolProf.alamatSekolah || 'SENDANG AGUNG',
     principalName: localStorage.getItem(getStorageKey('cardPrincipalName')) || 'Fulan, S.Pd',
     signatureUrl: localStorage.getItem(getStorageKey('cardSignatureUrl')) || '',
     logoLeftUrl: localStorage.getItem(getStorageKey('cardLogoLeftUrl')) || '',
