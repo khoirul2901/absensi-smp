@@ -19,7 +19,8 @@ import {
   User,
   ExternalLink,
   Calendar,
-  ScanLine
+  ScanLine,
+  CreditCard
 } from "lucide-react";
 import { callGas, isUsingMock, getGasUrl, getStorageKey, extractArrayData, getStorage, isInvalidWali } from "./lib/gasApi";
 import { User as UserType } from "./types";
@@ -28,12 +29,13 @@ import { User as UserType } from "./types";
 import Dashboard from "./components/Dashboard";
 import AbsensiScanner from "./components/AbsensiScanner";
 import AutoScannerBoard from "./components/AutoScannerBoard";
+import DesainKartu from "./components/DesainKartu";
 import DataMaster from "./components/DataMaster";
 import Laporan from "./components/Laporan";
 import Settings from "./components/Settings";
 import JadwalGuru from "./components/JadwalGuru";
 
-type TabType = "dashboard" | "absensi" | "scanner_auto" | "data_master" | "jadwal_guru" | "laporan" | "settings";
+type TabType = "dashboard" | "absensi" | "scanner_auto" | "desain_kartu" | "data_master" | "jadwal_guru" | "laporan" | "settings";
 
 export default function App() {
   const [session, setSession] = useState<UserType | null>(null);
@@ -189,6 +191,8 @@ export default function App() {
         return <AbsensiScanner session={session} />;
       case "scanner_auto":
         return <AutoScannerBoard session={session} />;
+      case "desain_kartu":
+        return <DesainKartu />;
       case "data_master":
         if (isGuru) return <Dashboard />;
         return <DataMaster />;
@@ -209,6 +213,7 @@ export default function App() {
     { id: "dashboard" as TabType, label: "Dashboard", icon: LayoutDashboard, color: "text-blue-500 hover:bg-blue-50/50" },
     { id: "absensi" as TabType, label: "Absensi Manual", icon: ScanQrCode, color: "text-emerald-500 hover:bg-emerald-50/50" },
     { id: "scanner_auto" as TabType, label: "Auto Scanner", icon: ScanLine, color: "text-rose-500 hover:bg-rose-50/50" },
+    { id: "desain_kartu" as TabType, label: "Desain Kartu", icon: CreditCard, color: "text-violet-500 hover:bg-violet-50/50" },
     { id: "data_master" as TabType, label: "Data Master", icon: Database, color: "text-indigo-500 hover:bg-indigo-50/50" },
     { id: "jadwal_guru" as TabType, label: "Jadwal Guru", icon: Calendar, color: "text-amber-500 hover:bg-amber-50/50" },
     { id: "laporan" as TabType, label: "Laporan & Rekap", icon: FilePieChart, color: "text-purple-500 hover:bg-purple-50/50" },
@@ -251,7 +256,7 @@ export default function App() {
             <div className="w-14 h-14 bg-blue-600/10 border border-blue-500/20 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-3">
               <GraduationCap className="w-7 h-7" />
             </div>
-            <h1 className="text-xl font-extrabold text-white tracking-tight">AL-HIKAM SCHOOL</h1>
+            <h1 className="text-xl font-extrabold text-white tracking-tight">SIAS AL-HIKAM SCHOOL</h1>
             <p className="text-xs text-slate-400">Sistem Informasi Absensi Sekolah Modern</p>
           </div>
 
