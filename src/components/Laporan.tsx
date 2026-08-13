@@ -51,12 +51,13 @@ export default function Laporan() {
   }, []);
 
   const isGuru = currentUser?.role === "Guru";
+  const isWaliKelasUser = currentUser?.role === "Wali Kelas";
 
   useEffect(() => {
-    if (isGuru && kategori === "Guru") {
+    if ((isGuru || isWaliKelasUser) && (kategori === "Guru" || (isWaliKelasUser && kategori === "Mengajar"))) {
       setKategori("Siswa");
     }
-  }, [isGuru, kategori]);
+  }, [isGuru, isWaliKelasUser, kategori]);
   
   // Filter Fields
   const [tanggalMulai, setTanggalMulai] = useState("");
@@ -88,7 +89,9 @@ export default function Laporan() {
   // Pagination States
   const [currentPageDetail, setCurrentPageDetail] = useState(1);
   const [currentPageRekap, setCurrentPageRekap] = useState(1);
-  const itemsPerPage = 10;
+  const [perPageOption, setPerPageOption] = useState<string>("10");
+
+  const itemsPerPage = perPageOption === "semua" ? 999999 : (Number(perPageOption) || 10);
 
   // EDIT KEHADIRAN MODAL STATES
   const [showEditModal, setShowEditModal] = useState(false);
@@ -1209,7 +1212,7 @@ export default function Laporan() {
             <UserCheck className="w-3.5 h-3.5" />
             <span>Presensi Siswa</span>
           </button>
-          {!isGuru && (
+          {!isGuru && !isWaliKelasUser && (
             <button 
               onClick={() => setKategori("Guru")}
               className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${kategori === "Guru" ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
@@ -1218,19 +1221,21 @@ export default function Laporan() {
               <span>Presensi Guru</span>
             </button>
           )}
-          <button 
-            onClick={() => setKategori("Mengajar")}
-            className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${kategori === "Mengajar" ? "bg-white text-emerald-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
-          >
-            <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Rekap Presensi Mengajar</span>
-          </button>
+          {!isWaliKelasUser && (
+            <button 
+              onClick={() => setKategori("Mengajar")}
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all duration-150 cursor-pointer ${kategori === "Mengajar" ? "bg-white text-emerald-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+            >
+              <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Rekap Presensi Mengajar</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Navigation Filter Panel (Hidden on print) */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6 print:hidden">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
           
           {/* View Mode Toggle */}
           <div className="space-y-1.5">
@@ -1254,6 +1259,28 @@ export default function Laporan() {
                 Rekap %
               </button>
             </div>
+          </div>
+
+          {/* Pagination Options */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-gray-500 flex items-center gap-1">
+              <List className="w-3.5 h-3.5 text-blue-500" />
+              Paginasi / Tampilkan
+            </label>
+            <select
+              value={perPageOption}
+              onChange={(e) => {
+                setPerPageOption(e.target.value);
+                setCurrentPageDetail(1);
+                setCurrentPageRekap(1);
+              }}
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
+            >
+              <option value="10">10 Data / Hal</option>
+              <option value="20">20 Data / Hal</option>
+              <option value="50">50 Data / Hal</option>
+              <option value="semua">Semua Data (Tanpa Paginasi)</option>
+            </select>
           </div>
 
           {/* Time Filter Type */}
