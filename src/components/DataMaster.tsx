@@ -172,7 +172,16 @@ export default function DataMaster() {
       } else {
         const res = await callGas("getDataMaster", [kategori]);
         if (res && res.success) {
-          setDataList(res.data);
+          const raw = Array.isArray(res.data) ? res.data : [];
+          const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
+          const identifierKey = kategori === "Siswa" ? "nisn" : "nip_nuptk";
+          const cleanData = raw.filter((item: any) => {
+            if (!item || typeof item !== "object") return false;
+            const name = String(item[nameKey] || item.nama || item.name || "").trim();
+            const identifier = String(item[identifierKey] || "").trim();
+            return Boolean((name && name !== "-") || (identifier && identifier !== "-"));
+          });
+          setDataList(cleanData);
         } else {
           setError(res?.message || "Gagal memuat data master");
         }
@@ -370,12 +379,16 @@ export default function DataMaster() {
       
       rows.forEach((row, i) => {
         const cols = row.split("\t"); // Excel copy paste is tab-separated
-        if (cols.length < 3) return; // skip junk rows
+        if (cols.length < 2) return; // skip junk rows
         
+        const idVal = cols[0]?.trim();
+        const nameVal = cols[1]?.trim();
+        if ((!idVal || idVal === "-") && (!nameVal || nameVal === "-")) return; // skip blank row
+
         if (kategori === "Siswa") {
           listParsed.push({
-            nisn: cols[0]?.trim() || "-",
-            nama_siswa: cols[1]?.trim() || "-",
+            nisn: idVal || "-",
+            nama_siswa: nameVal || "-",
             jenis_kelamin: cols[2]?.trim() || "Laki-laki",
             kelas: cols[3]?.trim() || "XI",
             jurusan: cols[4]?.trim() || "RPL 1",
@@ -383,8 +396,8 @@ export default function DataMaster() {
           });
         } else {
           listParsed.push({
-            nip_nuptk: cols[0]?.trim() || "-",
-            nama_guru: cols[1]?.trim() || "-",
+            nip_nuptk: idVal || "-",
+            nama_guru: nameVal || "-",
             jenis_kelamin: cols[2]?.trim() || "Laki-laki",
             jabatan_tugas: cols[3]?.trim() || "Guru",
             no_hp: cols[4]?.trim() || "-"
