@@ -7,6 +7,42 @@
 export const GAS_URL_STORAGE_KEY = "SIAS_GAS_URL";
 export const GAS_TOKEN_STORAGE_KEY = "SIAS_GAS_TOKEN";
 
+export interface SchoolProfile {
+  namaSekolah: string;
+  alamatSekolah: string;
+  npsn?: string;
+  telepon?: string;
+}
+
+export const DEFAULT_SCHOOL_PROFILE: SchoolProfile = {
+  namaSekolah: "AL-HIKAM SCHOOL",
+  alamatSekolah: "SENDANG AGUNG",
+  npsn: "20512345",
+  telepon: "(031) 8901234"
+};
+
+export function getSchoolProfile(): SchoolProfile {
+  try {
+    const saved = localStorage.getItem("SIAS_SCHOOL_PROFILE");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed && parsed.namaSekolah) {
+        return {
+          ...DEFAULT_SCHOOL_PROFILE,
+          ...parsed
+        };
+      }
+    }
+  } catch (e) {}
+  return DEFAULT_SCHOOL_PROFILE;
+}
+
+export function setSchoolProfile(profile: SchoolProfile): void {
+  try {
+    localStorage.setItem("SIAS_SCHOOL_PROFILE", JSON.stringify(profile));
+  } catch (e) {}
+}
+
 export function getGasUrl(): string {
   try {
     const saved = localStorage.getItem(GAS_URL_STORAGE_KEY);
