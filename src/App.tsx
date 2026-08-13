@@ -132,6 +132,7 @@ export default function App() {
   };
 
   const isGuru = session?.role === "Guru" || session?.role === "Wali Kelas";
+  const isAdmin = session?.role === "Admin" || session?.role === "Administrator" || (!isGuru && session?.role !== "TU");
   const [isWaliKelas, setIsWaliKelas] = useState<boolean>(false);
 
   useEffect(() => {
@@ -192,6 +193,7 @@ export default function App() {
       case "scanner_auto":
         return <AutoScannerBoard session={session} />;
       case "desain_kartu":
+        if (!isAdmin) return <Dashboard />;
         return <DesainKartu />;
       case "data_master":
         if (isGuru) return <Dashboard />;
@@ -221,6 +223,7 @@ export default function App() {
   ];
 
   const navItems = allNavItems.filter((item) => {
+    if (item.id === "desain_kartu") return isAdmin;
     if (isGuru) {
       if (item.id === "laporan") {
         return isWaliKelas;
@@ -513,7 +516,7 @@ export default function App() {
           <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold">
             <span>Sistem Informasi Absensi Sekolah</span>
             <span>&bull;</span>
-            <span className="text-slate-600">AL-HIKAM SCHOOL SENDANG AGUNG</span>
+            <span className="text-slate-600">AL-HIKAM SCHOOL</span>
           </div>
 
           <div className="flex items-center gap-4">
