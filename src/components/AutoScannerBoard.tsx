@@ -28,7 +28,7 @@ import {
   Info
 } from "lucide-react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
-import { callGas, getStorageKey, setStorage, getStorage, extractArrayData } from "../lib/gasApi";
+import { callGas, getStorageKey, setStorage, getStorage, extractArrayData, getSchoolProfile } from "../lib/gasApi";
 
 interface AutoScanResult {
   id: string;
@@ -500,7 +500,7 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
             <div className="flex items-center gap-2">
               <Building2 className="w-5 h-5 text-rose-400" />
               <span className="text-xs font-bold tracking-wider uppercase text-slate-300">
-                SMK AL-HIKAM — PAPAN INFORMASI PRESENSI LOBI
+                {getSchoolProfile().namaSekolah} — PAPAN INFORMASI PRESENSI LOBI
               </span>
             </div>
 
