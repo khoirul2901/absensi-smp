@@ -468,14 +468,26 @@ export function callMock(action: string, args: any[] = []): any {
     case "getDataMaster": {
       const [kategori] = args;
       const key = kategori === "Siswa" ? "data_siswa" : "data_guru";
-      let data = getStorage(key);
+      let rawData = getStorage(key);
       let changed = false;
       
       const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
       const identifierKey = kategori === "Siswa" ? "nisn" : "nip_nuptk";
       const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
+
+      // Clean out empty/blank records
+      const cleanData = (Array.isArray(rawData) ? rawData : []).filter((item: any) => {
+        if (!item || typeof item !== "object") return false;
+        const name = String(item[nameKey] || item.nama || item.name || "").trim();
+        const identifier = String(item[identifierKey] || "").trim();
+        return Boolean((name && name !== "-") || (identifier && identifier !== "-"));
+      });
+
+      if (cleanData.length !== rawData.length) {
+        changed = true;
+      }
       
-      data = data.map((item: any) => {
+      const data = cleanData.map((item: any) => {
         let needsSave = false;
         if (!item[idKey]) {
           const prefix = kategori === "Siswa" ? "S-" : "G-";
@@ -558,7 +570,16 @@ export function callMock(action: string, args: any[] = []): any {
       const key = kategori === "Siswa" ? "data_siswa" : "data_guru";
       let list = getStorage(key);
       const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
-      list = list.filter((x: any) => x[idKey] !== idTarget);
+      const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
+      const identifierKey = kategori === "Siswa" ? "nisn" : "nip_nuptk";
+
+      list = list.filter((x: any) => {
+        if (!x || typeof x !== "object") return false;
+        if (x[idKey] === idTarget) return false;
+        const name = String(x[nameKey] || x.nama || x.name || "").trim();
+        const identifier = String(x[identifierKey] || "").trim();
+        return Boolean((name && name !== "-") || (identifier && identifier !== "-"));
+      });
       setStorage(key, list);
       return { success: true, message: "Data terhapus permanen (SIMULASI)." };
     }
@@ -1842,8 +1863,18 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
           }
         } else if (action === "getDataMaster") {
           const cat = args[0];
-          const list = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : null);
-          if (list) setStorage(cat === "Siswa" ? "data_siswa" : "data_guru", list);
+          const rawList = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : null);
+          if (rawList) {
+            const nameKey = cat === "Siswa" ? "nama_siswa" : "nama_guru";
+            const identifierKey = cat === "Siswa" ? "nisn" : "nip_nuptk";
+            const cleanList = rawList.filter((item: any) => {
+              if (!item || typeof item !== "object") return false;
+              const name = String(item[nameKey] || item.nama || item.name || "").trim();
+              const identifier = String(item[identifierKey] || "").trim();
+              return Boolean((name && name !== "-") || (identifier && identifier !== "-"));
+            });
+            setStorage(cat === "Siswa" ? "data_siswa" : "data_guru", cleanList);
+          }
         } else if (action === "getKelasSemua") {
           const list = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : null);
           if (list) {
