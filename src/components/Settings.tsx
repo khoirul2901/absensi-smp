@@ -33,8 +33,7 @@ import {
   Loader2,
   Code
 } from "lucide-react";
-import { callGas, getStorageKey, setStorage, getStorage, extractArrayData, cleanTimeHHMM } from "../lib/gasApi";
-import { KODE_GS_SCRIPT } from "../lib/kodeGs";
+import { callGas, getStorageKey, setStorage, getStorage, extractArrayData, cleanTimeHHMM, KODE_GS_SCRIPT } from "../lib/gasApi";
 import { ConfigJam, HariLibur } from "../types";
 
 export default function Settings() {
