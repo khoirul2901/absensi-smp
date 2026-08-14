@@ -673,26 +673,47 @@ export function callMock(action: string, args: any[] = []): any {
       }
       
       const cleanQr = String(qrContent || "").trim().toLowerCase();
+      const cleanWithoutPrefix = cleanQr.replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
       const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
       const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
       const identifierKey = kategori === "Siswa" ? "nisn" : "nip_nuptk";
 
-      // Flexible lookup: QR content, ID, NISN/NIP, or Name
+      // Precise hierarchical lookup:
+      // 1. Exact Match on ID, NISN/NIP, or QR Content
       let user = master.find((x: any) => {
-        const qr = String(x.qr_content || "").trim().toLowerCase();
+        const qr = String(x.qr_content || x.qr_code || "").trim().toLowerCase();
         const id = String(x[idKey] || "").trim().toLowerCase();
-        const ident = String(x[identifierKey] || "").trim().toLowerCase();
-        const nama = String(x[nameKey] || "").trim().toLowerCase();
-        const rawNama = String(x.nama || "").trim().toLowerCase();
-        
-        return (
-          (qr && (qr === cleanQr || cleanQr.includes(qr) || qr.includes(cleanQr))) ||
-          (id && (id === cleanQr || cleanQr.includes(id))) ||
-          (ident && ident === cleanQr) ||
-          (nama && (nama === cleanQr || cleanQr.includes(nama) || nama.includes(cleanQr))) ||
-          (rawNama && (rawNama === cleanQr || cleanQr.includes(rawNama) || rawNama.includes(cleanQr)))
-        );
+        const ident = String(x[identifierKey] || x.nisn || x.nip || x.nip_nuptk || "").trim().toLowerCase();
+        return (qr && qr === cleanQr) || (id && id === cleanQr) || (ident && ident === cleanQr);
       });
+
+      // 2. Exact Match without common prefix (e.g. "S-001" vs "001" or "QR-S-001" vs "S-001")
+      if (!user && cleanWithoutPrefix && cleanWithoutPrefix.length >= 2) {
+        user = master.find((x: any) => {
+          const qr = String(x.qr_content || x.qr_code || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
+          const id = String(x[idKey] || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
+          const ident = String(x[identifierKey] || x.nisn || x.nip || x.nip_nuptk || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
+          return (qr && qr === cleanWithoutPrefix) || (id && id === cleanWithoutPrefix) || (ident && ident === cleanWithoutPrefix);
+        });
+      }
+
+      // 3. Exact Full Name Match
+      if (!user) {
+        user = master.find((x: any) => {
+          const nama = String(x[nameKey] || x.nama || "").trim().toLowerCase();
+          return nama && nama === cleanQr;
+        });
+      }
+
+      // 4. Normalized Full Name Match (only for alphabetic text queries with length >= 4)
+      if (!user && /^[a-zA-Z\s.,']+$/.test(cleanQr) && cleanQr.length >= 4) {
+        const normalize = (s: string) => s.toLowerCase().replace(/[,.]/g, " ").replace(/\s+/g, " ").trim();
+        const targetNorm = normalize(cleanQr);
+        user = master.find((x: any) => {
+          const n = normalize(String(x[nameKey] || x.nama || ""));
+          return n && (n === targetNorm || n.startsWith(targetNorm + " ") || targetNorm.startsWith(n + " "));
+        });
+      }
       
       if (!user) {
         // Try opposite category if not found
@@ -702,13 +723,28 @@ export function callMock(action: string, args: any[] = []): any {
         const altNameKey = kategori === "Siswa" ? "nama_guru" : "nama_siswa";
         const altIdentKey = kategori === "Siswa" ? "nip_nuptk" : "nisn";
         
-        const altUser = altMaster.find((x: any) => {
-          const qr = String(x.qr_content || "").trim().toLowerCase();
+        let altUser = altMaster.find((x: any) => {
+          const qr = String(x.qr_content || x.qr_code || "").trim().toLowerCase();
           const id = String(x[altIdKey] || "").trim().toLowerCase();
-          const ident = String(x[altIdentKey] || "").trim().toLowerCase();
-          const nama = String(x[altNameKey] || "").trim().toLowerCase();
-          return (qr && qr === cleanQr) || (id && id === cleanQr) || (ident && ident === cleanQr) || (nama && nama === cleanQr);
+          const ident = String(x[altIdentKey] || x.nisn || x.nip || x.nip_nuptk || "").trim().toLowerCase();
+          return (qr && qr === cleanQr) || (id && id === cleanQr) || (ident && ident === cleanQr);
         });
+
+        if (!altUser && cleanWithoutPrefix && cleanWithoutPrefix.length >= 2) {
+          altUser = altMaster.find((x: any) => {
+            const qr = String(x.qr_content || x.qr_code || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
+            const id = String(x[altIdKey] || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
+            const ident = String(x[altIdentKey] || x.nisn || x.nip || x.nip_nuptk || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
+            return (qr && qr === cleanWithoutPrefix) || (id && id === cleanWithoutPrefix) || (ident && ident === cleanWithoutPrefix);
+          });
+        }
+
+        if (!altUser) {
+          altUser = altMaster.find((x: any) => {
+            const nama = String(x[altNameKey] || x.nama || "").trim().toLowerCase();
+            return nama && nama === cleanQr;
+          });
+        }
 
         if (altUser) {
           user = altUser;
