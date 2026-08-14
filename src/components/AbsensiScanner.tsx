@@ -1237,22 +1237,48 @@ export default function AbsensiScanner({ session }: { session?: any }) {
           }
         }
         const displayName = personName || code;
+        const scanType = res.type || (activeMode === "Masuk" ? "masuk" : "pulang");
 
-        setScanStatus({ 
-          type: "success", 
-          msg: res.message || `Presensi ${displayName} (${activeMode}) Berhasil!`,
-          targetName: displayName,
-          details: `Mode: ${activeMode} • Kategori: ${kategori}`
-        });
-
-        // Update queue item
-        setScanQueue(prev => prev.map(item => 
-          item.id === queueId ? { ...item, status: "success", message: res.message || `${displayName} Tersimpan` } : item
-        ));
-
-        // Voice announcement with actual person name
-        if (speechEnabled) {
-          speakText(fastMode === "turbo" ? `Hadir, ${displayName}!` : `${displayName}. Presensi ${activeMode} berhasil.`);
+        if (scanType === "info") {
+          setScanStatus({ 
+            type: "info", 
+            msg: res.message || `${displayName} sudah presensi masuk`,
+            targetName: displayName,
+            details: `Kategori: ${kategori}`
+          });
+          setScanQueue(prev => prev.map(item => 
+            item.id === queueId ? { ...item, status: "pending", message: res.message || `${displayName} Sudah Masuk` } : item
+          ));
+          if (speechEnabled) {
+            speakText(`${displayName} sudah presensi masuk.`);
+          }
+        } else if (scanType === "mengajar") {
+          const mapelKelasStr = res.data?.mapel ? `${res.data.mapel} (${res.data.kelas || ""})` : "Jam Mengajar";
+          setScanStatus({ 
+            type: "success", 
+            msg: res.message || `Presensi Mengajar ${displayName} Berhasil!`,
+            targetName: displayName,
+            details: `Mapel: ${mapelKelasStr} • Jam Ke-${res.data?.jam_ke || 1}`
+          });
+          setScanQueue(prev => prev.map(item => 
+            item.id === queueId ? { ...item, status: "success", message: `Mengajar: ${mapelKelasStr}` } : item
+          ));
+          if (speechEnabled) {
+            speakText(`Presensi mengajar ${displayName} berhasil.`);
+          }
+        } else {
+          setScanStatus({ 
+            type: "success", 
+            msg: res.message || `Presensi ${displayName} (${scanType === "pulang" ? "Pulang" : "Masuk"}) Berhasil!`,
+            targetName: displayName,
+            details: `Mode: ${scanType === "pulang" ? "Pulang" : "Masuk"} • Kategori: ${kategori}`
+          });
+          setScanQueue(prev => prev.map(item => 
+            item.id === queueId ? { ...item, status: "success", message: res.message || `${displayName} Tersimpan` } : item
+          ));
+          if (speechEnabled) {
+            speakText(fastMode === "turbo" ? `Hadir, ${displayName}!` : `${displayName}. Presensi ${scanType === "pulang" ? "pulang" : "masuk"} berhasil.`);
+          }
         }
 
         if (filterTanggal !== scanTodayStr) {
