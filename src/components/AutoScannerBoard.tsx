@@ -231,44 +231,68 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
 
     try {
       const cleanCode = code.toLowerCase();
-      
-      // Look up in Guru list (ID, NIP, QR Content, Name, custom codes)
-      let matchedGuru = guruList.find((g: any) => {
-        const idG = String(g.id_guru || "").toLowerCase();
-        const nipG = String(g.nip_nuptk || g.nip || "").toLowerCase();
-        const qrG = String(g.qr_content || "").toLowerCase();
-        const namaG = String(g.nama_guru || g.nama || "").toLowerCase();
-        return (
-          (idG && (idG === cleanCode || cleanCode.includes(idG))) ||
-          (nipG && (nipG === cleanCode || cleanCode.includes(nipG))) ||
-          (qrG && (qrG === cleanCode || cleanCode.includes(qrG) || qrG.includes(cleanCode))) ||
-          (namaG && (namaG === cleanCode || cleanCode.includes(namaG) || namaG.includes(cleanCode)))
-        );
+      const cleanWithoutPrefix = cleanCode.replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
+
+      // Look up in Siswa list first by exact ID, NISN, or QR Content
+      let matchedSiswa = siswaList.find((s: any) => {
+        const idS = String(s.id_siswa || "").trim().toLowerCase();
+        const nisS = String(s.nisn || s.nis || "").trim().toLowerCase();
+        const qrS = String(s.qr_content || s.qr_code || "").trim().toLowerCase();
+        return (idS && idS === cleanCode) || (nisS && nisS === cleanCode) || (qrS && qrS === cleanCode);
       });
 
-      // Look up in Siswa list (ID, NISN, QR Content, Name, custom codes)
-      let matchedSiswa = siswaList.find((s: any) => {
-        const idS = String(s.id_siswa || "").toLowerCase();
-        const nisS = String(s.nisn || s.nis || "").toLowerCase();
-        const qrS = String(s.qr_content || "").toLowerCase();
-        const namaS = String(s.nama_siswa || s.nama || "").toLowerCase();
-        return (
-          (idS && (idS === cleanCode || cleanCode.includes(idS))) ||
-          (nisS && (nisS === cleanCode || cleanCode.includes(nisS))) ||
-          (qrS && (qrS === cleanCode || cleanCode.includes(qrS) || qrS.includes(cleanCode))) ||
-          (namaS && (namaS === cleanCode || cleanCode.includes(namaS) || namaS.includes(cleanCode)))
-        );
+      if (!matchedSiswa && cleanWithoutPrefix && cleanWithoutPrefix.length >= 2) {
+        matchedSiswa = siswaList.find((s: any) => {
+          const idS = String(s.id_siswa || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
+          const nisS = String(s.nisn || s.nis || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
+          const qrS = String(s.qr_content || s.qr_code || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
+          return (idS && idS === cleanWithoutPrefix) || (nisS && nisS === cleanWithoutPrefix) || (qrS && qrS === cleanWithoutPrefix);
+        });
+      }
+
+      if (!matchedSiswa) {
+        matchedSiswa = siswaList.find((s: any) => {
+          const namaS = String(s.nama_siswa || s.nama || "").trim().toLowerCase();
+          return namaS && namaS === cleanCode;
+        });
+      }
+
+      // Look up in Guru list by exact ID, NIP, or QR Content
+      let matchedGuru = guruList.find((g: any) => {
+        const idG = String(g.id_guru || "").trim().toLowerCase();
+        const nipG = String(g.nip_nuptk || g.nip || "").trim().toLowerCase();
+        const qrG = String(g.qr_content || g.qr_code || "").trim().toLowerCase();
+        return (idG && idG === cleanCode) || (nipG && nipG === cleanCode) || (qrG && qrG === cleanCode);
       });
+
+      if (!matchedGuru && cleanWithoutPrefix && cleanWithoutPrefix.length >= 2) {
+        matchedGuru = guruList.find((g: any) => {
+          const idG = String(g.id_guru || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
+          const nipG = String(g.nip_nuptk || g.nip || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
+          const qrG = String(g.qr_content || g.qr_code || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
+          return (idG && idG === cleanWithoutPrefix) || (nipG && nipG === cleanWithoutPrefix) || (qrG && qrG === cleanWithoutPrefix);
+        });
+      }
+
+      if (!matchedGuru) {
+        matchedGuru = guruList.find((g: any) => {
+          const namaG = String(g.nama_guru || g.nama || "").trim().toLowerCase();
+          return namaG && namaG === cleanCode;
+        });
+      }
 
       let role: "Guru" | "Siswa" = "Siswa";
       let personObj: any = null;
 
-      if (matchedGuru) {
+      if (matchedGuru && !matchedSiswa) {
         role = "Guru";
         personObj = matchedGuru;
       } else if (matchedSiswa) {
         role = "Siswa";
         personObj = matchedSiswa;
+      } else if (matchedGuru) {
+        role = "Guru";
+        personObj = matchedGuru;
       } else {
         // Fallback Heuristics by Prefix
         if (cleanCode.startsWith("g-") || cleanCode.startsWith("guru") || cleanCode.startsWith("nip") || cleanCode.startsWith("g_")) {
@@ -299,16 +323,43 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
         if (rowData) {
           if (rowData.nama_siswa || rowData.id_siswa || rowData.kelas_jurusan) {
             realRole = "Siswa";
-            realName = rowData.nama_siswa || personObj?.nama_siswa || personObj?.nama || code;
+            realName = rowData.nama_siswa || personObj?.nama_siswa || personObj?.nama || "";
             realClassOrNip = rowData.kelas_jurusan || (personObj?.kelas ? `${personObj.kelas} ${personObj.jurusan || ""}`.trim() : "Siswa");
             realStatus = autoMode === "Masuk" ? (rowData.status_masuk || fallbackStatus) : (rowData.status_pulang || "Tepat Waktu");
           } else if (rowData.nama_guru || rowData.id_guru) {
             realRole = "Guru";
-            realName = rowData.nama_guru || personObj?.nama_guru || personObj?.nama || code;
+            realName = rowData.nama_guru || personObj?.nama_guru || personObj?.nama || "";
             realClassOrNip = personObj?.nip_nuptk || personObj?.nip || rowData.id_guru || code;
             realStatus = autoMode === "Masuk" ? (rowData.status_masuk || fallbackStatus) : (rowData.status_pulang || "Tepat Waktu");
           }
         }
+        if (!realName && scanRes.message) {
+          const matchColon = scanRes.message.match(/:\s*([^(]+)/);
+          if (matchColon && matchColon[1]) {
+            realName = matchColon[1].trim();
+          }
+        }
+      } else if (scanRes && scanRes.success === false) {
+        const errorResult: AutoScanResult = {
+          id: code,
+          name: personObj?.nama_siswa || personObj?.nama_guru || personObj?.nama || code,
+          role: role,
+          subDetail: "-",
+          mode: autoMode,
+          status: "Gagal",
+          timestamp: timeString,
+          dateStr: dateString,
+          success: false,
+          message: scanRes.message || "Data tidak ditemukan atau belum terdaftar"
+        };
+        setLastResult(errorResult);
+        setRecentLogs(prev => [errorResult, ...prev.slice(0, 19)]);
+        setShowNotificationToast(true);
+        if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+        toastTimeoutRef.current = setTimeout(() => setShowNotificationToast(false), 5000);
+        playBeep("error");
+        speakText("Presensi tidak terdaftar atau gagal.");
+        return;
       }
 
       if (!realName) {
