@@ -758,7 +758,7 @@ export function callMock(action: string, args: any[] = []): any {
       const isGuruUser = Boolean(user.id_guru || user.nama_guru || user.nip_nuptk);
       const activeKategori = isGuruUser ? "Guru" : "Siswa";
       const reportsKey = activeKategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
-      const reports = getStorage(reportsKey);
+      const reports = getStorage(reportsKey) || [];
       
       const activeIdKey = activeKategori === "Siswa" ? "id_siswa" : "id_guru";
       const idTarget = user[activeIdKey] || user.id_siswa || user.id_guru || qrContent;
@@ -766,122 +766,183 @@ export function callMock(action: string, args: any[] = []): any {
       const nama = user[activeNameKey] || user.nama || qrContent;
       const classKey = activeKategori === "Siswa" ? `${user.kelas || "-"} ${user.jurusan || ""}`.trim() : "-";
       
-      // Check for duplicate
+      // Index in daily attendance report
       const index = reports.findIndex((r: any) => r.tanggal === tgl && (r[activeIdKey] === idTarget || r.id_siswa === idTarget || r.id_guru === idTarget || r.id_target === idTarget));
       const cfg = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
-      
-      if (mode === "Masuk") {
-        if (index !== -1 && reports[index].jam_masuk && reports[index].jam_masuk !== "-") {
-          return { success: true, message: `${nama} sudah melakukan presensi masuk hari ini (${reports[index].jam_masuk} WIB)!`, data: reports[index] };
-        }
-        
-        const statusMasuk = (jam <= (cfg.jam_masuk_batas || "07:15")) ? "Tepat Waktu" : "Terlambat";
-        const idLog = "LOG-" + new Date().getTime();
-        
-        if (index !== -1) {
-          reports[index].jam_masuk = jam;
-          reports[index].status_masuk = statusMasuk;
-          setStorage(reportsKey, reports);
-          return { success: true, message: `Presensi Masuk Berhasil: ${nama} (${statusMasuk})`, data: reports[index] };
-        }
+      const defaultJamMasukBatas = cfg.jam_masuk_batas || "07:15";
+      const defaultJamPulangMulai = cfg.jam_pulang_mulai || "15:30";
 
-        const newRow = activeKategori === "Siswa" ? {
-          id_log_siswa: idLog,
-          tanggal: tgl,
-          id_siswa: idTarget,
-          nama_siswa: nama,
-          kelas_jurusan: classKey,
-          jam_masuk: jam,
-          status_masuk: statusMasuk,
-          jam_pulang: "-",
-          status_pulang: "-",
-          ket: "-"
-        } : {
-          id_log_guru: idLog,
-          tanggal: tgl,
-          id_guru: idTarget,
-          nama_guru: nama,
-          jam_masuk: jam,
-          status_masuk: statusMasuk,
-          jam_pulang: "-",
-          status_pulang: "-",
-          ket: "-"
-        };
-        
-        reports.push(newRow);
-        setStorage(reportsKey, reports);
-        
-        // Auto sync to absensi_mengajar_guru for Guru category based on schedule
-        if (activeKategori === "Guru") {
-          try {
-            const hariList = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
-            const hariIni = hariList[new Date().getDay()];
-            const schedules = getStorage("jadwal_pelajaran") || [];
-            const jamSlots = getStorage("jam_pelajaran") || [];
-            const teacherSchedules = schedules.filter((s: any) => s.id_guru === idTarget && (s.hari === hariIni || hariIni === "Minggu"));
-            if (teacherSchedules.length > 0) {
-              const activeSlot = jamSlots.find((j: any) => jam >= j.jam_mulai && jam <= j.jam_selesai) || jamSlots[0];
-              const matchSch = teacherSchedules.find((s: any) => s.jam_ke === (activeSlot?.jam_ke || 1)) || teacherSchedules[0];
-              const jamMulai = matchSch.jam_mulai || activeSlot?.jam_mulai || "07:00";
-              let statusMengajar = "Hadir Tepat Waktu";
-              if (jamMulai && jamMulai !== "-") {
-                const [hM, mM] = jamMulai.split(":").map(Number);
-                const [hN, mN] = jam.split(":").map(Number);
-                if (!isNaN(hM) && !isNaN(mM) && !isNaN(hN) && !isNaN(mN)) {
-                  const savedCfg = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
-                  const toleransiGuruVal = Number(savedCfg.toleransi_guru ?? savedCfg.toleransi_mengajar_guru ?? 15);
-                  if (hN * 60 + mN > hM * 60 + mM + toleransiGuruVal) {
-                    statusMengajar = "Terlambat Masuk Kelas";
-                  }
-                }
-              }
-              const absLogs = getStorage("absensi_mengajar_guru") || [];
-              const existingIdx = absLogs.findIndex((a: any) => a.tanggal === tgl && a.id_guru === idTarget && a.jam_ke === Number(matchSch.jam_ke));
-              const logItem = {
-                id_log_mengajar: existingIdx !== -1 ? absLogs[existingIdx].id_log_mengajar : "LOG-MENG-" + Date.now(),
-                tanggal: tgl,
-                waktu_absen: jam,
-                hari: hariIni !== "Minggu" ? hariIni : "Senin",
-                id_guru: idTarget,
-                nama_guru: nama,
-                kelas: matchSch.kelas || "X RPL 1",
-                mapel: matchSch.mapel || "Pelajaran Umum",
-                jam_ke: Number(matchSch.jam_ke || 1),
-                jam_mulai_jadwal: jamMulai,
-                jam_selesai_jadwal: matchSch.jam_selesai || activeSlot?.jam_selesai || "07:45",
-                status: statusMengajar,
-                catatan_materi: "Presensi Otomatis via Auto Scanner"
-              };
-              if (existingIdx !== -1) absLogs[existingIdx] = logItem;
-              else absLogs.push(logItem);
-              setStorage("absensi_mengajar_guru", absLogs);
-            }
-          } catch (e) { console.error("Auto sync guru schedule error", e); }
-        }
+      const hariList = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+      const hariIni = hariList[new Date().getDay()];
 
-        return { success: true, message: `Presensi Masuk Berhasil: ${nama} (${statusMasuk})`, data: newRow };
-      } else {
-        // Mode Pulang
-        if (index !== -1) {
-          reports[index].jam_pulang = jam;
-          reports[index].status_pulang = "Tepat Waktu";
-          setStorage(reportsKey, reports);
-          return { success: true, message: `Presensi Pulang Berhasil: ${nama}`, data: reports[index] };
-        } else {
-          // Lupa masuk
-          const idLog = "LOG-" + new Date().getTime();
-          const newRow = activeKategori === "Siswa" ? {
+      // ==========================================
+      // 1. MODEL SISWA (Presensi Masuk & Pulang)
+      // ==========================================
+      if (activeKategori === "Siswa") {
+        const jamPulangSiswa = cfg.jam_pulang_mulai || "14:00";
+        const isTimeForPulang = jam >= jamPulangSiswa || (mode === "Pulang" && jam >= "12:00");
+
+        if (!isTimeForPulang) {
+          // Masuk Period for Siswa
+          if (index !== -1 && reports[index].jam_masuk && reports[index].jam_masuk !== "-") {
+            return { 
+              success: true, 
+              type: "info",
+              message: `${nama} sudah melakukan presensi masuk hari ini (${reports[index].jam_masuk} WIB)! Belum jam pulang sekolah (Pk ${jamPulangSiswa} WIB).`, 
+              data: reports[index] 
+            };
+          }
+
+          const statusMasuk = (jam <= defaultJamMasukBatas) ? "Tepat Waktu" : "Terlambat";
+          const idLog = "LOG-S-" + new Date().getTime();
+
+          if (index !== -1) {
+            reports[index].jam_masuk = jam;
+            reports[index].status_masuk = statusMasuk;
+            setStorage(reportsKey, reports);
+            return { success: true, type: "masuk", message: `Presensi Masuk Berhasil: ${nama} (${statusMasuk})`, data: reports[index] };
+          }
+
+          const newRow = {
             id_log_siswa: idLog,
             tanggal: tgl,
             id_siswa: idTarget,
             nama_siswa: nama,
             kelas_jurusan: classKey,
-            jam_masuk: "-",
-            status_masuk: "Lupa Scan Masuk",
-            jam_pulang: jam,
-            status_pulang: "Tepat Waktu",
-            ket: "-"
-          } : {
+            jam_masuk: jam,
+            status_masuk: statusMasuk,
+            jam_pulang: "-",
+            status_pulang: "-",
+            ket: "Scan Otomatis"
+          };
+          reports.push(newRow);
+          setStorage(reportsKey, reports);
+          return { success: true, type: "masuk", message: `Presensi Masuk Berhasil: ${nama} (${statusMasuk})`, data: newRow };
+        } else {
+          // Pulang Period for Siswa
+          if (index !== -1) {
+            reports[index].jam_pulang = jam;
+            reports[index].status_pulang = "Tepat Waktu";
+            setStorage(reportsKey, reports);
+            return { success: true, type: "pulang", message: `Presensi Pulang Berhasil: ${nama}`, data: reports[index] };
+          } else {
+            const idLog = "LOG-S-" + new Date().getTime();
+            const newRow = {
+              id_log_siswa: idLog,
+              tanggal: tgl,
+              id_siswa: idTarget,
+              nama_siswa: nama,
+              kelas_jurusan: classKey,
+              jam_masuk: "-",
+              status_masuk: "Lupa Scan Masuk",
+              jam_pulang: jam,
+              status_pulang: "Tepat Waktu",
+              ket: "Lupa Scan Masuk"
+            };
+            reports.push(newRow);
+            setStorage(reportsKey, reports);
+            return { success: true, type: "pulang", message: `Presensi Pulang Berhasil: ${nama} (Lupa Scan Masuk)`, data: newRow };
+          }
+        }
+      }
+
+      // ==========================================
+      // 2. MODEL GURU (Fleksibel & Jadwal Mengajar)
+      // ==========================================
+      const flexList = getStorage("jadwal_guru") || [];
+      const flexSchedule = flexList.find((j: any) => 
+        (String(j.id_guru || "").toLowerCase() === String(idTarget).toLowerCase() || 
+         String(j.nama_guru || "").toLowerCase() === String(nama).toLowerCase()) &&
+        (j.hari === hariIni || hariIni === "Minggu")
+      );
+
+      const guruJamMasukBatas = flexSchedule?.jam_masuk_batas || defaultJamMasukBatas;
+      const guruJamPulangMulai = flexSchedule?.jam_pulang_mulai || defaultJamPulangMulai;
+
+      // Check teaching schedules for this teacher today
+      const allSchedules = getStorage("jadwal_pelajaran") || [];
+      const jamSlots = getStorage("jam_pelajaran") || [];
+      const teacherDaySchedules = allSchedules.filter((s: any) => 
+        (String(s.id_guru || "").toLowerCase() === String(idTarget).toLowerCase() || 
+         String(s.nama_guru || "").toLowerCase() === String(nama).toLowerCase()) &&
+        (s.hari === hariIni || hariIni === "Minggu")
+      ).sort((a: any, b: any) => Number(a.jam_ke || 0) - Number(b.jam_ke || 0));
+
+      const absLogs = getStorage("absensi_mengajar_guru") || [];
+      const alreadyAttendedTeachingKeys = new Set(
+        absLogs.filter((a: any) => a.tanggal === tgl && (a.id_guru === idTarget || String(a.nama_guru).toLowerCase() === String(nama).toLowerCase()))
+               .map((a: any) => `${a.jam_ke}-${a.kelas}-${a.mapel}`)
+      );
+
+      // Check if current time matches any teaching schedule slot
+      let activeTeachingSlot: any = null;
+      if (teacherDaySchedules.length > 0) {
+        // 1. Find schedule slot matching current time
+        for (const sched of teacherDaySchedules) {
+          const slot = jamSlots.find((j: any) => Number(j.jam_ke) === Number(sched.jam_ke));
+          const slotMulai = sched.jam_mulai || slot?.jam_mulai;
+          const slotSelesai = sched.jam_selesai || slot?.jam_selesai;
+          if (slotMulai && slotMulai !== "-" && slotSelesai && slotSelesai !== "-") {
+            const [hM, mM] = slotMulai.split(":").map(Number);
+            const [hS, mS] = slotSelesai.split(":").map(Number);
+            const [hN, mN] = jam.split(":").map(Number);
+            if (!isNaN(hM) && !isNaN(mM) && !isNaN(hS) && !isNaN(mS) && !isNaN(hN) && !isNaN(mN)) {
+              const startMin = hM * 60 + mM;
+              const endMin = hS * 60 + mS;
+              const nowMin = hN * 60 + mN;
+              // Active window: from 15 min before start until end of lesson
+              if (nowMin >= startMin - 15 && nowMin <= endMin + 15) {
+                activeTeachingSlot = { ...sched, slotMulai, slotSelesai };
+                break;
+              }
+            }
+          }
+        }
+
+        // 2. If not strictly in slot, check first pending teaching schedule not yet recorded today
+        if (!activeTeachingSlot) {
+          const pendingSched = teacherDaySchedules.find((s: any) => !alreadyAttendedTeachingKeys.has(`${s.jam_ke}-${s.kelas}-${s.mapel}`));
+          if (pendingSched) {
+            const slot = jamSlots.find((j: any) => Number(j.jam_ke) === Number(pendingSched.jam_ke));
+            const slotMulai = pendingSched.jam_mulai || slot?.jam_mulai || "07:00";
+            const slotSelesai = pendingSched.jam_selesai || slot?.jam_selesai || "07:45";
+            activeTeachingSlot = { ...pendingSched, slotMulai, slotSelesai };
+          }
+        }
+      }
+
+      // Check whether teacher is allowed to clock out (Pulang)
+      // Guru can only clock out if:
+      // 1. Current time >= guruJamPulangMulai (from flexible schedule or school default)
+      // 2. OR teacher has completed all teaching schedules and time is past their last class end time
+      let lastClassEndMin = 0;
+      if (teacherDaySchedules.length > 0) {
+        const lastSched = teacherDaySchedules[teacherDaySchedules.length - 1];
+        const lastSlot = jamSlots.find((j: any) => Number(j.jam_ke) === Number(lastSched.jam_ke));
+        const lastEnd = lastSched.jam_selesai || lastSlot?.jam_selesai;
+        if (lastEnd && lastEnd !== "-") {
+          const [hE, mE] = lastEnd.split(":").map(Number);
+          if (!isNaN(hE) && !isNaN(mE)) lastClassEndMin = hE * 60 + mE;
+        }
+      }
+
+      const [hN, mN] = jam.split(":").map(Number);
+      const nowMin = hN * 60 + mN;
+      const [hP, mP] = guruJamPulangMulai.split(":").map(Number);
+      const pulangMulaiMin = (!isNaN(hP) && !isNaN(mP)) ? (hP * 60 + mP) : (15 * 60 + 30);
+
+      const isTeacherPulangTime = nowMin >= pulangMulaiMin || (lastClassEndMin > 0 && nowMin >= lastClassEndMin && nowMin >= (12 * 60));
+
+      // CASE A: TEACHER CLOCK OUT TIME REACHED
+      if (isTeacherPulangTime && mode === "Pulang") {
+        if (index !== -1) {
+          reports[index].jam_pulang = jam;
+          reports[index].status_pulang = "Tepat Waktu";
+          setStorage(reportsKey, reports);
+          return { success: true, type: "pulang", message: `Presensi Pulang Berhasil: ${nama}`, data: reports[index] };
+        } else {
+          const idLog = "LOG-G-" + new Date().getTime();
+          const newRow = {
             id_log_guru: idLog,
             tanggal: tgl,
             id_guru: idTarget,
@@ -890,13 +951,124 @@ export function callMock(action: string, args: any[] = []): any {
             status_masuk: "Lupa Scan Masuk",
             jam_pulang: jam,
             status_pulang: "Tepat Waktu",
-            ket: "-"
+            ket: "Lupa Scan Masuk"
           };
           reports.push(newRow);
           setStorage(reportsKey, reports);
-          return { success: true, message: `Presensi Pulang Berhasil: ${nama} (Lupa Scan Masuk)`, data: newRow };
+          return { success: true, type: "pulang", message: `Presensi Pulang Berhasil: ${nama} (Lupa Scan Masuk)`, data: newRow };
         }
       }
+
+      // CASE B: DURING TEACHING & WORKING HOURS (BEFORE PULANG TIME)
+      // 1. If teacher has a teaching schedule to attend:
+      if (activeTeachingSlot) {
+        const toleransiGuruVal = Number(cfg.toleransi_guru ?? cfg.toleransi_mengajar_guru ?? 15);
+        let statusMengajar = "Hadir Tepat Waktu";
+        if (activeTeachingSlot.slotMulai && activeTeachingSlot.slotMulai !== "-") {
+          const [hM, mM] = activeTeachingSlot.slotMulai.split(":").map(Number);
+          if (!isNaN(hM) && !isNaN(mM)) {
+            const startMin = hM * 60 + mM;
+            if (nowMin > startMin + toleransiGuruVal) {
+              statusMengajar = "Terlambat Masuk Kelas";
+            }
+          }
+        }
+
+        const teachingKey = `${activeTeachingSlot.jam_ke}-${activeTeachingSlot.kelas}-${activeTeachingSlot.mapel}`;
+        const existingIdx = absLogs.findIndex((a: any) => 
+          a.tanggal === tgl && 
+          (a.id_guru === idTarget || String(a.nama_guru).toLowerCase() === String(nama).toLowerCase()) && 
+          Number(a.jam_ke) === Number(activeTeachingSlot.jam_ke) &&
+          String(a.kelas).toLowerCase() === String(activeTeachingSlot.kelas).toLowerCase()
+        );
+
+        const logItem = {
+          id_log_mengajar: existingIdx !== -1 ? absLogs[existingIdx].id_log_mengajar : "LOG-MENG-" + Date.now(),
+          tanggal: tgl,
+          waktu_absen: jam,
+          hari: hariIni !== "Minggu" ? hariIni : "Senin",
+          id_guru: idTarget,
+          nama_guru: nama,
+          kelas: activeTeachingSlot.kelas || "-",
+          mapel: activeTeachingSlot.mapel || "-",
+          jam_ke: Number(activeTeachingSlot.jam_ke || 1),
+          jam_mulai_jadwal: activeTeachingSlot.slotMulai || "07:00",
+          jam_selesai_jadwal: activeTeachingSlot.slotSelesai || "07:45",
+          status: statusMengajar,
+          catatan_materi: "Presensi Otomatis Scan Barcode/QR"
+        };
+
+        if (existingIdx !== -1) absLogs[existingIdx] = logItem;
+        else absLogs.push(logItem);
+        setStorage("absensi_mengajar_guru", absLogs);
+
+        // Also ensure daily attendance (PresensiGuru) is recorded as Masuk if not yet done
+        const statusMasuk = (jam <= guruJamMasukBatas) ? "Tepat Waktu" : "Terlambat";
+        if (index === -1) {
+          const idLog = "LOG-G-" + new Date().getTime();
+          reports.push({
+            id_log_guru: idLog,
+            tanggal: tgl,
+            id_guru: idTarget,
+            nama_guru: nama,
+            jam_masuk: jam,
+            status_masuk: statusMasuk,
+            jam_pulang: "-",
+            status_pulang: "-",
+            ket: "Hadir Mengajar"
+          });
+          setStorage(reportsKey, reports);
+        } else if (!reports[index].jam_masuk || reports[index].jam_masuk === "-") {
+          reports[index].jam_masuk = jam;
+          reports[index].status_masuk = statusMasuk;
+          setStorage(reportsKey, reports);
+        }
+
+        return {
+          success: true,
+          type: "mengajar",
+          message: `Presensi Mengajar Berhasil: ${nama} (${activeTeachingSlot.mapel} - ${activeTeachingSlot.kelas}, Jam Ke-${activeTeachingSlot.jam_ke})`,
+          data: logItem
+        };
+      }
+
+      // 2. If teacher has NO active teaching schedule at this moment:
+      // Check daily masuk
+      if (index === -1 || !reports[index].jam_masuk || reports[index].jam_masuk === "-") {
+        const statusMasuk = (jam <= guruJamMasukBatas) ? "Tepat Waktu" : "Terlambat";
+        const idLog = "LOG-G-" + new Date().getTime();
+
+        if (index !== -1) {
+          reports[index].jam_masuk = jam;
+          reports[index].status_masuk = statusMasuk;
+          setStorage(reportsKey, reports);
+          return { success: true, type: "masuk", message: `Presensi Masuk Berhasil: ${nama} (${statusMasuk})`, data: reports[index] };
+        }
+
+        const newRow = {
+          id_log_guru: idLog,
+          tanggal: tgl,
+          id_guru: idTarget,
+          nama_guru: nama,
+          jam_masuk: jam,
+          status_masuk: statusMasuk,
+          jam_pulang: "-",
+          status_pulang: "-",
+          ket: flexSchedule ? "Guru Fleksibel" : "Harian"
+        };
+        reports.push(newRow);
+        setStorage(reportsKey, reports);
+        return { success: true, type: "masuk", message: `Presensi Masuk Berhasil: ${nama} (${statusMasuk})`, data: newRow };
+      }
+
+      // 3. Teacher already clocked in and it is NOT yet clock out time (outside flexible hours)
+      // DO NOT clock out teacher prematurely!
+      return {
+        success: true,
+        type: "info",
+        message: `${nama} sudah presensi masuk (${reports[index].jam_masuk} WIB). Belum masuk jam pulang (Jam Pulang dibuka pk ${guruJamPulangMulai} WIB).`,
+        data: reports[index]
+      };
     }
 
     case "catatAbsensiSiswa": {
