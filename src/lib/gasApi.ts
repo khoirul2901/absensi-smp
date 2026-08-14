@@ -657,36 +657,90 @@ export function callMock(action: string, args: any[] = []): any {
     case "prosesScanQR": {
       const [qrContent, kategori, mode, tanggal] = args;
       const masterKey = kategori === "Siswa" ? "data_siswa" : "data_guru";
-      const master = getStorage(masterKey);
-      const user = master.find((x: any) => x.qr_content === qrContent);
+      let master = getStorage(masterKey);
+      if (!Array.isArray(master) || master.length === 0) {
+        initMockDb();
+        master = getStorage(masterKey);
+      }
       
-      if (!user) return { success: false, message: "QR Code tidak valid atau tidak terdaftar!" };
+      const cleanQr = String(qrContent || "").trim().toLowerCase();
+      const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
+      const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
+      const identifierKey = kategori === "Siswa" ? "nisn" : "nip_nuptk";
+
+      // Flexible lookup: QR content, ID, NISN/NIP, or Name
+      let user = master.find((x: any) => {
+        const qr = String(x.qr_content || "").trim().toLowerCase();
+        const id = String(x[idKey] || "").trim().toLowerCase();
+        const ident = String(x[identifierKey] || "").trim().toLowerCase();
+        const nama = String(x[nameKey] || "").trim().toLowerCase();
+        const rawNama = String(x.nama || "").trim().toLowerCase();
+        
+        return (
+          (qr && (qr === cleanQr || cleanQr.includes(qr) || qr.includes(cleanQr))) ||
+          (id && (id === cleanQr || cleanQr.includes(id))) ||
+          (ident && ident === cleanQr) ||
+          (nama && (nama === cleanQr || cleanQr.includes(nama) || nama.includes(cleanQr))) ||
+          (rawNama && (rawNama === cleanQr || cleanQr.includes(rawNama) || rawNama.includes(cleanQr)))
+        );
+      });
+      
+      if (!user) {
+        // Try opposite category if not found
+        const altKey = kategori === "Siswa" ? "data_guru" : "data_siswa";
+        const altMaster = getStorage(altKey);
+        const altIdKey = kategori === "Siswa" ? "id_guru" : "id_siswa";
+        const altNameKey = kategori === "Siswa" ? "nama_guru" : "nama_siswa";
+        const altIdentKey = kategori === "Siswa" ? "nip_nuptk" : "nisn";
+        
+        const altUser = altMaster.find((x: any) => {
+          const qr = String(x.qr_content || "").trim().toLowerCase();
+          const id = String(x[altIdKey] || "").trim().toLowerCase();
+          const ident = String(x[altIdentKey] || "").trim().toLowerCase();
+          const nama = String(x[altNameKey] || "").trim().toLowerCase();
+          return (qr && qr === cleanQr) || (id && id === cleanQr) || (ident && ident === cleanQr) || (nama && nama === cleanQr);
+        });
+
+        if (altUser) {
+          user = altUser;
+        }
+      }
+
+      if (!user) return { success: false, message: `ID / Kartu "${qrContent}" tidak valid atau belum terdaftar!` };
       
       const tgl = tanggal || new Date().toISOString().split("T")[0];
       const jam = new Date().toTimeString().slice(0, 5);
-      const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
+      const isGuruUser = Boolean(user.id_guru || user.nama_guru || user.nip_nuptk);
+      const activeKategori = isGuruUser ? "Guru" : "Siswa";
+      const reportsKey = activeKategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
       const reports = getStorage(reportsKey);
       
-      const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
-      const idTarget = user[idKey];
-      const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
-      const nama = user[nameKey];
-      const classKey = kategori === "Siswa" ? `${user.kelas} - ${user.jurusan}` : "-";
+      const activeIdKey = activeKategori === "Siswa" ? "id_siswa" : "id_guru";
+      const idTarget = user[activeIdKey] || user.id_siswa || user.id_guru || qrContent;
+      const activeNameKey = activeKategori === "Siswa" ? "nama_siswa" : "nama_guru";
+      const nama = user[activeNameKey] || user.nama || qrContent;
+      const classKey = activeKategori === "Siswa" ? `${user.kelas || "-"} ${user.jurusan || ""}`.trim() : "-";
       
       // Check for duplicate
-      const index = reports.findIndex((r: any) => r.tanggal === tgl && (r.id_siswa === idTarget || r.id_guru === idTarget || r.id_target === idTarget || r[idKey] === idTarget));
+      const index = reports.findIndex((r: any) => r.tanggal === tgl && (r[activeIdKey] === idTarget || r.id_siswa === idTarget || r.id_guru === idTarget || r.id_target === idTarget));
       const cfg = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
       
       if (mode === "Masuk") {
-        if (index !== -1 && reports[index].jam_masuk !== "-") {
-          return { success: false, message: "Pengguna sudah melakukan scan masuk hari ini!" };
+        if (index !== -1 && reports[index].jam_masuk && reports[index].jam_masuk !== "-") {
+          return { success: true, message: `${nama} sudah melakukan presensi masuk hari ini (${reports[index].jam_masuk} WIB)!`, data: reports[index] };
         }
-        if (jam < (cfg.jam_masuk_mulai || "06:00")) return { success: false, message: "Jam masuk belum dibuka." };
         
         const statusMasuk = (jam <= (cfg.jam_masuk_batas || "07:15")) ? "Tepat Waktu" : "Terlambat";
         const idLog = "LOG-" + new Date().getTime();
         
-        const newRow = kategori === "Siswa" ? {
+        if (index !== -1) {
+          reports[index].jam_masuk = jam;
+          reports[index].status_masuk = statusMasuk;
+          setStorage(reportsKey, reports);
+          return { success: true, message: `Presensi Masuk Berhasil: ${nama} (${statusMasuk})`, data: reports[index] };
+        }
+
+        const newRow = activeKategori === "Siswa" ? {
           id_log_siswa: idLog,
           tanggal: tgl,
           id_siswa: idTarget,
@@ -713,7 +767,7 @@ export function callMock(action: string, args: any[] = []): any {
         setStorage(reportsKey, reports);
         
         // Auto sync to absensi_mengajar_guru for Guru category based on schedule
-        if (kategori === "Guru") {
+        if (activeKategori === "Guru") {
           try {
             const hariList = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
             const hariIni = hariList[new Date().getDay()];
@@ -751,7 +805,7 @@ export function callMock(action: string, args: any[] = []): any {
                 jam_mulai_jadwal: jamMulai,
                 jam_selesai_jadwal: matchSch.jam_selesai || activeSlot?.jam_selesai || "07:45",
                 status: statusMengajar,
-                catatan_materi: "Presensi Otomatis via Menu Absensi"
+                catatan_materi: "Presensi Otomatis via Auto Scanner"
               };
               if (existingIdx !== -1) absLogs[existingIdx] = logItem;
               else absLogs.push(logItem);
@@ -760,23 +814,18 @@ export function callMock(action: string, args: any[] = []): any {
           } catch (e) { console.error("Auto sync guru schedule error", e); }
         }
 
-        return { success: true, message: `Berhasil Absen Masuk (SIMULASI).\nStatus: ${statusMasuk}\nNama: ${nama}` };
+        return { success: true, message: `Presensi Masuk Berhasil: ${nama} (${statusMasuk})`, data: newRow };
       } else {
         // Mode Pulang
-        if (jam < (cfg.jam_pulang_mulai || "15:30")) return { success: false, message: "Jam pulang belum dibuka." };
-        
         if (index !== -1) {
-          if (reports[index].jam_pulang !== "-") {
-            return { success: false, message: "Pengguna sudah melakukan scan pulang hari ini!" };
-          }
           reports[index].jam_pulang = jam;
           reports[index].status_pulang = "Tepat Waktu";
           setStorage(reportsKey, reports);
-          return { success: true, message: `Berhasil Absen Pulang (SIMULASI).\nNama: ${nama}` };
+          return { success: true, message: `Presensi Pulang Berhasil: ${nama}`, data: reports[index] };
         } else {
           // Lupa masuk
           const idLog = "LOG-" + new Date().getTime();
-          const newRow = kategori === "Siswa" ? {
+          const newRow = activeKategori === "Siswa" ? {
             id_log_siswa: idLog,
             tanggal: tgl,
             id_siswa: idTarget,
@@ -800,8 +849,108 @@ export function callMock(action: string, args: any[] = []): any {
           };
           reports.push(newRow);
           setStorage(reportsKey, reports);
-          return { success: true, message: `Absen Pulang Berhasil (Peringatan: Lupa scan masuk, SIMULASI).\nNama: ${nama}` };
+          return { success: true, message: `Presensi Pulang Berhasil: ${nama} (Lupa Scan Masuk)`, data: newRow };
         }
+      }
+    }
+
+    case "catatAbsensiSiswa": {
+      const [idTarget, mode, status, keterangan, tanggal, jamCustom, namaSiswa, kelasJurusan] = args;
+      const tgl = tanggal || new Date().toISOString().split("T")[0];
+      const jam = jamCustom || new Date().toTimeString().slice(0, 5);
+      const reports = getStorage("laporan_siswa") || [];
+      const master = getStorage("data_siswa") || [];
+      
+      const sObj = master.find((s: any) => 
+        String(s.id_siswa || "").toLowerCase() === String(idTarget || "").toLowerCase() ||
+        String(s.nisn || "").toLowerCase() === String(idTarget || "").toLowerCase() ||
+        String(s.nama_siswa || "").toLowerCase() === String(namaSiswa || idTarget || "").toLowerCase()
+      );
+      
+      const nama = namaSiswa || sObj?.nama_siswa || sObj?.nama || idTarget;
+      const kelas = kelasJurusan || (sObj ? `${sObj.kelas || ""} ${sObj.jurusan || ""}`.trim() : "Siswa");
+      const targetId = sObj?.id_siswa || idTarget;
+
+      const idx = reports.findIndex((r: any) => r.tanggal === tgl && (r.id_siswa === targetId || r.id_target === targetId || String(r.nama_siswa || "").toLowerCase() === String(nama).toLowerCase()));
+      const statusText = status || (mode === "Masuk" ? "Tepat Waktu" : "Sudah Pulang");
+
+      if (idx !== -1) {
+        if (mode === "Masuk") {
+          reports[idx].jam_masuk = jam;
+          reports[idx].status_masuk = statusText;
+        } else {
+          reports[idx].jam_pulang = jam;
+          reports[idx].status_pulang = statusText;
+        }
+        if (keterangan) reports[idx].ket = keterangan;
+        setStorage("laporan_siswa", reports);
+        return { success: true, message: `Presensi Siswa Berhasil: ${nama}`, data: reports[idx] };
+      } else {
+        const idLog = "LOG-S-" + Date.now();
+        const newRow = {
+          id_log_siswa: idLog,
+          tanggal: tgl,
+          id_siswa: targetId,
+          nama_siswa: nama,
+          kelas_jurusan: kelas,
+          jam_masuk: mode === "Masuk" ? jam : "-",
+          status_masuk: mode === "Masuk" ? statusText : "Belum Absen",
+          jam_pulang: mode === "Pulang" ? jam : "-",
+          status_pulang: mode === "Pulang" ? statusText : "-",
+          ket: keterangan || "Scan Auto Board"
+        };
+        reports.push(newRow);
+        setStorage("laporan_siswa", reports);
+        return { success: true, message: `Presensi Siswa Berhasil: ${nama}`, data: newRow };
+      }
+    }
+
+    case "catatAbsensiGuru": {
+      const [idTarget, mode, status, keterangan, tanggal, jamCustom, namaGuru, nip] = args;
+      const tgl = tanggal || new Date().toISOString().split("T")[0];
+      const jam = jamCustom || new Date().toTimeString().slice(0, 5);
+      const reports = getStorage("laporan_guru") || [];
+      const master = getStorage("data_guru") || [];
+      
+      const gObj = master.find((g: any) => 
+        String(g.id_guru || "").toLowerCase() === String(idTarget || "").toLowerCase() ||
+        String(g.nip_nuptk || "").toLowerCase() === String(idTarget || "").toLowerCase() ||
+        String(g.nama_guru || "").toLowerCase() === String(namaGuru || idTarget || "").toLowerCase()
+      );
+      
+      const nama = namaGuru || gObj?.nama_guru || gObj?.nama || idTarget;
+      const targetId = gObj?.id_guru || idTarget;
+
+      const idx = reports.findIndex((r: any) => r.tanggal === tgl && (r.id_guru === targetId || r.id_target === targetId || String(r.nama_guru || "").toLowerCase() === String(nama).toLowerCase()));
+      const statusText = status || (mode === "Masuk" ? "Tepat Waktu" : "Sudah Pulang");
+
+      if (idx !== -1) {
+        if (mode === "Masuk") {
+          reports[idx].jam_masuk = jam;
+          reports[idx].status_masuk = statusText;
+        } else {
+          reports[idx].jam_pulang = jam;
+          reports[idx].status_pulang = statusText;
+        }
+        if (keterangan) reports[idx].ket = keterangan;
+        setStorage("laporan_guru", reports);
+        return { success: true, message: `Presensi Guru Berhasil: ${nama}`, data: reports[idx] };
+      } else {
+        const idLog = "LOG-G-" + Date.now();
+        const newRow = {
+          id_log_guru: idLog,
+          tanggal: tgl,
+          id_guru: targetId,
+          nama_guru: nama,
+          jam_masuk: mode === "Masuk" ? jam : "-",
+          status_masuk: mode === "Masuk" ? statusText : "Belum Absen",
+          jam_pulang: mode === "Pulang" ? jam : "-",
+          status_pulang: mode === "Pulang" ? statusText : "-",
+          ket: keterangan || "Scan Auto Board"
+        };
+        reports.push(newRow);
+        setStorage("laporan_guru", reports);
+        return { success: true, message: `Presensi Guru Berhasil: ${nama}`, data: newRow };
       }
     }
 
