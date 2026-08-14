@@ -87,6 +87,13 @@ export function extractArrayData(res: any): any[] {
   if (res.list && Array.isArray(res.list)) return res.list;
   if (res.items && Array.isArray(res.items)) return res.items;
   if (res.rows && Array.isArray(res.rows)) return res.rows;
+  if (res.PresensiSiswa && Array.isArray(res.PresensiSiswa)) return res.PresensiSiswa;
+  if (res.PresensiGuru && Array.isArray(res.PresensiGuru)) return res.PresensiGuru;
+  if (res.AbsensiMengajar && Array.isArray(res.AbsensiMengajar)) return res.AbsensiMengajar;
+  if (res.presensi_siswa && Array.isArray(res.presensi_siswa)) return res.presensi_siswa;
+  if (res.presensi_guru && Array.isArray(res.presensi_guru)) return res.presensi_guru;
+  if (res.absensi_mengajar && Array.isArray(res.absensi_mengajar)) return res.absensi_mengajar;
+  if (res.absensi_mengajar_guru && Array.isArray(res.absensi_mengajar_guru)) return res.absensi_mengajar_guru;
   if (res.jam_pelajaran && Array.isArray(res.jam_pelajaran)) return res.jam_pelajaran;
   if (res.jadwal_pelajaran && Array.isArray(res.jadwal_pelajaran)) return res.jadwal_pelajaran;
   if (res.jadwal_guru && Array.isArray(res.jadwal_guru)) return res.jadwal_guru;
@@ -96,6 +103,8 @@ export function extractArrayData(res: any): any[] {
   if (res.presensiSiswa && Array.isArray(res.presensiSiswa)) return res.presensiSiswa;
   if (res.presensiGuru && Array.isArray(res.presensiGuru)) return res.presensiGuru;
   if (res.absensiMengajar && Array.isArray(res.absensiMengajar)) return res.absensiMengajar;
+  if (res.laporan_siswa && Array.isArray(res.laporan_siswa)) return res.laporan_siswa;
+  if (res.laporan_guru && Array.isArray(res.laporan_guru)) return res.laporan_guru;
   if (res.laporanSiswa && Array.isArray(res.laporanSiswa)) return res.laporanSiswa;
   if (res.laporanGuru && Array.isArray(res.laporanGuru)) return res.laporanGuru;
   return [];
@@ -1968,6 +1977,44 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
           setStorage("data_kelas", currentK);
         }
       }
+
+      // Explicit sheet destination mapping according to system architecture
+      const actLower = String(action || "").toLowerCase();
+      const firstArg = typeof args[0] === "string" ? args[0] : "";
+      const secondArg = typeof args[1] === "string" ? args[1] : "";
+
+      if (
+        action === "getPresensiSiswa" ||
+        action === "catatAbsensiSiswa" ||
+        (actLower.includes("laporan") && (firstArg === "Siswa" || secondArg === "Siswa")) ||
+        (action === "prosesScanQR" && (secondArg === "Siswa" || firstArg === "Siswa")) ||
+        (action === "simpanAbsenManual" && secondArg === "Siswa")
+      ) {
+        bodyObj.sheet_name = "PresensiSiswa";
+        bodyObj.sheetName = "PresensiSiswa";
+        bodyObj.target_sheet = "PresensiSiswa";
+        bodyObj.targetSheet = "PresensiSiswa";
+      } else if (
+        action === "getPresensiGuru" ||
+        action === "catatAbsensiGuru" ||
+        (actLower.includes("laporan") && (firstArg === "Guru" || secondArg === "Guru")) ||
+        (action === "prosesScanQR" && (secondArg === "Guru" || firstArg === "Guru")) ||
+        (action === "simpanAbsenManual" && secondArg === "Guru")
+      ) {
+        bodyObj.sheet_name = "PresensiGuru";
+        bodyObj.sheetName = "PresensiGuru";
+        bodyObj.target_sheet = "PresensiGuru";
+        bodyObj.targetSheet = "PresensiGuru";
+      } else if (
+        actLower.includes("absensimengajar") ||
+        actLower.includes("jadwalmengajar")
+      ) {
+        bodyObj.sheet_name = "AbsensiMengajar";
+        bodyObj.sheetName = "AbsensiMengajar";
+        bodyObj.target_sheet = "AbsensiMengajar";
+        bodyObj.targetSheet = "AbsensiMengajar";
+      }
+
       for (const a of args) {
         if (typeof a === "object" && a !== null && !Array.isArray(a)) {
           Object.assign(bodyObj, a);
