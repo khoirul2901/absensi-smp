@@ -1205,21 +1205,54 @@ export default function AbsensiScanner({ session }: { session?: any }) {
       const scanTodayStr = new Date().toISOString().split("T")[0];
       const res = await callGas("prosesScanQR", [code, kategori, activeMode, scanTodayStr]);
       if (res && res.success) {
+        // Extract real person name from response or local master data
+        let personName = "";
+        if (res.data) {
+          personName = res.data.nama_siswa || res.data.nama_guru || res.data.nama || "";
+        }
+        if (!personName && res.message) {
+          const matchColon = res.message.match(/:\s*([^(]+)/);
+          if (matchColon && matchColon[1]) {
+            personName = matchColon[1].trim();
+          }
+        }
+        if (!personName) {
+          const mList: any[] = kategori === "Siswa" ? (getStorage("data_siswa") || []) : (teachersList && teachersList.length > 0 ? teachersList : (getStorage("data_guru") || []));
+          const cleanCode = code.toLowerCase();
+          const cleanWithoutPrefix = cleanCode.replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
+          const matched = mList.find((x: any) => {
+            const id = String(x.id_siswa || x.id_guru || x.id || "").trim().toLowerCase();
+            const ident = String(x.nisn || x.nip || x.nip_nuptk || "").trim().toLowerCase();
+            const qr = String(x.qr_content || x.qr_code || "").trim().toLowerCase();
+            return (id && id === cleanCode) || (ident && ident === cleanCode) || (qr && qr === cleanCode);
+          }) || (cleanWithoutPrefix ? mList.find((x: any) => {
+            const id = String(x.id_siswa || x.id_guru || x.id || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
+            const ident = String(x.nisn || x.nip || x.nip_nuptk || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
+            const qr = String(x.qr_content || x.qr_code || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
+            return (id && id === cleanWithoutPrefix) || (ident && ident === cleanWithoutPrefix) || (qr && qr === cleanWithoutPrefix);
+          }) : null);
+
+          if (matched) {
+            personName = matched.nama_siswa || matched.nama_guru || matched.nama || "";
+          }
+        }
+        const displayName = personName || code;
+
         setScanStatus({ 
           type: "success", 
-          msg: res.message || `Absensi ${kategori} Berhasil!`,
-          targetName: code,
+          msg: res.message || `Presensi ${displayName} (${activeMode}) Berhasil!`,
+          targetName: displayName,
           details: `Mode: ${activeMode} • Kategori: ${kategori}`
         });
 
         // Update queue item
         setScanQueue(prev => prev.map(item => 
-          item.id === queueId ? { ...item, status: "success", message: res.message || "Tersimpan" } : item
+          item.id === queueId ? { ...item, status: "success", message: res.message || `${displayName} Tersimpan` } : item
         ));
 
-        // Voice announcement
+        // Voice announcement with actual person name
         if (speechEnabled) {
-          speakText(fastMode === "turbo" ? "Hadir!" : `${code}. Absen ${activeMode} berhasil.`);
+          speakText(fastMode === "turbo" ? `Hadir, ${displayName}!` : `${displayName}. Presensi ${activeMode} berhasil.`);
         }
 
         if (filterTanggal !== scanTodayStr) {
