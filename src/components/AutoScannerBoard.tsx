@@ -344,9 +344,13 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
             realClassOrNip = personObj?.nip_nuptk || personObj?.nip || rowData.id_guru || code;
             if (activeScanType === "mengajar") {
               realStatus = rowData.status || "Hadir Tepat Waktu";
-              scheduleNote = `Mengajar: ${rowData.mapel} (${rowData.kelas}) • Jam Ke-${rowData.jam_ke}`;
+              const jamLabel = rowData.jam_ke_label || `Jam Ke-${rowData.jam_ke}`;
+              scheduleNote = `Mengajar: ${rowData.mapel} (${rowData.kelas}) • ${jamLabel}`;
             } else if (activeScanType === "masuk") {
               realStatus = rowData.status_masuk || fallbackStatus;
+              if (rowData.ket && rowData.ket.includes("Jadwal")) {
+                scheduleNote = rowData.ket;
+              }
             } else if (activeScanType === "pulang") {
               realStatus = rowData.status_pulang || "Tepat Waktu";
             } else {
@@ -426,7 +430,8 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
       // Play Beep & Voice Announcement with Contextual Info
       if (activeScanType === "info") {
         playBeep("info");
-        speakText(`${realName} sudah presensi masuk.`);
+        const infoMsg = scanRes?.message || `${realName} sudah presensi masuk.`;
+        speakText(infoMsg);
       } else if (activeScanType === "mengajar") {
         playBeep("success");
         const matchData = scanRes?.data;
