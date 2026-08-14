@@ -31,16 +31,21 @@ import {
   UserCheck,
   ArrowRight,
   Loader2,
-  Code
+  Code,
+  FileSpreadsheet,
+  Layers,
+  CheckCircle2,
+  ExternalLink
 } from "lucide-react";
 import { callGas, getStorageKey, setStorage, getStorage, extractArrayData, cleanTimeHHMM, getSchoolProfile, setSchoolProfile } from "../lib/gasApi";
 import { ConfigJam, HariLibur } from "../types";
 
 export default function Settings() {
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<"profil" | "jam" | "keamanan" | "backup">("profil");
+  const [activeTab, setActiveTab] = useState<"profil" | "jam" | "keamanan" | "spreadsheet" | "backup">("profil");
   const [loading, setLoading] = useState(false);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem(getStorageKey("SIAS_SESSION"));
@@ -539,6 +544,18 @@ export default function Settings() {
         </button>
 
         <button
+          onClick={() => setActiveTab("spreadsheet")}
+          className={`flex-1 min-w-[140px] px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+            activeTab === "spreadsheet"
+              ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+              : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+          }`}
+        >
+          <FileSpreadsheet className="w-4 h-4" />
+          <span>Struktur Sheet & GAS</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab("backup")}
           className={`flex-1 min-w-[140px] px-4 py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
             activeTab === "backup"
@@ -1013,6 +1030,201 @@ export default function Settings() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* TAB: STRUKTUR SPREADSHEET & APPS SCRIPT */}
+      {activeTab === "spreadsheet" && (
+        <div className="space-y-6">
+          {/* Header Info */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 md:p-8 space-y-4">
+            <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
+              <div className="p-2.5 bg-emerald-50 rounded-xl text-emerald-600">
+                <FileSpreadsheet className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-extrabold text-gray-900">Struktur Sheet Database Google Spreadsheet</h2>
+                <p className="text-xs text-gray-500">Konfigurasi nama sheet dan pemetaan kolom untuk sinkronisasi otomatis presensi dan master data</p>
+              </div>
+            </div>
+
+            {/* 3 Core Attendance Sheets Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+              {/* Sheet 1: PresensiSiswa */}
+              <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="px-2.5 py-1 bg-blue-600 text-white text-[11px] font-black rounded-lg uppercase tracking-wider">
+                    Sheet: PresensiSiswa
+                  </span>
+                  <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                </div>
+                <h3 className="text-xs font-extrabold text-blue-950">Presensi Harian Siswa</h3>
+                <p className="text-[11px] text-blue-800 leading-relaxed">
+                  Menyimpan log rekap kehadiran harian siswa (Masuk dan Pulang) hasil scan QR/Barcode eksternal & manual.
+                </p>
+                <div className="bg-white/80 p-2.5 rounded-xl border border-blue-100 text-[10px] text-blue-900 font-mono space-y-0.5">
+                  <p className="font-bold text-blue-950">Kolom Sheet:</p>
+                  <p className="break-all text-slate-700">id_log_siswa, tanggal, id_siswa, nama_siswa, kelas_jurusan, jam_masuk, status_masuk, jam_pulang, status_pulang, ket</p>
+                </div>
+              </div>
+
+              {/* Sheet 2: PresensiGuru */}
+              <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="px-2.5 py-1 bg-indigo-600 text-white text-[11px] font-black rounded-lg uppercase tracking-wider">
+                    Sheet: PresensiGuru
+                  </span>
+                  <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                </div>
+                <h3 className="text-xs font-extrabold text-indigo-950">Presensi Harian Guru (Jam Fleksibel)</h3>
+                <p className="text-[11px] text-indigo-800 leading-relaxed">
+                  Menyimpan log kehadiran harian guru dengan jam kerja fleksibel / harian (Masuk & Pulang sekolah).
+                </p>
+                <div className="bg-white/80 p-2.5 rounded-xl border border-indigo-100 text-[10px] text-indigo-900 font-mono space-y-0.5">
+                  <p className="font-bold text-indigo-950">Kolom Sheet:</p>
+                  <p className="break-all text-slate-700">id_log_guru, tanggal, id_guru, nama_guru, jam_masuk, status_masuk, jam_pulang, status_pulang, ket</p>
+                </div>
+              </div>
+
+              {/* Sheet 3: AbsensiMengajar */}
+              <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="px-2.5 py-1 bg-purple-600 text-white text-[11px] font-black rounded-lg uppercase tracking-wider">
+                    Sheet: AbsensiMengajar
+                  </span>
+                  <CheckCircle2 className="w-4 h-4 text-purple-600" />
+                </div>
+                <h3 className="text-xs font-extrabold text-purple-950">Presensi Guru Sesuai Jadwal Mengajar</h3>
+                <p className="text-[11px] text-purple-800 leading-relaxed">
+                  Menyimpan jurnal & presensi mengajar guru per jam pelajaran, kelas, mata pelajaran, serta status keterlambatan kelas.
+                </p>
+                <div className="bg-white/80 p-2.5 rounded-xl border border-purple-100 text-[10px] text-purple-900 font-mono space-y-0.5">
+                  <p className="font-bold text-purple-950">Kolom Sheet:</p>
+                  <p className="break-all text-slate-700">id_log_mengajar, tanggal, waktu_absen, hari, id_guru, nama_guru, kelas, mapel, jam_ke, jam_mulai_jadwal, jam_selesai_jadwal, status, catatan_materi</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Other Sheets Summary */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2 mt-4">
+              <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-2">
+                <Layers className="w-4 h-4 text-slate-600" />
+                <span>Sheet Master Lainnya pada Google Spreadsheet:</span>
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-[11px]">
+                <div className="bg-white p-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-700 text-center">DataSiswa</div>
+                <div className="bg-white p-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-700 text-center">DataGuru</div>
+                <div className="bg-white p-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-700 text-center">DataKelas</div>
+                <div className="bg-white p-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-700 text-center">JadwalPelajaran</div>
+                <div className="bg-white p-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-700 text-center">JamPelajaran</div>
+                <div className="bg-white p-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-700 text-center">Pengaturan</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Apps Script Helper Card */}
+          <div className="bg-slate-900 text-white rounded-2xl p-6 md:p-8 space-y-4 shadow-xl border border-slate-800">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-2.5">
+                <Code className="w-5 h-5 text-emerald-400" />
+                <div>
+                  <h3 className="text-sm font-extrabold text-white">Kode Google Apps Script (GAS) SIAS</h3>
+                  <p className="text-xs text-slate-400">Salin skrip berikut ke menu <b>Ekstensi &gt; Apps Script</b> pada Google Spreadsheet Anda</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const gasCodeText = `/**
+ * SIAS Google Apps Script Backend Web App
+ * Target Sheets:
+ * 1. PresensiSiswa (Presensi Siswa Harian)
+ * 2. PresensiGuru (Presensi Guru Fleksibel / Harian)
+ * 3. AbsensiMengajar (Presensi Guru Jadwal Mengajar)
+ */
+function doPost(e) {
+  var lock = LockService.getScriptLock();
+  lock.tryLock(10000);
+  try {
+    var rawData = e && e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : {};
+    var action = rawData.action || "";
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    
+    function getOrMakeSheet(name, headers) {
+      var s = ss.getSheetByName(name);
+      if (!s) {
+        s = ss.insertSheet(name);
+        if (headers && headers.length > 0) s.appendRow(headers);
+      }
+      return s;
+    }
+    
+    if (action === "getPresensiSiswa" || action === "getLaporanSiswa") {
+      var s = getOrMakeSheet("PresensiSiswa", ["id_log_siswa", "tanggal", "id_siswa", "nama_siswa", "kelas_jurusan", "jam_masuk", "status_masuk", "jam_pulang", "status_pulang", "ket"]);
+      var data = getSheetObjects(s);
+      return jsonResponse({ success: true, data: data, PresensiSiswa: data });
+    }
+    
+    if (action === "getPresensiGuru" || action === "getLaporanGuru") {
+      var s = getOrMakeSheet("PresensiGuru", ["id_log_guru", "tanggal", "id_guru", "nama_guru", "jam_masuk", "status_masuk", "jam_pulang", "status_pulang", "ket"]);
+      var data = getSheetObjects(s);
+      return jsonResponse({ success: true, data: data, PresensiGuru: data });
+    }
+    
+    if (action === "getAbsensiMengajarGuru" || action === "getAbsensiMengajar") {
+      var s = getOrMakeSheet("AbsensiMengajar", ["id_log_mengajar", "tanggal", "waktu_absen", "hari", "id_guru", "nama_guru", "kelas", "mapel", "jam_ke", "jam_mulai_jadwal", "jam_selesai_jadwal", "status", "catatan_materi"]);
+      var data = getSheetObjects(s);
+      return jsonResponse({ success: true, data: data, AbsensiMengajar: data });
+    }
+    
+    return jsonResponse({ success: true, message: "OK" });
+  } catch (err) {
+    return jsonResponse({ success: false, message: err.toString() });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getSheetObjects(sheet) {
+  var values = sheet.getDataRange().getValues();
+  if (values.length <= 1) return [];
+  var headers = values[0];
+  var result = [];
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      obj[headers[j]] = row[j];
+    }
+    result.push(obj);
+  }
+  return result;
+}
+
+function jsonResponse(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}`;
+                  navigator.clipboard.writeText(gasCodeText);
+                  setCopiedCode(true);
+                  setTimeout(() => setCopiedCode(false), 2500);
+                }}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                {copiedCode ? <Check className="w-4 h-4 text-white" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedCode ? "Skrip Disalin!" : "Salin Skrip Apps Script"}</span>
+              </button>
+            </div>
+
+            <div className="bg-slate-950 p-4 rounded-xl font-mono text-[11px] text-slate-300 overflow-x-auto max-h-60 border border-slate-800">
+              <pre>
+{`// Target Sheets SIAS:
+// 1. PresensiSiswa  -> [id_log_siswa, tanggal, id_siswa, nama_siswa, kelas_jurusan, jam_masuk, status_masuk, jam_pulang, status_pulang, ket]
+// 2. PresensiGuru   -> [id_log_guru, tanggal, id_guru, nama_guru, jam_masuk, status_masuk, jam_pulang, status_pulang, ket]
+// 3. AbsensiMengajar-> [id_log_mengajar, tanggal, waktu_absen, hari, id_guru, nama_guru, kelas, mapel, jam_ke, jam_mulai_jadwal, jam_selesai_jadwal, status, catatan_materi]`}
+              </pre>
+            </div>
+          </div>
         </div>
       )}
 
