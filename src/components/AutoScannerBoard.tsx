@@ -283,38 +283,57 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
       const currentMinutes = now.getMinutes();
       const autoMode: "Masuk" | "Pulang" = currentHour >= 12 ? "Pulang" : "Masuk";
       const isLate = autoMode === "Masuk" && (currentHour > 7 || (currentHour === 7 && currentMinutes > 15));
-      const statusText = autoMode === "Masuk" ? (isLate ? "Terlambat" : "Hadir Tepat Waktu") : "Sudah Pulang";
+      const fallbackStatus = autoMode === "Masuk" ? (isLate ? "Terlambat" : "Tepat Waktu") : "Tepat Waktu";
 
-      let resultObj: AutoScanResult;
+      // 1. PANGGIL BACKEND DATABASE (Sama persis dengan Menu Absensi Scanner Eksternal: prosesScanQR)
+      const scanRes = await callGas("prosesScanQR", [code, role, autoMode, dateString]);
+      
+      let realName = "";
+      let realRole = role;
+      let realStatus = fallbackStatus;
+      let realClassOrNip = "-";
+      let scheduleNote = "";
 
-      if (role === "Siswa") {
-        // PROCESS SISWA ABSENSI
-        const personName = personObj?.nama_siswa || personObj?.nama || (code.length > 4 ? `Siswa (${code})` : "Siswa");
-        const kelasStr = personObj?.kelas_jurusan || (personObj?.kelas ? `${personObj.kelas} ${personObj.jurusan || ""}`.trim() : "Siswa");
-        const idTarget = personObj?.id_siswa || personObj?.nisn || code;
+      if (scanRes && scanRes.success) {
+        const rowData = scanRes.data;
+        if (rowData) {
+          if (rowData.nama_siswa || rowData.id_siswa || rowData.kelas_jurusan) {
+            realRole = "Siswa";
+            realName = rowData.nama_siswa || personObj?.nama_siswa || personObj?.nama || code;
+            realClassOrNip = rowData.kelas_jurusan || (personObj?.kelas ? `${personObj.kelas} ${personObj.jurusan || ""}`.trim() : "Siswa");
+            realStatus = autoMode === "Masuk" ? (rowData.status_masuk || fallbackStatus) : (rowData.status_pulang || "Tepat Waktu");
+          } else if (rowData.nama_guru || rowData.id_guru) {
+            realRole = "Guru";
+            realName = rowData.nama_guru || personObj?.nama_guru || personObj?.nama || code;
+            realClassOrNip = personObj?.nip_nuptk || personObj?.nip || rowData.id_guru || code;
+            realStatus = autoMode === "Masuk" ? (rowData.status_masuk || fallbackStatus) : (rowData.status_pulang || "Tepat Waktu");
+          }
+        }
+      }
 
-        // 1. Save to Backend Database (Google Apps Script & Mock Storage)
-        await callGas("catatAbsensiSiswa", [
-          idTarget,
-          autoMode,
-          statusText,
-          "Scan Auto Board",
-          dateString,
-          timeString,
-          personName,
-          kelasStr
-        ]);
+      if (!realName) {
+        if (realRole === "Siswa") {
+          realName = personObj?.nama_siswa || personObj?.nama || `Siswa (${code})`;
+          realClassOrNip = personObj?.kelas_jurusan || (personObj?.kelas ? `${personObj.kelas} ${personObj.jurusan || ""}`.trim() : "Siswa");
+        } else {
+          realName = personObj?.nama_guru || personObj?.nama || `Bapak/Ibu Guru (${code})`;
+          realClassOrNip = personObj?.nip_nuptk || personObj?.nip || personObj?.id_guru || code;
+        }
+      }
 
-        // 2. Direct Sync Local Storage Laporan Siswa to ensure instantaneous UI updates across all tabs
+      const idTarget = personObj?.id_siswa || personObj?.id_guru || personObj?.nisn || personObj?.nip_nuptk || code;
+
+      // 2. Direct Sync Local Storage Laporan Siswa & Guru
+      if (realRole === "Siswa") {
         const curReports = getStorage("laporan_siswa") || [];
-        const existingIdx = curReports.findIndex((r: any) => r.tanggal === dateString && (r.id_siswa === idTarget || r.id_target === idTarget || String(r.nama_siswa || "").toLowerCase() === personName.toLowerCase()));
+        const existingIdx = curReports.findIndex((r: any) => r.tanggal === dateString && (r.id_siswa === idTarget || r.id_target === idTarget || String(r.nama_siswa || "").toLowerCase() === realName.toLowerCase()));
         if (existingIdx !== -1) {
           if (autoMode === "Masuk") {
             curReports[existingIdx].jam_masuk = timeString;
-            curReports[existingIdx].status_masuk = statusText;
+            curReports[existingIdx].status_masuk = realStatus;
           } else {
             curReports[existingIdx].jam_pulang = timeString;
-            curReports[existingIdx].status_pulang = statusText;
+            curReports[existingIdx].status_pulang = realStatus;
           }
           curReports[existingIdx].ket = "Scan Auto Board";
         } else {
@@ -322,58 +341,26 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
             id_log_siswa: "LOG-S-" + Date.now(),
             tanggal: dateString,
             id_siswa: idTarget,
-            nama_siswa: personName,
-            kelas_jurusan: kelasStr,
+            nama_siswa: realName,
+            kelas_jurusan: realClassOrNip,
             jam_masuk: autoMode === "Masuk" ? timeString : "-",
-            status_masuk: autoMode === "Masuk" ? statusText : "Belum Absen",
+            status_masuk: autoMode === "Masuk" ? realStatus : "Belum Absen",
             jam_pulang: autoMode === "Pulang" ? timeString : "-",
-            status_pulang: autoMode === "Pulang" ? statusText : "-",
+            status_pulang: autoMode === "Pulang" ? realStatus : "-",
             ket: "Scan Auto Board"
           });
         }
         setStorage("laporan_siswa", curReports);
-
-        resultObj = {
-          id: idTarget,
-          name: personName,
-          role: "Siswa",
-          subDetail: `Kelas: ${kelasStr}`,
-          mode: autoMode,
-          status: statusText,
-          timestamp: timeString,
-          dateStr: dateString,
-          success: true,
-          message: `Presensi ${personName} (${autoMode}) Berhasil Dicatat ke Database`
-        };
-
       } else {
-        // PROCESS GURU ABSENSI & AUTO LESSON SCHEDULE
-        const personName = personObj?.nama_guru || personObj?.nama || (code.length > 4 ? `Guru (${code})` : "Bapak/Ibu Guru");
-        const nipStr = personObj?.nip_nuptk || personObj?.nip || personObj?.id_guru || code;
-        const idTarget = personObj?.id_guru || nipStr || code;
-
-        // 1. Record Harian Guru to Backend Database
-        await callGas("catatAbsensiGuru", [
-          idTarget,
-          autoMode,
-          statusText,
-          "Scan Auto Board",
-          dateString,
-          timeString,
-          personName,
-          nipStr
-        ]);
-
-        // 2. Direct Sync Local Storage Laporan Guru
         const curReports = getStorage("laporan_guru") || [];
-        const existingIdx = curReports.findIndex((r: any) => r.tanggal === dateString && (r.id_guru === idTarget || r.id_target === idTarget || String(r.nama_guru || "").toLowerCase() === personName.toLowerCase()));
+        const existingIdx = curReports.findIndex((r: any) => r.tanggal === dateString && (r.id_guru === idTarget || r.id_target === idTarget || String(r.nama_guru || "").toLowerCase() === realName.toLowerCase()));
         if (existingIdx !== -1) {
           if (autoMode === "Masuk") {
             curReports[existingIdx].jam_masuk = timeString;
-            curReports[existingIdx].status_masuk = statusText;
+            curReports[existingIdx].status_masuk = realStatus;
           } else {
             curReports[existingIdx].jam_pulang = timeString;
-            curReports[existingIdx].status_pulang = statusText;
+            curReports[existingIdx].status_pulang = realStatus;
           }
           curReports[existingIdx].ket = "Scan Auto Board";
         } else {
@@ -381,22 +368,21 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
             id_log_guru: "LOG-G-" + Date.now(),
             tanggal: dateString,
             id_guru: idTarget,
-            nama_guru: personName,
+            nama_guru: realName,
             jam_masuk: autoMode === "Masuk" ? timeString : "-",
-            status_masuk: autoMode === "Masuk" ? statusText : "Belum Absen",
+            status_masuk: autoMode === "Masuk" ? realStatus : "Belum Absen",
             jam_pulang: autoMode === "Pulang" ? timeString : "-",
-            status_pulang: autoMode === "Pulang" ? statusText : "-",
+            status_pulang: autoMode === "Pulang" ? realStatus : "-",
             ket: "Scan Auto Board"
           });
         }
         setStorage("laporan_guru", curReports);
 
-        // 3. AUTO LESSON SCHEDULE MATCHING FOR GURU
-        let scheduleNote = "";
+        // 3. AUTO LESSON SCHEDULE RECORD FOR GURU
         const matchedSchedule = jadwalToday.find((j: any) => {
           const idG = String(j.id_guru || "").toLowerCase();
           const nameG = String(j.nama_guru || "").toLowerCase();
-          return (idG && idG === idTarget.toLowerCase()) || (nameG && nameG.includes(personName.toLowerCase()));
+          return (idG && idG === idTarget.toLowerCase()) || (nameG && nameG.includes(realName.toLowerCase()));
         });
 
         if (matchedSchedule) {
@@ -409,7 +395,7 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
               waktu_absen: timeString,
               hari: matchedSchedule.hari || "Hari Ini",
               id_guru: idTarget,
-              nama_guru: personName,
+              nama_guru: realName,
               kelas: matchedSchedule.kelas || "Kelas Utama",
               mapel: matchedSchedule.mapel || "Pelajaran",
               jam_ke: matchedSchedule.jam_ke || 1,
@@ -422,21 +408,23 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
             console.error("Gagal auto-record absensi mengajar guru:", err);
           }
         }
-
-        resultObj = {
-          id: idTarget,
-          name: personName,
-          role: "Guru",
-          subDetail: `NIP/ID: ${nipStr}`,
-          mode: autoMode,
-          status: statusText,
-          timestamp: timeString,
-          dateStr: dateString,
-          scheduleDetail: scheduleNote,
-          success: true,
-          message: `Presensi ${personName} (${autoMode}) Berhasil Dicatat ke Database`
-        };
       }
+
+      const isSuccessful = Boolean(scanRes && scanRes.success !== false);
+
+      const resultObj: AutoScanResult = {
+        id: idTarget,
+        name: realName,
+        role: realRole,
+        subDetail: realRole === "Siswa" ? `Kelas: ${realClassOrNip}` : `NIP/ID: ${realClassOrNip}`,
+        mode: autoMode,
+        status: realStatus,
+        timestamp: timeString,
+        dateStr: dateString,
+        scheduleDetail: scheduleNote,
+        success: isSuccessful,
+        message: scanRes?.message || `Presensi ${realName} (${autoMode}) Berhasil Dicatat ke Database`
+      };
 
       // Update State & Banner Board
       setLastResult(resultObj);
