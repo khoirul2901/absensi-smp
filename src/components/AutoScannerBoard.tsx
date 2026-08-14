@@ -72,6 +72,8 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
   const [lastResult, setLastResult] = useState<AutoScanResult | null>(null);
   const [recentLogs, setRecentLogs] = useState<AutoScanResult[]>([]);
   const [currentTimeStr, setCurrentTimeStr] = useState<string>("");
+  const [showNotificationToast, setShowNotificationToast] = useState<boolean>(false);
+  const toastTimeoutRef = useRef<any>(null);
 
   // Statistics Today
   const [stats, setStats] = useState({
@@ -79,6 +81,24 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
     guruMasuk: 0,
     mengajarRecord: 0
   });
+
+  // Calculate today stats from storage
+  const refreshTodayStats = () => {
+    const todayStr = new Date().toISOString().split("T")[0];
+    const sReports = getStorage("laporan_siswa") || [];
+    const gReports = getStorage("laporan_guru") || [];
+    const mReports = getStorage("absensi_mengajar_guru") || [];
+
+    const sTodayCount = sReports.filter((r: any) => r.tanggal === todayStr && r.jam_masuk && r.jam_masuk !== "-").length;
+    const gTodayCount = gReports.filter((r: any) => r.tanggal === todayStr && r.jam_masuk && r.jam_masuk !== "-").length;
+    const mTodayCount = mReports.filter((r: any) => r.tanggal === todayStr).length;
+
+    setStats({
+      siswaMasuk: sTodayCount,
+      guruMasuk: gTodayCount,
+      mengajarRecord: mTodayCount
+    });
+  };
 
   // Clock Ticker
   useEffect(() => {
@@ -126,6 +146,8 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
         return h === todayName.toLowerCase();
       });
       setJadwalToday(filteredToday);
+
+      refreshTodayStats();
 
     } catch (e) {
       console.error("Gagal load master data auto scanner:", e);
@@ -208,23 +230,34 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
     const dateString = now.toISOString().split("T")[0];
 
     try {
-      // 1. DETERMINE PERSON ROLE (GURU vs SISWA)
       const cleanCode = code.toLowerCase();
       
-      // Look up in Guru list
+      // Look up in Guru list (ID, NIP, QR Content, Name, custom codes)
       let matchedGuru = guruList.find((g: any) => {
         const idG = String(g.id_guru || "").toLowerCase();
         const nipG = String(g.nip_nuptk || g.nip || "").toLowerCase();
+        const qrG = String(g.qr_content || "").toLowerCase();
         const namaG = String(g.nama_guru || g.nama || "").toLowerCase();
-        return (idG && idG === cleanCode) || (nipG && nipG === cleanCode) || (namaG && namaG === cleanCode);
+        return (
+          (idG && (idG === cleanCode || cleanCode.includes(idG))) ||
+          (nipG && (nipG === cleanCode || cleanCode.includes(nipG))) ||
+          (qrG && (qrG === cleanCode || cleanCode.includes(qrG) || qrG.includes(cleanCode))) ||
+          (namaG && (namaG === cleanCode || cleanCode.includes(namaG) || namaG.includes(cleanCode)))
+        );
       });
 
-      // Look up in Siswa list
+      // Look up in Siswa list (ID, NISN, QR Content, Name, custom codes)
       let matchedSiswa = siswaList.find((s: any) => {
         const idS = String(s.id_siswa || "").toLowerCase();
         const nisS = String(s.nisn || s.nis || "").toLowerCase();
+        const qrS = String(s.qr_content || "").toLowerCase();
         const namaS = String(s.nama_siswa || s.nama || "").toLowerCase();
-        return (idS && idS === cleanCode) || (nisS && nisS === cleanCode) || (namaS && namaS === cleanCode);
+        return (
+          (idS && (idS === cleanCode || cleanCode.includes(idS))) ||
+          (nisS && (nisS === cleanCode || cleanCode.includes(nisS))) ||
+          (qrS && (qrS === cleanCode || cleanCode.includes(qrS) || qrS.includes(cleanCode))) ||
+          (namaS && (namaS === cleanCode || cleanCode.includes(namaS) || namaS.includes(cleanCode)))
+        );
       });
 
       let role: "Guru" | "Siswa" = "Siswa";
@@ -238,7 +271,7 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
         personObj = matchedSiswa;
       } else {
         // Fallback Heuristics by Prefix
-        if (cleanCode.startsWith("g-") || cleanCode.startsWith("guru") || cleanCode.startsWith("nip")) {
+        if (cleanCode.startsWith("g-") || cleanCode.startsWith("guru") || cleanCode.startsWith("nip") || cleanCode.startsWith("g_")) {
           role = "Guru";
         } else {
           role = "Siswa";
@@ -247,26 +280,58 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
 
       // Auto Mode (Masuk vs Pulang)
       const currentHour = now.getHours();
+      const currentMinutes = now.getMinutes();
       const autoMode: "Masuk" | "Pulang" = currentHour >= 12 ? "Pulang" : "Masuk";
-      const statusText = autoMode === "Masuk" ? (currentHour >= 7 && now.getMinutes() > 15 ? "Terlambat" : "Hadir Tepat Waktu") : "Sudah Pulang";
+      const isLate = autoMode === "Masuk" && (currentHour > 7 || (currentHour === 7 && currentMinutes > 15));
+      const statusText = autoMode === "Masuk" ? (isLate ? "Terlambat" : "Hadir Tepat Waktu") : "Sudah Pulang";
 
       let resultObj: AutoScanResult;
 
       if (role === "Siswa") {
         // PROCESS SISWA ABSENSI
-        const personName = personObj?.nama_siswa || personObj?.nama || code;
-        const kelasStr = personObj?.kelas_jurusan || personObj?.kelas || "Siswa";
-        const idTarget = personObj?.id_siswa || code;
+        const personName = personObj?.nama_siswa || personObj?.nama || (code.length > 4 ? `Siswa (${code})` : "Siswa");
+        const kelasStr = personObj?.kelas_jurusan || (personObj?.kelas ? `${personObj.kelas} ${personObj.jurusan || ""}`.trim() : "Siswa");
+        const idTarget = personObj?.id_siswa || personObj?.nisn || code;
 
-        // Save to GAS
+        // 1. Save to Backend Database (Google Apps Script & Mock Storage)
         await callGas("catatAbsensiSiswa", [
           idTarget,
           autoMode,
           statusText,
           "Scan Auto Board",
           dateString,
-          timeString
+          timeString,
+          personName,
+          kelasStr
         ]);
+
+        // 2. Direct Sync Local Storage Laporan Siswa to ensure instantaneous UI updates across all tabs
+        const curReports = getStorage("laporan_siswa") || [];
+        const existingIdx = curReports.findIndex((r: any) => r.tanggal === dateString && (r.id_siswa === idTarget || r.id_target === idTarget || String(r.nama_siswa || "").toLowerCase() === personName.toLowerCase()));
+        if (existingIdx !== -1) {
+          if (autoMode === "Masuk") {
+            curReports[existingIdx].jam_masuk = timeString;
+            curReports[existingIdx].status_masuk = statusText;
+          } else {
+            curReports[existingIdx].jam_pulang = timeString;
+            curReports[existingIdx].status_pulang = statusText;
+          }
+          curReports[existingIdx].ket = "Scan Auto Board";
+        } else {
+          curReports.push({
+            id_log_siswa: "LOG-S-" + Date.now(),
+            tanggal: dateString,
+            id_siswa: idTarget,
+            nama_siswa: personName,
+            kelas_jurusan: kelasStr,
+            jam_masuk: autoMode === "Masuk" ? timeString : "-",
+            status_masuk: autoMode === "Masuk" ? statusText : "Belum Absen",
+            jam_pulang: autoMode === "Pulang" ? timeString : "-",
+            status_pulang: autoMode === "Pulang" ? statusText : "-",
+            ket: "Scan Auto Board"
+          });
+        }
+        setStorage("laporan_siswa", curReports);
 
         resultObj = {
           id: idTarget,
@@ -278,28 +343,55 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
           timestamp: timeString,
           dateStr: dateString,
           success: true,
-          message: `Presensi Siswa (${autoMode}) Berhasil Tersimpan`
+          message: `Presensi ${personName} (${autoMode}) Berhasil Dicatat ke Database`
         };
-
-        setStats(prev => ({ ...prev, siswaMasuk: prev.siswaMasuk + 1 }));
 
       } else {
         // PROCESS GURU ABSENSI & AUTO LESSON SCHEDULE
-        const personName = personObj?.nama_guru || personObj?.nama || code;
-        const nipStr = personObj?.nip_nuptk || personObj?.id_guru || code;
-        const idTarget = personObj?.id_guru || code;
+        const personName = personObj?.nama_guru || personObj?.nama || (code.length > 4 ? `Guru (${code})` : "Bapak/Ibu Guru");
+        const nipStr = personObj?.nip_nuptk || personObj?.nip || personObj?.id_guru || code;
+        const idTarget = personObj?.id_guru || nipStr || code;
 
-        // 1. Record Harian Guru
+        // 1. Record Harian Guru to Backend Database
         await callGas("catatAbsensiGuru", [
           idTarget,
           autoMode,
           statusText,
           "Scan Auto Board",
           dateString,
-          timeString
+          timeString,
+          personName,
+          nipStr
         ]);
 
-        // 2. AUTO LESSON SCHEDULE MATCHING FOR GURU
+        // 2. Direct Sync Local Storage Laporan Guru
+        const curReports = getStorage("laporan_guru") || [];
+        const existingIdx = curReports.findIndex((r: any) => r.tanggal === dateString && (r.id_guru === idTarget || r.id_target === idTarget || String(r.nama_guru || "").toLowerCase() === personName.toLowerCase()));
+        if (existingIdx !== -1) {
+          if (autoMode === "Masuk") {
+            curReports[existingIdx].jam_masuk = timeString;
+            curReports[existingIdx].status_masuk = statusText;
+          } else {
+            curReports[existingIdx].jam_pulang = timeString;
+            curReports[existingIdx].status_pulang = statusText;
+          }
+          curReports[existingIdx].ket = "Scan Auto Board";
+        } else {
+          curReports.push({
+            id_log_guru: "LOG-G-" + Date.now(),
+            tanggal: dateString,
+            id_guru: idTarget,
+            nama_guru: personName,
+            jam_masuk: autoMode === "Masuk" ? timeString : "-",
+            status_masuk: autoMode === "Masuk" ? statusText : "Belum Absen",
+            jam_pulang: autoMode === "Pulang" ? timeString : "-",
+            status_pulang: autoMode === "Pulang" ? statusText : "-",
+            ket: "Scan Auto Board"
+          });
+        }
+        setStorage("laporan_guru", curReports);
+
+        // 3. AUTO LESSON SCHEDULE MATCHING FOR GURU
         let scheduleNote = "";
         const matchedSchedule = jadwalToday.find((j: any) => {
           const idG = String(j.id_guru || "").toLowerCase();
@@ -308,11 +400,10 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
         });
 
         if (matchedSchedule) {
-          scheduleNote = `Jadwal Mengajar Terdeteksi: Jam Ke-${matchedSchedule.jam_ke || 1} | Kelas ${matchedSchedule.kelas || "-"} | Mapel: ${matchedSchedule.mapel || "-"}`;
+          scheduleNote = `Jadwal Mengajar: Jam Ke-${matchedSchedule.jam_ke || 1} • Kelas ${matchedSchedule.kelas || "-"} • ${matchedSchedule.mapel || "-"}`;
           
-          // Automatically save Absensi Mengajar to database
           try {
-            await callGas("simpanAbsensiMengajar", [{
+            await callGas("simpanAbsensiMengajarGuru", [{
               id_log_mengajar: "LOG-AUTOGURU-" + Date.now(),
               tanggal: dateString,
               waktu_absen: timeString,
@@ -327,7 +418,6 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
               status: "Hadir Tepat Waktu",
               catatan_materi: "Presensi Otomatis Papan Scanner"
             }]);
-            setStats(prev => ({ ...prev, mengajarRecord: prev.mengajarRecord + 1 }));
           } catch (err) {
             console.error("Gagal auto-record absensi mengajar guru:", err);
           }
@@ -344,17 +434,23 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
           dateStr: dateString,
           scheduleDetail: scheduleNote,
           success: true,
-          message: `Presensi Guru (${autoMode}) Berhasil Tersimpan`
+          message: `Presensi ${personName} (${autoMode}) Berhasil Dicatat ke Database`
         };
-
-        setStats(prev => ({ ...prev, guruMasuk: prev.guruMasuk + 1 }));
       }
 
-      // Update State & Banner
+      // Update State & Banner Board
       setLastResult(resultObj);
-      setRecentLogs(prev => [resultObj, ...prev.slice(0, 9)]);
+      setRecentLogs(prev => [resultObj, ...prev.slice(0, 19)]);
+      refreshTodayStats();
 
-      // Play Beep & Voice Announcement
+      // Show floating real-time notification with Person Name
+      setShowNotificationToast(true);
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = setTimeout(() => {
+        setShowNotificationToast(false);
+      }, 6000);
+
+      // Play Beep & Voice Announcement with Person Name
       playBeep("success");
       speakText(`Presensi ${resultObj.role} berhasil, ${resultObj.name}`);
 
@@ -370,9 +466,12 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
         timestamp: timeString,
         dateStr: dateString,
         success: false,
-        message: "Gagal memproses ID: " + (err?.message || "Kesalahan server")
+        message: `Presensi gagal untuk ${code}: ` + (err?.message || "ID tidak ditemukan")
       };
       setLastResult(errorResult);
+      setShowNotificationToast(true);
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = setTimeout(() => setShowNotificationToast(false), 5000);
       playBeep("error");
       speakText("Presensi gagal, silakan coba lagi");
     } finally {
@@ -444,8 +543,61 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
   }, [scanMethod, cameraActive, selectedCameraId]);
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-7xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in max-w-7xl mx-auto pb-12 relative">
       
+      {/* REAL-TIME SCAN NOTIFICATION TOAST (MENAMPILKAN NAMA SISWA / GURU) */}
+      {showNotificationToast && lastResult && (
+        <div className="fixed top-20 right-4 sm:right-8 z-50 max-w-md w-full animate-bounce-short">
+          <div className={`p-4 rounded-2xl shadow-2xl border flex items-start gap-3.5 backdrop-blur-md ${
+            lastResult.success
+              ? "bg-slate-900/95 border-emerald-500/80 text-white"
+              : "bg-slate-900/95 border-rose-500/80 text-white"
+          }`}>
+            <div className={`p-2.5 rounded-xl shrink-0 ${
+              lastResult.success ? "bg-emerald-500 text-slate-950" : "bg-rose-500 text-white"
+            }`}>
+              {lastResult.success ? <CheckCircle2 className="w-6 h-6" /> : <XCircle className="w-6 h-6" />}
+            </div>
+
+            <div className="flex-1 space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                  lastResult.role === "Guru" ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30" : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                }`}>
+                  {lastResult.role} • {lastResult.mode}
+                </span>
+                <span className="text-[11px] font-mono text-slate-400">{lastResult.timestamp} WIB</span>
+              </div>
+
+              {/* NAMA SISWA / GURU TEBAL & JELAS */}
+              <div className="text-base font-extrabold text-white tracking-tight">
+                {lastResult.name}
+              </div>
+
+              <div className="text-xs text-slate-300 flex items-center justify-between gap-2">
+                <span>{lastResult.subDetail}</span>
+                <span className={`font-bold ${lastResult.status.includes("Terlambat") ? "text-rose-400" : "text-emerald-400"}`}>
+                  {lastResult.status}
+                </span>
+              </div>
+
+              {lastResult.scheduleDetail && (
+                <div className="text-[11px] text-amber-300 bg-amber-950/60 border border-amber-500/30 p-1.5 rounded-lg mt-1">
+                  {lastResult.scheduleDetail}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setShowNotificationToast(false)}
+              className="text-slate-400 hover:text-white p-1 cursor-pointer"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* HEADER TITLE BAR */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
         <div className="flex items-center gap-3">
