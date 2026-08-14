@@ -859,87 +859,129 @@ export function callMock(action: string, args: any[] = []): any {
       const guruJamMasukBatas = flexSchedule?.jam_masuk_batas || defaultJamMasukBatas;
       const guruJamPulangMulai = flexSchedule?.jam_pulang_mulai || defaultJamPulangMulai;
 
-      // Check teaching schedules for this teacher today
+      // Helper for fuzzy & title-agnostic teacher name matching
+      const normalizeName = (str: string) => {
+        return String(str || "")
+          .toLowerCase()
+          .replace(/[,.]/g, " ")
+          .replace(/\b(s|m|dr|drs|dra|prof|ir|h|hj)\s*\.?\s*(pd|kom|ag|is|si|se|mm|hum|st|pt|tp|sos|ip|ed|pdi|mat|bio|fis|med)\b/gi, "")
+          .replace(/\s+/g, " ")
+          .trim();
+      };
+
+      const isTeacherScheduleMatch = (scheduleItem: any) => {
+        const sGuruId = String(scheduleItem.id_guru || "").trim().toLowerCase();
+        const sGuruName = String(scheduleItem.nama_guru || "").trim();
+        const targetIdStr = String(idTarget || "").trim().toLowerCase();
+        const targetNipStr = String(user.nip_nuptk || user.nip || "").trim().toLowerCase();
+        const targetQrStr = String(user.qr_content || user.qr_code || "").trim().toLowerCase();
+        const targetCleanCode = String(qrContent || "").trim().toLowerCase();
+
+        if (sGuruId) {
+          if (sGuruId === targetIdStr || sGuruId === targetNipStr || sGuruId === targetQrStr || sGuruId === targetCleanCode) return true;
+          const sWithout = sGuruId.replace(/^(guru|id|nip|g)[_:\-\s]+/i, '');
+          const tWithout = targetIdStr.replace(/^(guru|id|nip|g)[_:\-\s]+/i, '');
+          if (sWithout && tWithout && sWithout === tWithout) return true;
+        }
+
+        if (sGuruName && nama) {
+          const n1 = sGuruName.toLowerCase();
+          const n2 = String(nama).toLowerCase();
+          if (n1 === n2 || n1.includes(n2) || n2.includes(n1)) return true;
+
+          const norm1 = normalizeName(sGuruName);
+          const norm2 = normalizeName(nama);
+          if (norm1 && norm2 && (norm1 === norm2 || norm1.includes(norm2) || norm2.includes(norm1))) return true;
+        }
+        return false;
+      };
+
+      // Load teaching schedules and jam slots
       const allSchedules = getStorage("jadwal_pelajaran") || [];
-      const jamSlots = getStorage("jam_pelajaran") || [];
-      const teacherDaySchedules = allSchedules.filter((s: any) => 
-        (String(s.id_guru || "").toLowerCase() === String(idTarget).toLowerCase() || 
-         String(s.nama_guru || "").toLowerCase() === String(nama).toLowerCase()) &&
-        (s.hari === hariIni || hariIni === "Minggu")
-      ).sort((a: any, b: any) => Number(a.jam_ke || 0) - Number(b.jam_ke || 0));
+      const jamSlots = getStorage("jam_pelajaran") || [
+        { jam_ke: 1, jam_mulai: "07:00", jam_selesai: "07:45" },
+        { jam_ke: 2, jam_mulai: "07:45", jam_selesai: "08:30" },
+        { jam_ke: 3, jam_mulai: "08:30", jam_selesai: "09:15" },
+        { jam_ke: 4, jam_mulai: "09:45", jam_selesai: "10:30" },
+        { jam_ke: 5, jam_mulai: "10:30", jam_selesai: "11:15" },
+        { jam_ke: 6, jam_mulai: "11:15", jam_selesai: "12:00" },
+        { jam_ke: 7, jam_mulai: "13:00", jam_selesai: "13:45" },
+        { jam_ke: 8, jam_mulai: "13:45", jam_selesai: "14:30" }
+      ];
+
+      // Filter teaching schedules for this teacher today
+      let teacherDaySchedules = allSchedules.filter((s: any) => 
+        isTeacherScheduleMatch(s) && (s.hari === hariIni || hariIni === "Minggu" || !s.hari)
+      ).map((s: any) => {
+        const slot = jamSlots.find((j: any) => Number(j.jam_ke) === Number(s.jam_ke));
+        const slotMulai = s.jam_mulai || slot?.jam_mulai || "07:00";
+        const slotSelesai = s.jam_selesai || slot?.jam_selesai || "07:45";
+        return { ...s, slotMulai, slotSelesai };
+      }).sort((a: any, b: any) => Number(a.jam_ke || 0) - Number(b.jam_ke || 0));
+
+      // Fallback: if no schedule on Sunday/testing day, check if teacher has any schedule in system
+      if (teacherDaySchedules.length === 0 && (hariIni === "Minggu" || allSchedules.length > 0)) {
+        const anySched = allSchedules.filter((s: any) => isTeacherScheduleMatch(s));
+        if (anySched.length > 0 && hariIni === "Minggu") {
+          teacherDaySchedules = anySched.map((s: any) => {
+            const slot = jamSlots.find((j: any) => Number(j.jam_ke) === Number(s.jam_ke));
+            const slotMulai = s.jam_mulai || slot?.jam_mulai || "07:00";
+            const slotSelesai = s.jam_selesai || slot?.jam_selesai || "07:45";
+            return { ...s, slotMulai, slotSelesai };
+          }).sort((a: any, b: any) => Number(a.jam_ke || 0) - Number(b.jam_ke || 0));
+        }
+      }
 
       const absLogs = getStorage("absensi_mengajar_guru") || [];
       const alreadyAttendedTeachingKeys = new Set(
-        absLogs.filter((a: any) => a.tanggal === tgl && (a.id_guru === idTarget || String(a.nama_guru).toLowerCase() === String(nama).toLowerCase()))
+        absLogs.filter((a: any) => a.tanggal === tgl && isTeacherScheduleMatch(a))
                .map((a: any) => `${a.jam_ke}-${a.kelas}-${a.mapel}`)
       );
-
-      // Check if current time matches any teaching schedule slot
-      let activeTeachingSlot: any = null;
-      if (teacherDaySchedules.length > 0) {
-        // 1. Find schedule slot matching current time
-        for (const sched of teacherDaySchedules) {
-          const slot = jamSlots.find((j: any) => Number(j.jam_ke) === Number(sched.jam_ke));
-          const slotMulai = sched.jam_mulai || slot?.jam_mulai;
-          const slotSelesai = sched.jam_selesai || slot?.jam_selesai;
-          if (slotMulai && slotMulai !== "-" && slotSelesai && slotSelesai !== "-") {
-            const [hM, mM] = slotMulai.split(":").map(Number);
-            const [hS, mS] = slotSelesai.split(":").map(Number);
-            const [hN, mN] = jam.split(":").map(Number);
-            if (!isNaN(hM) && !isNaN(mM) && !isNaN(hS) && !isNaN(mS) && !isNaN(hN) && !isNaN(mN)) {
-              const startMin = hM * 60 + mM;
-              const endMin = hS * 60 + mS;
-              const nowMin = hN * 60 + mN;
-              // Active window: from 15 min before start until end of lesson
-              if (nowMin >= startMin - 15 && nowMin <= endMin + 15) {
-                activeTeachingSlot = { ...sched, slotMulai, slotSelesai };
-                break;
-              }
-            }
-          }
-        }
-
-        // 2. If not strictly in slot, check first pending teaching schedule not yet recorded today
-        if (!activeTeachingSlot) {
-          const pendingSched = teacherDaySchedules.find((s: any) => !alreadyAttendedTeachingKeys.has(`${s.jam_ke}-${s.kelas}-${s.mapel}`));
-          if (pendingSched) {
-            const slot = jamSlots.find((j: any) => Number(j.jam_ke) === Number(pendingSched.jam_ke));
-            const slotMulai = pendingSched.jam_mulai || slot?.jam_mulai || "07:00";
-            const slotSelesai = pendingSched.jam_selesai || slot?.jam_selesai || "07:45";
-            activeTeachingSlot = { ...pendingSched, slotMulai, slotSelesai };
-          }
-        }
-      }
-
-      // Check whether teacher is allowed to clock out (Pulang)
-      // Guru can only clock out if:
-      // 1. Current time >= guruJamPulangMulai (from flexible schedule or school default)
-      // 2. OR teacher has completed all teaching schedules and time is past their last class end time
-      let lastClassEndMin = 0;
-      if (teacherDaySchedules.length > 0) {
-        const lastSched = teacherDaySchedules[teacherDaySchedules.length - 1];
-        const lastSlot = jamSlots.find((j: any) => Number(j.jam_ke) === Number(lastSched.jam_ke));
-        const lastEnd = lastSched.jam_selesai || lastSlot?.jam_selesai;
-        if (lastEnd && lastEnd !== "-") {
-          const [hE, mE] = lastEnd.split(":").map(Number);
-          if (!isNaN(hE) && !isNaN(mE)) lastClassEndMin = hE * 60 + mE;
-        }
-      }
 
       const [hN, mN] = jam.split(":").map(Number);
       const nowMin = hN * 60 + mN;
       const [hP, mP] = guruJamPulangMulai.split(":").map(Number);
       const pulangMulaiMin = (!isNaN(hP) && !isNaN(mP)) ? (hP * 60 + mP) : (15 * 60 + 30);
 
-      const isTeacherPulangTime = nowMin >= pulangMulaiMin || (lastClassEndMin > 0 && nowMin >= lastClassEndMin && nowMin >= (12 * 60));
+      const toleransiGuruVal = Number(cfg.toleransi_guru ?? cfg.toleransi_mengajar_guru ?? 15);
 
-      // CASE A: TEACHER CLOCK OUT TIME REACHED
-      if (isTeacherPulangTime && mode === "Pulang") {
+      // Find the end time of teacher's last class today
+      let lastClassEndMin = 0;
+      if (teacherDaySchedules.length > 0) {
+        const lastSched = teacherDaySchedules[teacherDaySchedules.length - 1];
+        if (lastSched.slotSelesai && lastSched.slotSelesai !== "-") {
+          const [hE, mE] = lastSched.slotSelesai.split(":").map(Number);
+          if (!isNaN(hE) && !isNaN(mE)) lastClassEndMin = hE * 60 + mE;
+        }
+      }
+
+      // Check if all teaching classes for today have been attended
+      const totalTeachingClasses = teacherDaySchedules.length;
+      const completedTeachingClasses = teacherDaySchedules.filter((s: any) => 
+        alreadyAttendedTeachingKeys.has(`${s.jam_ke}-${s.kelas}-${s.mapel}`)
+      ).length;
+      const allTeachingClassesDone = totalTeachingClasses > 0 && completedTeachingClasses >= totalTeachingClasses;
+
+      // Allow clocking out if:
+      // 1. Current time >= guruJamPulangMulai
+      // 2. OR all classes completed AND current time >= lastClassEndMin AND past 12:00
+      const isTeacherPulangTime = (nowMin >= pulangMulaiMin) || 
+                                  (allTeachingClassesDone && lastClassEndMin > 0 && nowMin >= lastClassEndMin && nowMin >= (12 * 60));
+
+      // -------------------------------------------------------------
+      // CASE A: TEACHER CLOCK OUT (PULANG)
+      // -------------------------------------------------------------
+      if (isTeacherPulangTime && (mode === "Pulang" || allTeachingClassesDone)) {
         if (index !== -1) {
           reports[index].jam_pulang = jam;
           reports[index].status_pulang = "Tepat Waktu";
           setStorage(reportsKey, reports);
-          return { success: true, type: "pulang", message: `Presensi Pulang Berhasil: ${nama}`, data: reports[index] };
+          return { 
+            success: true, 
+            type: "pulang", 
+            message: `Presensi Pulang Berhasil: ${nama} (${allTeachingClassesDone ? "Seluruh Jam Mengajar Selesai" : "Tepat Waktu"})`, 
+            data: reports[index] 
+          };
         } else {
           const idLog = "LOG-G-" + new Date().getTime();
           const newRow = {
@@ -959,54 +1001,138 @@ export function callMock(action: string, args: any[] = []): any {
         }
       }
 
-      // CASE B: DURING TEACHING & WORKING HOURS (BEFORE PULANG TIME)
-      // 1. If teacher has a teaching schedule to attend:
-      if (activeTeachingSlot) {
-        const toleransiGuruVal = Number(cfg.toleransi_guru ?? cfg.toleransi_mengajar_guru ?? 15);
-        let statusMengajar = "Hadir Tepat Waktu";
-        if (activeTeachingSlot.slotMulai && activeTeachingSlot.slotMulai !== "-") {
-          const [hM, mM] = activeTeachingSlot.slotMulai.split(":").map(Number);
-          if (!isNaN(hM) && !isNaN(mM)) {
-            const startMin = hM * 60 + mM;
-            if (nowMin > startMin + toleransiGuruVal) {
-              statusMengajar = "Terlambat Masuk Kelas";
+      // -------------------------------------------------------------
+      // CASE B: TEACHER HAS TEACHING SCHEDULES TODAY
+      // -------------------------------------------------------------
+      if (teacherDaySchedules.length > 0) {
+        // 1. Check if current time matches an active teaching slot window (from 15 min before start until end + 20 min)
+        let activeSlotMatch: any = null;
+        let multiJamBlock: any[] = [];
+
+        for (const sched of teacherDaySchedules) {
+          if (sched.slotMulai && sched.slotMulai !== "-" && sched.slotSelesai && sched.slotSelesai !== "-") {
+            const [hM, mM] = sched.slotMulai.split(":").map(Number);
+            const [hS, mS] = sched.slotSelesai.split(":").map(Number);
+            if (!isNaN(hM) && !isNaN(mM) && !isNaN(hS) && !isNaN(mS)) {
+              const startMin = hM * 60 + mM;
+              const endMin = hS * 60 + mS;
+              // Active window: from 15 min before lesson begins up to 25 min after lesson ends
+              if (nowMin >= startMin - 15 && nowMin <= endMin + 25) {
+                activeSlotMatch = sched;
+                break;
+              }
             }
           }
         }
 
-        const teachingKey = `${activeTeachingSlot.jam_ke}-${activeTeachingSlot.kelas}-${activeTeachingSlot.mapel}`;
-        const existingIdx = absLogs.findIndex((a: any) => 
-          a.tanggal === tgl && 
-          (a.id_guru === idTarget || String(a.nama_guru).toLowerCase() === String(nama).toLowerCase()) && 
-          Number(a.jam_ke) === Number(activeTeachingSlot.jam_ke) &&
-          String(a.kelas).toLowerCase() === String(activeTeachingSlot.kelas).toLowerCase()
-        );
+        // 2. If not strictly within an active window, find the next unrecorded class schedule today
+        if (!activeSlotMatch) {
+          const firstUnrecorded = teacherDaySchedules.find((s: any) => 
+            !alreadyAttendedTeachingKeys.has(`${s.jam_ke}-${s.kelas}-${s.mapel}`)
+          );
+          if (firstUnrecorded) {
+            activeSlotMatch = firstUnrecorded;
+          }
+        }
 
-        const logItem = {
-          id_log_mengajar: existingIdx !== -1 ? absLogs[existingIdx].id_log_mengajar : "LOG-MENG-" + Date.now(),
-          tanggal: tgl,
-          waktu_absen: jam,
-          hari: hariIni !== "Minggu" ? hariIni : "Senin",
-          id_guru: idTarget,
-          nama_guru: nama,
-          kelas: activeTeachingSlot.kelas || "-",
-          mapel: activeTeachingSlot.mapel || "-",
-          jam_ke: Number(activeTeachingSlot.jam_ke || 1),
-          jam_mulai_jadwal: activeTeachingSlot.slotMulai || "07:00",
-          jam_selesai_jadwal: activeTeachingSlot.slotSelesai || "07:45",
-          status: statusMengajar,
-          catatan_materi: "Presensi Otomatis Scan Barcode/QR"
-        };
+        // 3. If an active or pending class is found that is NOT yet fully logged:
+        if (activeSlotMatch && !alreadyAttendedTeachingKeys.has(`${activeSlotMatch.jam_ke}-${activeSlotMatch.kelas}-${activeSlotMatch.mapel}`)) {
+          // Find all consecutive hours for the same class and mapel today (1x Scan for multi-jam block)
+          multiJamBlock = teacherDaySchedules.filter((s: any) => 
+            String(s.kelas).toLowerCase() === String(activeSlotMatch.kelas).toLowerCase() &&
+            String(s.mapel).toLowerCase() === String(activeSlotMatch.mapel).toLowerCase()
+          );
 
-        if (existingIdx !== -1) absLogs[existingIdx] = logItem;
-        else absLogs.push(logItem);
-        setStorage("absensi_mengajar_guru", absLogs);
+          if (multiJamBlock.length === 0) multiJamBlock = [activeSlotMatch];
 
-        // Also ensure daily attendance (PresensiGuru) is recorded as Masuk if not yet done
-        const statusMasuk = (jam <= guruJamMasukBatas) ? "Tepat Waktu" : "Terlambat";
-        if (index === -1) {
+          // Determine attendance status based on schedule start time + tolerance
+          const firstSlot = multiJamBlock[0];
+          const [hM, mM] = (firstSlot.slotMulai || "07:00").split(":").map(Number);
+          const firstStartMin = (!isNaN(hM) && !isNaN(mM)) ? (hM * 60 + mM) : (7 * 60);
+          
+          const statusMengajar = (nowMin <= firstStartMin + toleransiGuruVal) ? "Hadir Tepat Waktu" : "Terlambat Masuk Kelas";
+
+          // Save ALL hours in the multi-jam block into absensi_mengajar_guru
+          for (const schedItem of multiJamBlock) {
+            const existingIdx = absLogs.findIndex((a: any) => 
+              a.tanggal === tgl && 
+              isTeacherScheduleMatch(a) &&
+              Number(a.jam_ke) === Number(schedItem.jam_ke) &&
+              String(a.kelas).toLowerCase() === String(schedItem.kelas).toLowerCase()
+            );
+
+            const logItem = {
+              id_log_mengajar: existingIdx !== -1 ? absLogs[existingIdx].id_log_mengajar : "LOG-MENG-" + Date.now() + "-" + schedItem.jam_ke,
+              tanggal: tgl,
+              waktu_absen: jam,
+              hari: hariIni !== "Minggu" ? hariIni : (schedItem.hari || "Senin"),
+              id_guru: idTarget,
+              nama_guru: nama,
+              kelas: schedItem.kelas || "-",
+              mapel: schedItem.mapel || "-",
+              jam_ke: Number(schedItem.jam_ke || 1),
+              jam_mulai_jadwal: schedItem.slotMulai || "07:00",
+              jam_selesai_jadwal: schedItem.slotSelesai || "07:45",
+              status: statusMengajar,
+              catatan_materi: "Presensi Otomatis Barcode/QR"
+            };
+
+            if (existingIdx !== -1) absLogs[existingIdx] = logItem;
+            else absLogs.push(logItem);
+          }
+
+          setStorage("absensi_mengajar_guru", absLogs);
+
+          // ALSO ensure daily school attendance (laporan_guru) is recorded as Masuk
+          const statusMasuk = (jam <= guruJamMasukBatas) ? "Tepat Waktu" : "Terlambat";
+          if (index === -1) {
+            const idLog = "LOG-G-" + new Date().getTime();
+            reports.push({
+              id_log_guru: idLog,
+              tanggal: tgl,
+              id_guru: idTarget,
+              nama_guru: nama,
+              jam_masuk: jam,
+              status_masuk: statusMasuk,
+              jam_pulang: "-",
+              status_pulang: "-",
+              ket: `Hadir Mengajar (${activeSlotMatch.mapel})`
+            });
+            setStorage(reportsKey, reports);
+          } else if (!reports[index].jam_masuk || reports[index].jam_masuk === "-") {
+            reports[index].jam_masuk = jam;
+            reports[index].status_masuk = statusMasuk;
+            reports[index].ket = `Hadir Mengajar (${activeSlotMatch.mapel})`;
+            setStorage(reportsKey, reports);
+          }
+
+          const jamNumbers = multiJamBlock.map((s: any) => Number(s.jam_ke)).sort((a: number, b: number) => a - b);
+          const jamLabel = jamNumbers.length > 1
+            ? `Jam Ke-${jamNumbers[0]} s/d ${jamNumbers[jamNumbers.length - 1]}`
+            : `Jam Ke-${jamNumbers[0] || activeSlotMatch.jam_ke}`;
+
+          return {
+            success: true,
+            type: "mengajar",
+            message: `Presensi Mengajar Berhasil: ${nama} (${activeSlotMatch.mapel} - ${activeSlotMatch.kelas}, ${jamLabel})`,
+            data: {
+              ...activeSlotMatch,
+              nama_guru: nama,
+              id_guru: idTarget,
+              status: statusMengajar,
+              jam_ke_label: jamLabel
+            }
+          };
+        }
+
+        // 4. If all classes for today are already recorded, or morning arrival before first class
+        if (index === -1 || !reports[index].jam_masuk || reports[index].jam_masuk === "-") {
+          // Record morning daily check-in
+          const statusMasuk = (jam <= guruJamMasukBatas) ? "Tepat Waktu" : "Terlambat";
           const idLog = "LOG-G-" + new Date().getTime();
-          reports.push({
+          const firstClass = teacherDaySchedules[0];
+
+          const newRow = {
             id_log_guru: idLog,
             tanggal: tgl,
             id_guru: idTarget,
@@ -1015,25 +1141,50 @@ export function callMock(action: string, args: any[] = []): any {
             status_masuk: statusMasuk,
             jam_pulang: "-",
             status_pulang: "-",
-            ket: "Hadir Mengajar"
-          });
+            ket: `Jadwal: ${firstClass.mapel} (${firstClass.kelas})`
+          };
+          if (index !== -1) {
+            reports[index].jam_masuk = jam;
+            reports[index].status_masuk = statusMasuk;
+            reports[index].ket = newRow.ket;
+          } else {
+            reports.push(newRow);
+          }
           setStorage(reportsKey, reports);
-        } else if (!reports[index].jam_masuk || reports[index].jam_masuk === "-") {
-          reports[index].jam_masuk = jam;
-          reports[index].status_masuk = statusMasuk;
-          setStorage(reportsKey, reports);
+
+          return { 
+            success: true, 
+            type: "masuk", 
+            message: `Presensi Masuk Berhasil: ${nama} (${statusMasuk}). Jadwal pertama: ${firstClass.mapel} (${firstClass.kelas}) Jam ke-${firstClass.jam_ke} (${firstClass.slotMulai} WIB)`, 
+            data: newRow 
+          };
         }
+
+        // 5. Already recorded daily masuk & already recorded active class
+        if (allTeachingClassesDone) {
+          return {
+            success: true,
+            type: "info",
+            message: `${nama} sudah menyelesaikan seluruh jadwal mengajar hari ini (${totalTeachingClasses} jam pelajaran). Jam pulang dibuka pk ${guruJamPulangMulai} WIB.`,
+            data: reports[index]
+          };
+        }
+
+        const nextPending = teacherDaySchedules.find((s: any) => 
+          !alreadyAttendedTeachingKeys.has(`${s.jam_ke}-${s.kelas}-${s.mapel}`)
+        );
 
         return {
           success: true,
-          type: "mengajar",
-          message: `Presensi Mengajar Berhasil: ${nama} (${activeTeachingSlot.mapel} - ${activeTeachingSlot.kelas}, Jam Ke-${activeTeachingSlot.jam_ke})`,
-          data: logItem
+          type: "info",
+          message: `${nama} sudah presensi masuk. Jadwal mengajar berikutnya: ${nextPending?.mapel || "Pelajaran"} (${nextPending?.kelas || "-"}) Jam Ke-${nextPending?.jam_ke || "-"} (${nextPending?.slotMulai || ""} WIB).`,
+          data: reports[index]
         };
       }
 
-      // 2. If teacher has NO active teaching schedule at this moment:
-      // Check daily masuk
+      // -------------------------------------------------------------
+      // CASE C: TEACHER WITH NO TEACHING SCHEDULE TODAY (HANYA HARIAN / FLEKSIBEL)
+      // -------------------------------------------------------------
       if (index === -1 || !reports[index].jam_masuk || reports[index].jam_masuk === "-") {
         const statusMasuk = (jam <= guruJamMasukBatas) ? "Tepat Waktu" : "Terlambat";
         const idLog = "LOG-G-" + new Date().getTime();
@@ -1061,12 +1212,11 @@ export function callMock(action: string, args: any[] = []): any {
         return { success: true, type: "masuk", message: `Presensi Masuk Berhasil: ${nama} (${statusMasuk})`, data: newRow };
       }
 
-      // 3. Teacher already clocked in and it is NOT yet clock out time (outside flexible hours)
-      // DO NOT clock out teacher prematurely!
+      // Teacher already clocked in, no teaching schedule, not yet clock-out time
       return {
         success: true,
         type: "info",
-        message: `${nama} sudah presensi masuk (${reports[index].jam_masuk} WIB). Belum masuk jam pulang (Jam Pulang dibuka pk ${guruJamPulangMulai} WIB).`,
+        message: `${nama} sudah presensi masuk (${reports[index].jam_masuk} WIB). Tidak ada jadwal mengajar hari ini. Jam pulang dibuka pk ${guruJamPulangMulai} WIB.`,
         data: reports[index]
       };
     }
