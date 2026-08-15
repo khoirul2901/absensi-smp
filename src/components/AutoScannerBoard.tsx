@@ -253,6 +253,14 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
     }
   }, [autoFocusLock]);
 
+  // Helper to accurately get start & end times for a specific lesson hour (jam_ke)
+  const getJamSlotTime = (jamKeNum: number | string, fallbackMulai?: string, fallbackSelesai?: string) => {
+    const slot = jamSlotsList.find((j: any) => Number(j.jam_ke) === Number(jamKeNum));
+    const mulai = slot ? slot.jam_mulai : (fallbackMulai && fallbackMulai !== "-" ? fallbackMulai : "-");
+    const selesai = slot ? slot.jam_selesai : (fallbackSelesai && fallbackSelesai !== "-" ? fallbackSelesai : "-");
+    return { mulai, selesai };
+  };
+
   // Audio & Speech Feedback
   const speakText = (text: string) => {
     if (!speechEnabled || audioMuted) return;
@@ -312,6 +320,11 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
     const now = new Date();
     const timeString = now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
     const dateString = now.toISOString().split("T")[0];
+    const daysMap = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    const todayName = daysMap[now.getDay()] || "Senin";
+    const currentHour = now.getHours();
+    const currentMinutes = now.getMinutes();
+    const nowMin = currentHour * 60 + currentMinutes;
 
     try {
       const cleanCode = code.toLowerCase();
@@ -331,7 +344,8 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
         return (idS && (idS === cleanCode || idS === cleanWithoutPrefix)) ||
                (nisS && (nisS === cleanCode || nisS === cleanWithoutPrefix)) ||
                (qrS && (qrS === cleanCode || qrS === cleanWithoutPrefix)) ||
-               isNameMatch(s.nama_siswa, cleanCode);
+               isNameMatch(s.nama_siswa, cleanCode) ||
+               isNameMatch(s.nama_siswa, cleanWithoutPrefix);
       }) : null;
 
       // 3. Look up in Guru list by exact ID, NIP, QR Content, or Name
@@ -376,6 +390,25 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
         }
       }
 
+      // Check if scanned code matches teacher in flexible schedules list
+      if (!matchedGuru && !matchedSiswa) {
+        const matchedFlexItem = flexSchedulesList.find((f: any) => {
+          const fId = String(f.id_guru || "").trim().toLowerCase();
+          return (fId && (fId === cleanCode || fId === cleanWithoutPrefix)) ||
+                 isNameMatch(f.nama_guru, cleanCode) ||
+                 isNameMatch(f.nama_guru, cleanWithoutPrefix);
+        });
+        if (matchedFlexItem) {
+          matchedGuru = guruList.find((g: any) => 
+            isNameMatch(g.nama_guru, matchedFlexItem.nama_guru) || 
+            String(g.id_guru || "").toLowerCase() === String(matchedFlexItem.id_guru || "").toLowerCase()
+          ) || {
+            id_guru: matchedFlexItem.id_guru || code,
+            nama_guru: matchedFlexItem.nama_guru || code
+          };
+        }
+      }
+
       let role: "Guru" | "Siswa" = "Siswa";
       let personObj: any = null;
 
@@ -390,7 +423,7 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
         personObj = matchedGuru;
       } else {
         // Fallback Heuristics by Prefix
-        if (cleanCode.startsWith("g-") || cleanCode.startsWith("guru") || cleanCode.startsWith("nip") || cleanCode.startsWith("g_") || cleanCode.startsWith("jad")) {
+        if (cleanCode.startsWith("g-") || cleanCode.startsWith("guru") || cleanCode.startsWith("nip") || cleanCode.startsWith("g_") || cleanCode.startsWith("jpel") || cleanCode.startsWith("jad")) {
           role = "Guru";
         } else {
           role = "Siswa";
@@ -398,16 +431,245 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
       }
 
       // Auto Mode (Masuk vs Pulang)
-      const currentHour = now.getHours();
-      const currentMinutes = now.getMinutes();
       const autoMode: "Masuk" | "Pulang" = currentHour >= 12 ? "Pulang" : "Masuk";
       const isLate = autoMode === "Masuk" && (currentHour > 7 || (currentHour === 7 && currentMinutes > 15));
       const fallbackStatus = autoMode === "Masuk" ? (isLate ? "Terlambat" : "Tepat Waktu") : "Tepat Waktu";
 
-      // Effective code to send
+      // =========================================================================
+      // SPECIAL FLOW FOR GURU: JADWAL FLEKSIBEL & JADWAL MENGAJAR (HARD SCANNER LOGIC)
+      // =========================================================================
+      if (role === "Guru") {
+        const guruId = personObj?.id_guru || personObj?.id || code;
+        const guruNama = personObj?.nama_guru || personObj?.nama || code;
+        const guruNip = personObj?.nip_nuptk || personObj?.nip || guruId;
+
+        // 1. CEK APAKAH GURU TERDAFTAR DI JADWAL FLEKSIBEL (JadwalGuru)
+        const guruFlexEntries = flexSchedulesList.filter((f: any) => 
+          String(f.id_guru || "").trim().toLowerCase() === String(guruId).trim().toLowerCase() ||
+          isNameMatch(f.nama_guru, guruNama)
+        );
+
+        if (guruFlexEntries.length > 0) {
+          // Guru memiliki pengaturan jadwal fleksibel. Cek apakah ada jadwal di HARI INI
+          const todayFlex = guruFlexEntries.find((f: any) => (f.hari || "").trim().toLowerCase() === todayName.toLowerCase());
+          
+          if (!todayFlex) {
+            // DITOLAK KARENA TIDAK SESUAI JADWAL FLEKSIBEL
+            const activeFlexDays = Array.from(new Set(guruFlexEntries.map((f: any) => f.hari))).join(", ");
+            const errorMsg = `Presensi Ditolak: Guru '${guruNama}' tidak memiliki jadwal fleksibel di hari ${todayName}. Jadwal aktif: ${activeFlexDays}`;
+            
+            const errorResult: AutoScanResult = {
+              id: guruId,
+              name: guruNama,
+              role: "Guru",
+              subDetail: `NIP: ${guruNip}`,
+              mode: autoMode,
+              status: "Ditolak",
+              timestamp: timeString,
+              dateStr: dateString,
+              success: false,
+              message: errorMsg
+            };
+            setLastResult(errorResult);
+            setRecentLogs(prev => [errorResult, ...prev.slice(0, 19)]);
+            setShowNotificationToast(true);
+            if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+            toastTimeoutRef.current = setTimeout(() => setShowNotificationToast(false), 6000);
+            playBeep("error");
+            speakText(`Presensi ditolak. ${guruNama} tidak memiliki jadwal di hari ${todayName}.`);
+            return;
+          }
+        }
+
+        // 2. CEK JADWAL MENGAJAR GURU (JadwalPelajaran)
+        const teacherDaySchedules = allJadwalList.filter((s: any) => 
+          (s.hari || "").trim().toLowerCase() === todayName.toLowerCase() &&
+          (
+            (s.id_guru && String(s.id_guru).trim().toLowerCase() === String(guruId).trim().toLowerCase()) ||
+            isNameMatch(s.nama_guru, guruNama) ||
+            (matchedDirectSched && String(s.id_jadwal) === String(matchedDirectSched.id_jadwal))
+          )
+        );
+
+        if (teacherDaySchedules.length > 0) {
+          // Evaluasi jam aktif jadwal mengajar
+          const activeSchedMatches = teacherDaySchedules.filter((s: any) => {
+            const { mulai, selesai } = getJamSlotTime(s.jam_ke, s.jam_mulai, s.jam_selesai);
+            if (!mulai || mulai === "-" || !selesai || selesai === "-") return true;
+            const [hM, mM] = mulai.split(":").map(Number);
+            const [hS, mS] = selesai.split(":").map(Number);
+            if (isNaN(hM) || isNaN(mM) || isNaN(hS) || isNaN(mS)) return true;
+            const startMin = hM * 60 + mM;
+            const endMin = hS * 60 + mS;
+            return nowMin >= startMin - toleransiAwal && nowMin <= endMin + toleransiAkhir;
+          });
+
+          // Jika pembatasan jam aktif dinyalakan dan waktu scan di luar jam jadwal
+          if (batasiJamJadwal && activeSchedMatches.length === 0) {
+            const schedListTimes = teacherDaySchedules.map((s: any) => {
+              const { mulai, selesai } = getJamSlotTime(s.jam_ke, s.jam_mulai, s.jam_selesai);
+              return `Jam ${s.jam_ke} (${s.mapel} ${s.kelas}: ${mulai} - ${selesai})`;
+            }).join("; ");
+
+            const errorMsg = `Presensi Mengajar Ditolak: Di luar jam jadwal pelajaran. Guru '${guruNama}' (jam ${timeString} WIB) tidak memiliki jadwal aktif saat ini. Jadwal hari ${todayName}: ${schedListTimes}`;
+            
+            const errorResult: AutoScanResult = {
+              id: guruId,
+              name: guruNama,
+              role: "Guru",
+              subDetail: `NIP: ${guruNip}`,
+              mode: "Masuk",
+              status: "Ditolak",
+              timestamp: timeString,
+              dateStr: dateString,
+              success: false,
+              message: errorMsg
+            };
+            setLastResult(errorResult);
+            setRecentLogs(prev => [errorResult, ...prev.slice(0, 19)]);
+            setShowNotificationToast(true);
+            if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+            toastTimeoutRef.current = setTimeout(() => setShowNotificationToast(false), 6000);
+            playBeep("error");
+            speakText("Presensi mengajar ditolak. Di luar jam jadwal pelajaran.");
+            return;
+          }
+
+          // Tentukan jadwal target yang belum diisi presensinya hari ini
+          const loggedScheduleJamSet = new Set(
+            absensiMengajarLogs
+              .filter((l: any) => 
+                String(l.tanggal || "").split("T")[0] === dateString &&
+                (String(l.id_guru) === String(guruId) || isNameMatch(l.nama_guru, guruNama))
+              )
+              .map((l: any) => `${l.kelas}_${l.jam_ke}`)
+          );
+
+          const candidateSchedules = activeSchedMatches.length > 0 ? activeSchedMatches : teacherDaySchedules;
+          const targetSched = candidateSchedules.find((s: any) => !loggedScheduleJamSet.has(`${s.kelas}_${s.jam_ke}`)) || candidateSchedules[0];
+
+          // Ambil seluruh blok multi-jam pelajaran yang berturut-turut untuk kelas & mapel yang sama (1x Scan)
+          const matchingSchedules = teacherDaySchedules.filter((s: any) => 
+            String(s.kelas).trim().toLowerCase() === String(targetSched.kelas).trim().toLowerCase() &&
+            String(s.mapel).trim().toLowerCase() === String(targetSched.mapel).trim().toLowerCase()
+          );
+
+          const targetList = matchingSchedules.length > 0 ? matchingSchedules : [targetSched];
+
+          // Hitung status ketepatan waktu berdasarkan jam mulai slot pertama + toleransi guru
+          const firstSlot = targetList[0];
+          const { mulai: firstMulai } = getJamSlotTime(firstSlot.jam_ke, firstSlot.jam_mulai, firstSlot.jam_selesai);
+          let statusMengajar = "Hadir Tepat Waktu";
+          if (firstMulai && firstMulai !== "-") {
+            const [hM, mM] = firstMulai.split(":").map(Number);
+            if (!isNaN(hM) && !isNaN(mM)) {
+              const startMin = hM * 60 + mM;
+              if (nowMin > startMin + toleransiGuru) {
+                statusMengajar = "Terlambat Masuk Kelas";
+              }
+            }
+          }
+
+          // Simpan seluruh jam pelajaran ke database AbsensiMengajar
+          const savedLogs: any[] = [];
+          for (const schedItem of targetList) {
+            const { mulai: sMulai, selesai: sSelesai } = getJamSlotTime(schedItem.jam_ke, schedItem.jam_mulai, schedItem.jam_selesai);
+            const itemPayload = {
+              id_log_mengajar: `LOG-MENG-${Date.now()}-${schedItem.jam_ke}-${Math.floor(Math.random() * 1000)}`,
+              tanggal: dateString,
+              waktu_absen: timeString,
+              hari: todayName,
+              id_guru: targetSched.id_guru || schedItem.id_guru || guruId,
+              nama_guru: targetSched.nama_guru || schedItem.nama_guru || guruNama,
+              kelas: schedItem.kelas || targetSched.kelas,
+              mapel: schedItem.mapel || targetSched.mapel,
+              jam_ke: Number(schedItem.jam_ke),
+              jam_mulai_jadwal: sMulai !== "-" ? sMulai : (schedItem.jam_mulai || "07:00"),
+              jam_selesai_jadwal: sSelesai !== "-" ? sSelesai : (schedItem.jam_selesai || "07:45"),
+              status: statusMengajar,
+              catatan_materi: "Presensi Otomatis Scan QR"
+            };
+
+            await callGas("simpanAbsensiMengajarGuru", [itemPayload]);
+            savedLogs.push(itemPayload);
+          }
+
+          // Perbarui state log presensi mengajar lokal agar widget jadwal langsung terupdate
+          setAbsensiMengajarLogs(prev => [...savedLogs, ...prev]);
+
+          const jamNumbers = targetList.map((s: any) => Number(s.jam_ke)).sort((a: number, b: number) => a - b);
+          const minJam = jamNumbers[0] || targetSched.jam_ke;
+          const maxJam = jamNumbers[jamNumbers.length - 1] || targetSched.jam_ke;
+          const jamLabel = targetList.length > 1
+            ? `Blok ${targetList.length} Jam (Jam ke-${minJam} s/d Jam ke-${maxJam})`
+            : `Jam Ke-${targetSched.jam_ke}`;
+
+          const successResult: AutoScanResult = {
+            id: guruId,
+            name: guruNama,
+            role: "Guru",
+            subDetail: `NIP: ${guruNip}`,
+            mode: "Masuk",
+            status: statusMengajar,
+            timestamp: timeString,
+            dateStr: dateString,
+            scheduleDetail: `Mengajar: ${targetSched.mapel} (${targetSched.kelas}) • ${jamLabel}`,
+            success: true,
+            message: `Presensi Mengajar Berhasil: ${guruNama} (${targetSched.mapel} ${targetSched.kelas}, ${jamLabel}) - ${statusMengajar}`
+          };
+
+          setLastResult(successResult);
+          setRecentLogs(prev => [successResult, ...prev.slice(0, 19)]);
+          refreshTodayStats();
+
+          setShowNotificationToast(true);
+          if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+          toastTimeoutRef.current = setTimeout(() => setShowNotificationToast(false), 6000);
+
+          playBeep("success");
+          speakText(`Presensi mengajar ${guruNama} berhasil. ${targetSched.mapel} kelas ${targetSched.kelas}.`);
+          return;
+        }
+
+        // 3. JIKA GURU MEMILIKI JADWAL DI HARI LAIN TAPI TIDAK DI HARI INI
+        const otherDaySchedules = allJadwalList.filter((s: any) => 
+          (s.id_guru && String(s.id_guru).trim().toLowerCase() === String(guruId).trim().toLowerCase()) ||
+          isNameMatch(s.nama_guru, guruNama)
+        );
+
+        if (otherDaySchedules.length > 0 && guruFlexEntries.length === 0) {
+          const availableDays = Array.from(new Set(otherDaySchedules.map((s: any) => s.hari))).join(", ");
+          const errorMsg = `Presensi Ditolak: Jadwal mengajar '${guruNama}' tidak ada di hari ${todayName}. Ditemukan di hari: ${availableDays}`;
+          
+          const errorResult: AutoScanResult = {
+            id: guruId,
+            name: guruNama,
+            role: "Guru",
+            subDetail: `NIP: ${guruNip}`,
+            mode: autoMode,
+            status: "Ditolak",
+            timestamp: timeString,
+            dateStr: dateString,
+            success: false,
+            message: errorMsg
+          };
+          setLastResult(errorResult);
+          setRecentLogs(prev => [errorResult, ...prev.slice(0, 19)]);
+          setShowNotificationToast(true);
+          if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+          toastTimeoutRef.current = setTimeout(() => setShowNotificationToast(false), 6000);
+          playBeep("error");
+          speakText(`Presensi ditolak. Jadwal mengajar ${guruNama} ada di hari ${availableDays}.`);
+          return;
+        }
+      }
+
+      // =========================================================================
+      // REGULAR ATTENDANCE FLOW (SISWA / GURU HARIAN)
+      // =========================================================================
       const effectiveCode = personObj ? (personObj.id_guru || personObj.id_siswa || personObj.nip_nuptk || personObj.nisn || code) : code;
 
-      // 1. PANGGIL BACKEND DATABASE prosesScanQR
+      // PANGGIL BACKEND DATABASE prosesScanQR
       const scanRes = await callGas("prosesScanQR", [effectiveCode, role, autoMode, dateString]);
       
       let realName = "";
@@ -441,7 +703,7 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
               scheduleNote = `Mengajar: ${mapelStr}${kelasStr} • ${jamLabel}`;
             } else if (activeScanType === "masuk") {
               realStatus = rowData.status_masuk || fallbackStatus;
-              if (rowData.ket && (rowData.ket.includes("Jadwal") || rowData.ket.includes("Mengajar"))) {
+              if (rowData.ket && (rowData.ket.includes("Jadwal") || rowData.ket.includes("Mengajar") || rowData.ket.includes("Fleksibel"))) {
                 scheduleNote = rowData.ket;
               }
             } else if (activeScanType === "pulang") {
