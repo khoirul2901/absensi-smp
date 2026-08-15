@@ -58,7 +58,14 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
   const [allJadwalList, setAllJadwalList] = useState<any[]>([]);
   const [jadwalToday, setJadwalToday] = useState<any[]>([]);
   const [jamSlotsList, setJamSlotsList] = useState<any[]>([]);
+  const [flexSchedulesList, setFlexSchedulesList] = useState<any[]>([]);
+  const [absensiMengajarLogs, setAbsensiMengajarLogs] = useState<any[]>([]);
+  const [batasiJamJadwal, setBatasiJamJadwal] = useState<boolean>(true);
+  const [toleransiAwal, setToleransiAwal] = useState<number>(15);
+  const [toleransiAkhir, setToleransiAkhir] = useState<number>(30);
+  const [toleransiGuru, setToleransiGuru] = useState<number>(15);
   const [loadingMaster, setLoadingMaster] = useState(false);
+  const [activeTab, setActiveTab] = useState<"logs" | "jadwalToday">("logs");
 
   // Result Banner Board State (Kotak status diatas scanner)
   const [lastResult, setLastResult] = useState<AutoScanResult | null>(null);
@@ -129,8 +136,18 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
   const loadMasterData = async () => {
     setLoadingMaster(true);
     try {
-      // 1. Load Siswa
-      const resSiswa = await callGas("getDataMaster", ["Siswa"]);
+      // 1. Fetch Parallel Data
+      const [resSiswa, resGuru, resJadwal, resJam, resFlex, resLogsMengajar, resCfg] = await Promise.all([
+        callGas("getDataMaster", ["Siswa"]),
+        callGas("getDataMaster", ["Guru"]),
+        callGas("getJadwalPelajaranSemua"),
+        callGas("getJamPelajaran"),
+        callGas("getJadwalGuruSemua"),
+        callGas("getAbsensiMengajarGuru"),
+        callGas("getPengaturanSemua")
+      ]);
+
+      // Process Siswa
       const sData = extractArrayData(resSiswa);
       if (sData && sData.length > 0) {
         setSiswaList(sData);
@@ -139,8 +156,7 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
         setSiswaList(getStorage("data_siswa") || []);
       }
 
-      // 2. Load Guru
-      const resGuru = await callGas("getDataMaster", ["Guru"]);
+      // Process Guru
       const gData = extractArrayData(resGuru);
       if (gData && gData.length > 0) {
         setGuruList(gData);
@@ -149,8 +165,7 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
         setGuruList(getStorage("data_guru") || []);
       }
 
-      // 3. Load All Lesson Schedules
-      const resJadwal = await callGas("getJadwalPelajaranSemua");
+      // Process Lesson Schedules
       const jData = extractArrayData(resJadwal);
       if (jData && jData.length > 0) {
         setAllJadwalList(jData);
@@ -160,8 +175,7 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
         setAllJadwalList(storedJadwal);
       }
 
-      // 4. Load Jam Pelajaran
-      const resJam = await callGas("getJamPelajaran");
+      // Process Jam Pelajaran
       const jamData = extractArrayData(resJam);
       if (jamData && jamData.length > 0) {
         setJamSlotsList(jamData);
@@ -170,14 +184,35 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
         setJamSlotsList(getStorage("jam_pelajaran") || []);
       }
 
-      // 5. Load Flexible Schedules
-      const resFlex = await callGas("getJadwalGuruSemua");
+      // Process Flexible Schedules
       const flexData = extractArrayData(resFlex);
       if (flexData && flexData.length > 0) {
+        setFlexSchedulesList(flexData);
         setStorage("jadwal_guru", flexData);
+      } else {
+        setFlexSchedulesList(getStorage("jadwal_guru") || []);
       }
 
-      // 6. Filter Today's Schedules
+      // Process Absensi Mengajar Logs
+      const logsMengajar = extractArrayData(resLogsMengajar);
+      if (logsMengajar && logsMengajar.length > 0) {
+        setAbsensiMengajarLogs(logsMengajar);
+        setStorage("absensi_mengajar_guru", logsMengajar);
+      } else {
+        setAbsensiMengajarLogs(getStorage("absensi_mengajar_guru") || []);
+      }
+
+      // Process Settings
+      const cfg = resCfg?.data || resCfg;
+      if (cfg && typeof cfg === "object") {
+        if (cfg.batasi_jam_jadwal !== undefined) setBatasiJamJadwal(Boolean(cfg.batasi_jam_jadwal));
+        if (cfg.toleransi_awal_menit !== undefined) setToleransiAwal(Number(cfg.toleransi_awal_menit) || 15);
+        if (cfg.toleransi_akhir_menit !== undefined) setToleransiAkhir(Number(cfg.toleransi_akhir_menit) || 30);
+        const val = Number(cfg.toleransi_guru ?? cfg.toleransi_mengajar_guru);
+        if (!isNaN(val) && val >= 0) setToleransiGuru(val);
+      }
+
+      // Filter Today's Schedules
       const days = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
       const todayName = days[new Date().getDay()];
       const currentJadwal = (jData && jData.length > 0) ? jData : (getStorage("jadwal_pelajaran") || []);
@@ -194,6 +229,7 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
       setSiswaList(getStorage("data_siswa") || []);
       setGuruList(getStorage("data_guru") || []);
       setAllJadwalList(getStorage("jadwal_pelajaran") || []);
+      setFlexSchedulesList(getStorage("jadwal_guru") || []);
     } finally {
       setLoadingMaster(false);
     }
@@ -429,19 +465,19 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
           role: role,
           subDetail: "-",
           mode: autoMode,
-          status: "Gagal",
+          status: "Ditolak",
           timestamp: timeString,
           dateStr: dateString,
           success: false,
-          message: scanRes.message || "Data tidak ditemukan atau belum terdaftar"
+          message: scanRes.message || "Data tidak ditemukan atau jadwal tidak sesuai"
         };
         setLastResult(errorResult);
         setRecentLogs(prev => [errorResult, ...prev.slice(0, 19)]);
         setShowNotificationToast(true);
         if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-        toastTimeoutRef.current = setTimeout(() => setShowNotificationToast(false), 5000);
+        toastTimeoutRef.current = setTimeout(() => setShowNotificationToast(false), 6000);
         playBeep("error");
-        speakText("Presensi tidak terdaftar atau gagal.");
+        speakText(scanRes.message || "Presensi ditolak.");
         return;
       }
 
@@ -819,35 +855,126 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
 
         </div>
 
-        {/* QUICK MANUAL SEARCH & RECENT LOGS SIDEBAR */}
+        {/* QUICK MANUAL SEARCH, LOGS & JADWAL SIDEBAR */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4 flex flex-col justify-between">
           <div>
-            <h3 className="text-sm font-extrabold text-gray-900 mb-3 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-indigo-500" />
-              Log Presensi Terakhir
-            </h3>
+            {/* Tab Header */}
+            <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl mb-3">
+              <button
+                type="button"
+                onClick={() => setActiveTab("logs")}
+                className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                  activeTab === "logs" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-800"
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                Log Scan ({recentLogs.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("jadwalToday")}
+                className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-lg transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                  activeTab === "jadwalToday" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-800"
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5 text-amber-500" />
+                Jadwal Hari Ini ({jadwalToday.length})
+              </button>
+            </div>
 
-            {recentLogs.length === 0 ? (
-              <p className="text-xs text-gray-400 italic text-center py-8">
-                Belum ada log presensi pada sesi ini
-              </p>
-            ) : (
-              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-                {recentLogs.map((log, idx) => (
-                  <div key={idx} className="p-2.5 bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-between text-xs">
-                    <div>
-                      <div className="font-extrabold text-gray-900">{log.name}</div>
-                      <div className="text-[10px] text-gray-500">{log.role} — {log.subDetail}</div>
-                    </div>
+            {/* TAB CONTENT 1: LOGS */}
+            {activeTab === "logs" && (
+              <>
+                {recentLogs.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic text-center py-8">
+                    Belum ada log presensi pada sesi ini
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                    {recentLogs.map((log, idx) => (
+                      <div key={idx} className={`p-2.5 rounded-xl border flex items-center justify-between text-xs transition ${
+                        log.success ? "bg-gray-50 border-gray-100" : "bg-rose-50/50 border-rose-200 text-rose-900"
+                      }`}>
+                        <div>
+                          <div className="font-extrabold text-gray-900 flex items-center gap-1.5">
+                            <span>{log.name}</span>
+                            <span className={`text-[9px] font-black px-1.5 py-0.2 rounded uppercase ${
+                              log.role === "Guru" ? "bg-indigo-100 text-indigo-700" : "bg-emerald-100 text-emerald-700"
+                            }`}>
+                              {log.role}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-gray-500">
+                            {log.subDetail}
+                            {log.scheduleDetail ? ` • ${log.scheduleDetail}` : ""}
+                          </div>
+                        </div>
 
-                    <div className="text-right">
-                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                        {log.timestamp}
-                      </span>
-                    </div>
+                        <div className="text-right shrink-0">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                            !log.success 
+                              ? "bg-rose-100 text-rose-700"
+                              : log.status.includes("Terlambat") 
+                              ? "bg-amber-100 text-amber-800" 
+                              : "bg-emerald-100 text-emerald-800"
+                          }`}>
+                            {log.timestamp}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                )}
+              </>
+            )}
+
+            {/* TAB CONTENT 2: JADWAL HARI INI */}
+            {activeTab === "jadwalToday" && (
+              <>
+                {jadwalToday.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic text-center py-8">
+                    Tidak ada jadwal mengajar di database untuk hari ini
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                    {jadwalToday.map((j: any, idx: number) => {
+                      const todayStr = new Date().toISOString().split("T")[0];
+                      const isAttended = absensiMengajarLogs.some((a: any) => 
+                        a.tanggal === todayStr &&
+                        Number(a.jam_ke) === Number(j.jam_ke) &&
+                        String(a.kelas || "").trim().toLowerCase() === String(j.kelas || "").trim().toLowerCase() &&
+                        (isNameMatch(a.nama_guru, j.nama_guru) || String(a.id_guru) === String(j.id_guru))
+                      );
+
+                      return (
+                        <div key={idx} className="p-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs flex items-center justify-between">
+                          <div>
+                            <div className="font-extrabold text-gray-900 flex items-center gap-1.5">
+                              <span>{j.mapel} ({j.kelas})</span>
+                              <span className="bg-amber-100 text-amber-800 text-[9px] font-black px-1.5 rounded">
+                                Jam {j.jam_ke}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-gray-500">{j.nama_guru}</div>
+                          </div>
+
+                          <div className="text-right">
+                            {isAttended ? (
+                              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                                Sudah Absen
+                              </span>
+                            ) : (
+                              <span className="bg-slate-100 text-slate-600 text-[10px] font-medium px-2 py-0.5 rounded-md">
+                                Belum
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -857,7 +984,7 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
             className="w-full bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 text-xs font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loadingMaster ? "animate-spin" : ""}`} />
-            Refresh Data Master ({siswaList.length} Siswa / {guruList.length} Guru)
+            Refresh Data Master & Jadwal ({siswaList.length} Siswa / {guruList.length} Guru)
           </button>
         </div>
 
