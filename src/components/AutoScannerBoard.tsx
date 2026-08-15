@@ -10,8 +10,6 @@ import {
   Clock, 
   Volume2, 
   VolumeX, 
-  Camera, 
-  CameraOff, 
   Users, 
   CheckCircle2, 
   XCircle, 
@@ -27,7 +25,6 @@ import {
   RefreshCw,
   Info
 } from "lucide-react";
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { callGas, getStorageKey, setStorage, getStorage, extractArrayData, getSchoolProfile } from "../lib/gasApi";
 
 interface AutoScanResult {
@@ -45,17 +42,10 @@ interface AutoScanResult {
 }
 
 export default function AutoScannerBoard({ session }: { session?: any }) {
-  // Scanner Mode & Hardware listener states
-  const [scanMethod, setScanMethod] = useState<"hardware" | "camera">("hardware");
+  // Scanner Hardware listener states
   const [barcodeInput, setBarcodeInput] = useState("");
   const [autoFocusLock, setAutoFocusLock] = useState(true);
   const barcodeRef = useRef<HTMLInputElement | null>(null);
-
-  // Camera states
-  const [cameraActive, setCameraActive] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [availableCameras, setAvailableCameras] = useState<{ id: string; label: string }[]>([]);
-  const [selectedCameraId, setSelectedCameraId] = useState<string>("");
 
   // Processing & Audio states
   const [isProcessing, setIsProcessing] = useState(false);
@@ -65,7 +55,9 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
   // Master Data Cache
   const [siswaList, setSiswaList] = useState<any[]>([]);
   const [guruList, setGuruList] = useState<any[]>([]);
+  const [allJadwalList, setAllJadwalList] = useState<any[]>([]);
   const [jadwalToday, setJadwalToday] = useState<any[]>([]);
+  const [jamSlotsList, setJamSlotsList] = useState<any[]>([]);
   const [loadingMaster, setLoadingMaster] = useState(false);
 
   // Result Banner Board State (Kotak status diatas scanner)
@@ -111,6 +103,28 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
     return () => clearInterval(interval);
   }, []);
 
+  // Name Normalizer & Fuzzy Matcher
+  const normalizeName = (str: string) => {
+    return String(str || "")
+      .toLowerCase()
+      .replace(/[,.]/g, " ")
+      .replace(/\b(s|m|dr|drs|dra|prof|ir|h|hj)\s*\.?\s*(pd|kom|ag|is|si|se|mm|hum|st|pt|tp|sos|ip|ed|pdi|mat|bio|fis|med)\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+
+  const isNameMatch = (n1: string, n2: string) => {
+    if (!n1 || !n2) return false;
+    const s1 = String(n1).trim().toLowerCase();
+    const s2 = String(n2).trim().toLowerCase();
+    if (s1 === s2) return true;
+    if (s1.includes(s2) || s2.includes(s1)) return true;
+    const norm1 = normalizeName(n1);
+    const norm2 = normalizeName(n2);
+    if (norm1 && norm2 && (norm1 === norm2 || norm1.includes(norm2) || norm2.includes(norm1))) return true;
+    return false;
+  };
+
   // Load Master Data & Schedules
   const loadMasterData = async () => {
     setLoadingMaster(true);
@@ -135,13 +149,39 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
         setGuruList(getStorage("data_guru") || []);
       }
 
-      // 3. Load Lesson Schedule Today
+      // 3. Load All Lesson Schedules
       const resJadwal = await callGas("getJadwalPelajaranSemua");
       const jData = extractArrayData(resJadwal);
+      if (jData && jData.length > 0) {
+        setAllJadwalList(jData);
+        setStorage("jadwal_pelajaran", jData);
+      } else {
+        const storedJadwal = getStorage("jadwal_pelajaran") || [];
+        setAllJadwalList(storedJadwal);
+      }
+
+      // 4. Load Jam Pelajaran
+      const resJam = await callGas("getJamPelajaran");
+      const jamData = extractArrayData(resJam);
+      if (jamData && jamData.length > 0) {
+        setJamSlotsList(jamData);
+        setStorage("jam_pelajaran", jamData);
+      } else {
+        setJamSlotsList(getStorage("jam_pelajaran") || []);
+      }
+
+      // 5. Load Flexible Schedules
+      const resFlex = await callGas("getJadwalGuruSemua");
+      const flexData = extractArrayData(resFlex);
+      if (flexData && flexData.length > 0) {
+        setStorage("jadwal_guru", flexData);
+      }
+
+      // 6. Filter Today's Schedules
       const days = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
       const todayName = days[new Date().getDay()];
-      
-      const filteredToday = (jData || []).filter((j: any) => {
+      const currentJadwal = (jData && jData.length > 0) ? jData : (getStorage("jadwal_pelajaran") || []);
+      const filteredToday = currentJadwal.filter((j: any) => {
         const h = (j.hari || "").trim().toLowerCase();
         return h === todayName.toLowerCase();
       });
@@ -153,6 +193,7 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
       console.error("Gagal load master data auto scanner:", e);
       setSiswaList(getStorage("data_siswa") || []);
       setGuruList(getStorage("data_guru") || []);
+      setAllJadwalList(getStorage("jadwal_pelajaran") || []);
     } finally {
       setLoadingMaster(false);
     }
@@ -162,9 +203,9 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
     loadMasterData();
   }, []);
 
-  // Auto-focus lock for USB/Bluetooth Scanner
+  // Auto-focus lock for USB/Bluetooth Hardware Scanner
   useEffect(() => {
-    if (scanMethod === "hardware" && autoFocusLock) {
+    if (autoFocusLock) {
       const focusInput = () => {
         if (barcodeRef.current && document.activeElement !== barcodeRef.current) {
           barcodeRef.current.focus();
@@ -174,7 +215,7 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
       const interval = setInterval(focusInput, 1500);
       return () => clearInterval(interval);
     }
-  }, [scanMethod, autoFocusLock]);
+  }, [autoFocusLock]);
 
   // Audio & Speech Feedback
   const speakText = (text: string) => {
@@ -238,54 +279,65 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
 
     try {
       const cleanCode = code.toLowerCase();
-      const cleanWithoutPrefix = cleanCode.replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
+      const cleanWithoutPrefix = cleanCode.replace(/^(qr|id|s|g|nisn|nip|siswa|guru|jad|jadwal)[_:\-\s]+/i, '').trim();
 
-      // Look up in Siswa list first by exact ID, NISN, or QR Content
-      let matchedSiswa = siswaList.find((s: any) => {
+      // 1. Direct Schedule ID match across all lesson schedules
+      const matchedDirectSched = allJadwalList.find((s: any) => {
+        const idJ = String(s.id_jadwal || "").trim().toLowerCase();
+        return idJ && (idJ === cleanCode || idJ === cleanWithoutPrefix);
+      });
+
+      // 2. Look up in Siswa list by exact ID, NISN, QR Content, or Name
+      let matchedSiswa = !matchedDirectSched ? siswaList.find((s: any) => {
         const idS = String(s.id_siswa || "").trim().toLowerCase();
         const nisS = String(s.nisn || s.nis || "").trim().toLowerCase();
         const qrS = String(s.qr_content || s.qr_code || "").trim().toLowerCase();
-        return (idS && idS === cleanCode) || (nisS && nisS === cleanCode) || (qrS && qrS === cleanCode);
-      });
+        return (idS && (idS === cleanCode || idS === cleanWithoutPrefix)) ||
+               (nisS && (nisS === cleanCode || nisS === cleanWithoutPrefix)) ||
+               (qrS && (qrS === cleanCode || qrS === cleanWithoutPrefix)) ||
+               isNameMatch(s.nama_siswa, cleanCode);
+      }) : null;
 
-      if (!matchedSiswa && cleanWithoutPrefix && cleanWithoutPrefix.length >= 2) {
-        matchedSiswa = siswaList.find((s: any) => {
-          const idS = String(s.id_siswa || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
-          const nisS = String(s.nisn || s.nis || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
-          const qrS = String(s.qr_content || s.qr_code || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
-          return (idS && idS === cleanWithoutPrefix) || (nisS && nisS === cleanWithoutPrefix) || (qrS && qrS === cleanWithoutPrefix);
-        });
-      }
-
-      if (!matchedSiswa) {
-        matchedSiswa = siswaList.find((s: any) => {
-          const namaS = String(s.nama_siswa || s.nama || "").trim().toLowerCase();
-          return namaS && namaS === cleanCode;
-        });
-      }
-
-      // Look up in Guru list by exact ID, NIP, or QR Content
+      // 3. Look up in Guru list by exact ID, NIP, QR Content, or Name
       let matchedGuru = guruList.find((g: any) => {
         const idG = String(g.id_guru || "").trim().toLowerCase();
         const nipG = String(g.nip_nuptk || g.nip || "").trim().toLowerCase();
         const qrG = String(g.qr_content || g.qr_code || "").trim().toLowerCase();
-        return (idG && idG === cleanCode) || (nipG && nipG === cleanCode) || (qrG && qrG === cleanCode);
+        return (idG && (idG === cleanCode || idG === cleanWithoutPrefix)) ||
+               (nipG && (nipG === cleanCode || nipG === cleanWithoutPrefix)) ||
+               (qrG && (qrG === cleanCode || qrG === cleanWithoutPrefix)) ||
+               isNameMatch(g.nama_guru, cleanCode) ||
+               isNameMatch(g.nama_guru, cleanWithoutPrefix);
       });
 
-      if (!matchedGuru && cleanWithoutPrefix && cleanWithoutPrefix.length >= 2) {
-        matchedGuru = guruList.find((g: any) => {
-          const idG = String(g.id_guru || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
-          const nipG = String(g.nip_nuptk || g.nip || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
-          const qrG = String(g.qr_content || g.qr_code || "").trim().toLowerCase().replace(/^(qr|id|s|g|nisn|nip|siswa|guru)[_:\-\s]+/i, '').trim();
-          return (idG && idG === cleanWithoutPrefix) || (nipG && nipG === cleanWithoutPrefix) || (qrG && qrG === cleanWithoutPrefix);
-        });
+      // If matched by direct schedule QR, resolve teacher from schedule
+      if (matchedDirectSched) {
+        matchedGuru = guruList.find((g: any) => 
+          isNameMatch(g.nama_guru, matchedDirectSched.nama_guru) || 
+          String(g.id_guru || "").toLowerCase() === String(matchedDirectSched.id_guru || "").toLowerCase()
+        ) || {
+          id_guru: matchedDirectSched.id_guru || code,
+          nama_guru: matchedDirectSched.nama_guru || "Guru Pengampu"
+        };
       }
 
-      if (!matchedGuru) {
-        matchedGuru = guruList.find((g: any) => {
-          const namaG = String(g.nama_guru || g.nama || "").trim().toLowerCase();
-          return namaG && namaG === cleanCode;
+      // Check if scanned code matches teacher in lesson schedules list
+      if (!matchedGuru && !matchedSiswa) {
+        const matchedSchedItem = allJadwalList.find((s: any) => {
+          const sId = String(s.id_guru || "").trim().toLowerCase();
+          return (sId && (sId === cleanCode || sId === cleanWithoutPrefix)) ||
+                 isNameMatch(s.nama_guru, cleanCode) ||
+                 isNameMatch(s.nama_guru, cleanWithoutPrefix);
         });
+        if (matchedSchedItem) {
+          matchedGuru = guruList.find((g: any) => 
+            isNameMatch(g.nama_guru, matchedSchedItem.nama_guru) || 
+            String(g.id_guru || "").toLowerCase() === String(matchedSchedItem.id_guru || "").toLowerCase()
+          ) || {
+            id_guru: matchedSchedItem.id_guru || code,
+            nama_guru: matchedSchedItem.nama_guru || code
+          };
+        }
       }
 
       let role: "Guru" | "Siswa" = "Siswa";
@@ -302,7 +354,7 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
         personObj = matchedGuru;
       } else {
         // Fallback Heuristics by Prefix
-        if (cleanCode.startsWith("g-") || cleanCode.startsWith("guru") || cleanCode.startsWith("nip") || cleanCode.startsWith("g_")) {
+        if (cleanCode.startsWith("g-") || cleanCode.startsWith("guru") || cleanCode.startsWith("nip") || cleanCode.startsWith("g_") || cleanCode.startsWith("jad")) {
           role = "Guru";
         } else {
           role = "Siswa";
@@ -316,8 +368,11 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
       const isLate = autoMode === "Masuk" && (currentHour > 7 || (currentHour === 7 && currentMinutes > 15));
       const fallbackStatus = autoMode === "Masuk" ? (isLate ? "Terlambat" : "Tepat Waktu") : "Tepat Waktu";
 
-      // 1. PANGGIL BACKEND DATABASE (Sama persis dengan Menu Absensi Scanner Eksternal: prosesScanQR)
-      const scanRes = await callGas("prosesScanQR", [code, role, autoMode, dateString]);
+      // Effective code to send
+      const effectiveCode = personObj ? (personObj.id_guru || personObj.id_siswa || personObj.nip_nuptk || personObj.nisn || code) : code;
+
+      // 1. PANGGIL BACKEND DATABASE prosesScanQR
+      const scanRes = await callGas("prosesScanQR", [effectiveCode, role, autoMode, dateString]);
       
       let realName = "";
       let realRole = role;
@@ -345,14 +400,17 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
             if (activeScanType === "mengajar") {
               realStatus = rowData.status || "Hadir Tepat Waktu";
               const jamLabel = rowData.jam_ke_label || `Jam Ke-${rowData.jam_ke}`;
-              scheduleNote = `Mengajar: ${rowData.mapel} (${rowData.kelas}) • ${jamLabel}`;
+              const mapelStr = rowData.mapel || "Mata Pelajaran";
+              const kelasStr = rowData.kelas ? ` (${rowData.kelas})` : "";
+              scheduleNote = `Mengajar: ${mapelStr}${kelasStr} • ${jamLabel}`;
             } else if (activeScanType === "masuk") {
               realStatus = rowData.status_masuk || fallbackStatus;
-              if (rowData.ket && rowData.ket.includes("Jadwal")) {
+              if (rowData.ket && (rowData.ket.includes("Jadwal") || rowData.ket.includes("Mengajar"))) {
                 scheduleNote = rowData.ket;
               }
             } else if (activeScanType === "pulang") {
               realStatus = rowData.status_pulang || "Tepat Waktu";
+              if (rowData.ket) scheduleNote = rowData.ket;
             } else {
               realStatus = rowData.status_masuk || "Sudah Masuk";
             }
@@ -398,7 +456,6 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
       }
 
       const idTarget = personObj?.id_siswa || personObj?.id_guru || personObj?.nisn || personObj?.nip_nuptk || code;
-
       const isSuccessful = Boolean(scanRes && scanRes.success !== false);
 
       const resultObj: AutoScanResult = {
@@ -430,12 +487,12 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
       // Play Beep & Voice Announcement with Contextual Info
       if (activeScanType === "info") {
         playBeep("info");
-        const infoMsg = scanRes?.message || `${realName} sudah presensi masuk.`;
+        const infoMsg = scanRes?.message || `${realName} sudah presensi.`;
         speakText(infoMsg);
       } else if (activeScanType === "mengajar") {
         playBeep("success");
         const matchData = scanRes?.data;
-        const mapelKelasStr = matchData?.mapel ? `${matchData.mapel} kelas ${matchData.kelas || ""}` : "jam mengajar";
+        const mapelKelasStr = matchData?.mapel ? `${matchData.mapel} ${matchData.kelas ? 'kelas ' + matchData.kelas : ''}` : "jam mengajar";
         speakText(`Presensi mengajar ${realName} berhasil, ${mapelKelasStr}`);
       } else if (activeScanType === "pulang") {
         playBeep("success");
@@ -460,15 +517,19 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
         message: `Presensi gagal untuk ${code}: ` + (err?.message || "ID tidak ditemukan")
       };
       setLastResult(errorResult);
+      setRecentLogs(prev => [errorResult, ...prev.slice(0, 19)]);
       setShowNotificationToast(true);
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
       toastTimeoutRef.current = setTimeout(() => setShowNotificationToast(false), 5000);
       playBeep("error");
-      speakText("Presensi gagal, silakan coba lagi");
+      speakText("Presensi gagal.");
     } finally {
       setIsProcessing(false);
       setBarcodeInput("");
-      if (barcodeRef.current) barcodeRef.current.focus();
+      if (barcodeRef.current) {
+        barcodeRef.current.value = "";
+        barcodeRef.current.focus();
+      }
     }
   };
 
@@ -478,60 +539,6 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
       processAutoScan(barcodeInput.trim());
     }
   };
-
-  // CAMERA SCANNER INITIALIZATION
-  useEffect(() => {
-    let html5Qrcode: Html5Qrcode | null = null;
-
-    if (scanMethod === "camera" && cameraActive) {
-      Html5Qrcode.getCameras()
-        .then((devices) => {
-          if (devices && devices.length > 0) {
-            const formatted = devices.map(d => ({ id: d.id, label: d.label || `Kamera ${d.id}` }));
-            setAvailableCameras(formatted);
-            const camId = selectedCameraId || formatted[0].id;
-            if (!selectedCameraId) setSelectedCameraId(camId);
-
-            html5Qrcode = new Html5Qrcode("auto-reader", {
-              formatsToSupport: [
-                Html5QrcodeSupportedFormats.QR_CODE,
-                Html5QrcodeSupportedFormats.CODE_128,
-                Html5QrcodeSupportedFormats.EAN_13,
-                Html5QrcodeSupportedFormats.CODE_39
-              ],
-              verbose: false
-            });
-
-            html5Qrcode.start(
-              camId,
-              { fps: 10, qrbox: { width: 250, height: 250 } },
-              (decodedText) => {
-                if (decodedText && !isProcessing) {
-                  processAutoScan(decodedText);
-                }
-              },
-              () => {}
-            ).catch((err) => {
-              setCameraError("Kamera gagal diakses: " + err.toString());
-              setCameraActive(false);
-            });
-          } else {
-            setCameraError("Tidak ada kamera terdeteksi.");
-            setCameraActive(false);
-          }
-        })
-        .catch((err) => {
-          setCameraError("Izin kamera ditolak: " + err.toString());
-          setCameraActive(false);
-        });
-    }
-
-    return () => {
-      if (html5Qrcode && html5Qrcode.isScanning) {
-        html5Qrcode.stop().catch(() => {});
-      }
-    };
-  }, [scanMethod, cameraActive, selectedCameraId]);
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto pb-12 relative">
@@ -731,7 +738,7 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
               </div>
               <h3 className="text-lg font-extrabold text-white">Papan Informasi Presensi Siap</h3>
               <p className="text-xs text-slate-400 max-w-lg mx-auto">
-                Silakan lakukan scan kartu (Siswa / Guru) menggunakan Barcode Scanner USB atau Kamera. Sistem akan otomatis mendeteksi ID dan mencatat data.
+                Silakan lakukan scan kartu (Siswa / Guru) menggunakan Barcode / QR / RFID Hardware Scanner USB. Sistem akan otomatis mendeteksi ID dan mencatat presensi + jadwal mengajar.
               </p>
             </div>
           )}
@@ -742,127 +749,73 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
       {/* 2. SCANNER INPUT CONTROLS SECTION */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* SCANNER INPUT CARD */}
+        {/* SCANNER INPUT CARD (DEDICATED HARDWARE SCANNER) */}
         <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6">
           
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-100 pb-4">
             <div>
               <h2 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
                 <Zap className="w-4 h-4 text-amber-500" />
-                Input Auto Scanner
+                Input Auto Scanner (Hardware USB / Barcode / RFID)
               </h2>
               <p className="text-xs text-gray-500">
-                Mendukung Scanner Kartu RFID/Barcode HID USB & Kamera QR Code
+                Penerimaan instan dari alat scanner hardware / barcode gun / RFID reader
               </p>
             </div>
 
-            {/* Scan Method Switcher */}
-            <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200 text-xs font-bold">
-              <button
-                onClick={() => {
-                  setScanMethod("hardware");
-                  setCameraActive(false);
-                }}
-                className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
-                  scanMethod === "hardware" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-900"
-                }`}
-              >
-                <Usb className="w-3.5 h-3.5 text-rose-500" />
-                Hardware / USB
-              </button>
-
-              <button
-                onClick={() => {
-                  setScanMethod("camera");
-                  setCameraActive(true);
-                }}
-                className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
-                  scanMethod === "camera" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-900"
-                }`}
-              >
-                <Camera className="w-3.5 h-3.5 text-blue-500" />
-                Kamera QR
-              </button>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                Scanner Siap
+              </span>
             </div>
           </div>
 
           {/* HARDWARE USB SCANNER INPUT */}
-          {scanMethod === "hardware" && (
-            <div className="space-y-4">
-              <form onSubmit={handleBarcodeSubmit} className="space-y-3">
-                <label className="text-xs font-bold text-gray-600 block">
-                  Scan Barcode / Tempel Kartu ID di Alat Scanner:
-                </label>
+          <div className="space-y-4">
+            <form onSubmit={handleBarcodeSubmit} className="space-y-3">
+              <label className="text-xs font-bold text-gray-600 block">
+                Scan Barcode / Tempel Kartu ID di Alat Scanner:
+              </label>
+              
+              <div className="relative">
+                <input
+                  ref={barcodeRef}
+                  type="text"
+                  value={barcodeInput}
+                  onChange={(e) => setBarcodeInput(e.target.value)}
+                  placeholder="Standby menunggu scan kartu... (Contoh: S-1001 / G-001)"
+                  className="w-full bg-slate-900 text-white font-mono text-base font-bold rounded-xl py-3.5 pl-11 pr-24 border border-slate-800 focus:outline-none focus:border-rose-500 shadow-inner"
+                  disabled={isProcessing}
+                />
+                <Usb className="w-5 h-5 text-rose-400 absolute left-3.5 top-3.5" />
                 
-                <div className="relative">
-                  <input
-                    ref={barcodeRef}
-                    type="text"
-                    value={barcodeInput}
-                    onChange={(e) => setBarcodeInput(e.target.value)}
-                    placeholder="Standby menunggu scan kartu... (Contoh: S-1001 / G-001)"
-                    className="w-full bg-slate-900 text-white font-mono text-base font-bold rounded-xl py-3.5 pl-11 pr-24 border border-slate-800 focus:outline-none focus:border-rose-500 shadow-inner"
-                    disabled={isProcessing}
-                  />
-                  <Usb className="w-5 h-5 text-rose-400 absolute left-3.5 top-3.5" />
-                  
-                  <button
-                    type="submit"
-                    disabled={isProcessing || !barcodeInput.trim()}
-                    className="absolute right-2 top-2 bottom-2 bg-rose-600 text-white font-bold text-xs px-4 rounded-lg hover:bg-rose-700 transition disabled:opacity-50 cursor-pointer"
-                  >
-                    {isProcessing ? "Proses..." : "Scan"}
-                  </button>
-                </div>
-              </form>
-
-              <div className="flex items-center justify-between bg-rose-50/50 p-3 rounded-xl border border-rose-100 text-xs">
-                <span className="text-rose-900 font-semibold flex items-center gap-1.5">
-                  <Info className="w-4 h-4 text-rose-500 shrink-0" />
-                  Auto Focus aktif untuk memproses hasil cetak scanner otomatis
-                </span>
-
                 <button
-                  onClick={() => setAutoFocusLock(!autoFocusLock)}
-                  className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border cursor-pointer ${
-                    autoFocusLock ? "bg-rose-600 text-white border-rose-600" : "bg-white text-gray-700 border-gray-200"
-                  }`}
+                  type="submit"
+                  disabled={isProcessing || !barcodeInput.trim()}
+                  className="absolute right-2 top-2 bottom-2 bg-rose-600 text-white font-bold text-xs px-4 rounded-lg hover:bg-rose-700 transition disabled:opacity-50 cursor-pointer"
                 >
-                  {autoFocusLock ? "Lock Focus ON" : "Lock Focus OFF"}
+                  {isProcessing ? "Proses..." : "Scan"}
                 </button>
               </div>
-            </div>
-          )}
+            </form>
 
-          {/* CAMERA QR SCANNER VIEW */}
-          {scanMethod === "camera" && (
-            <div className="space-y-4">
-              {availableCameras.length > 1 && (
-                <div className="flex items-center gap-2">
-                  <label className="text-xs font-bold text-gray-600">Pilih Kamera:</label>
-                  <select
-                    value={selectedCameraId}
-                    onChange={(e) => setSelectedCameraId(e.target.value)}
-                    className="bg-gray-50 border border-gray-200 text-xs font-bold rounded-xl p-2"
-                  >
-                    {availableCameras.map(cam => (
-                      <option key={cam.id} value={cam.id}>{cam.label}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
+            <div className="flex items-center justify-between bg-rose-50/50 p-3 rounded-xl border border-rose-100 text-xs">
+              <span className="text-rose-900 font-semibold flex items-center gap-1.5">
+                <Info className="w-4 h-4 text-rose-500 shrink-0" />
+                Auto Focus aktif untuk memproses hasil scan alat secara langsung
+              </span>
 
-              {cameraError ? (
-                <div className="p-4 bg-rose-50 text-rose-800 rounded-xl text-xs font-bold">
-                  {cameraError}
-                </div>
-              ) : (
-                <div className="relative rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 min-h-[250px] flex items-center justify-center">
-                  <div id="auto-reader" className="w-full"></div>
-                </div>
-              )}
+              <button
+                onClick={() => setAutoFocusLock(!autoFocusLock)}
+                className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border cursor-pointer ${
+                  autoFocusLock ? "bg-rose-600 text-white border-rose-600" : "bg-white text-gray-700 border-gray-200"
+                }`}
+              >
+                {autoFocusLock ? "Lock Focus ON" : "Lock Focus OFF"}
+              </button>
             </div>
-          )}
+          </div>
 
         </div>
 
