@@ -1048,27 +1048,45 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* 3 Core Attendance Sheets Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-              {/* Sheet 1: PresensiSiswa */}
-              <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200/80 space-y-3">
+            {/* Core Database Sheets Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+              {/* Sheet 1: JadwalGuru */}
+              <div className="p-4 rounded-2xl bg-teal-50/70 border border-teal-200/80 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-1 bg-blue-600 text-white text-[11px] font-black rounded-lg uppercase tracking-wider">
-                    Sheet: PresensiSiswa
+                  <span className="px-2.5 py-1 bg-teal-600 text-white text-[11px] font-black rounded-lg uppercase tracking-wider">
+                    Sheet: JadwalGuru
                   </span>
-                  <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                  <CheckCircle2 className="w-4 h-4 text-teal-600" />
                 </div>
-                <h3 className="text-xs font-extrabold text-blue-950">Presensi Harian Siswa</h3>
-                <p className="text-[11px] text-blue-800 leading-relaxed">
-                  Menyimpan log rekap kehadiran harian siswa (Masuk dan Pulang) hasil scan QR/Barcode eksternal & manual.
+                <h3 className="text-xs font-extrabold text-teal-950">Master Jadwal Fleksibel Guru</h3>
+                <p className="text-[11px] text-teal-800 leading-relaxed">
+                  Menyimpan konfigurasi jadwal harian/fleksibel guru (hari aktif, jam masuk awal, batas terlambat, dan jam pulang).
                 </p>
-                <div className="bg-white/80 p-2.5 rounded-xl border border-blue-100 text-[10px] text-blue-900 font-mono space-y-0.5">
-                  <p className="font-bold text-blue-950">Kolom Sheet:</p>
-                  <p className="break-all text-slate-700">id_log_siswa, tanggal, id_siswa, nama_siswa, kelas_jurusan, jam_masuk, status_masuk, jam_pulang, status_pulang, ket</p>
+                <div className="bg-white/80 p-2.5 rounded-xl border border-teal-100 text-[10px] text-teal-900 font-mono space-y-0.5">
+                  <p className="font-bold text-teal-950">Kolom Sheet:</p>
+                  <p className="break-all text-slate-700">id_jadwal, id_guru, nama_guru, hari, jam_masuk_mulai, jam_masuk_batas, jam_pulang_mulai</p>
                 </div>
               </div>
 
-              {/* Sheet 2: PresensiGuru */}
+              {/* Sheet 2: JadwalPelajaran */}
+              <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="px-2.5 py-1 bg-amber-600 text-white text-[11px] font-black rounded-lg uppercase tracking-wider">
+                    Sheet: JadwalPelajaran
+                  </span>
+                  <CheckCircle2 className="w-4 h-4 text-amber-600" />
+                </div>
+                <h3 className="text-xs font-extrabold text-amber-950">Master Jadwal Pelajaran Guru</h3>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  Menyimpan plot jadwal mengajar guru per hari, jam ke, rentang waktu, kelas, mapel, dan ruangan.
+                </p>
+                <div className="bg-white/80 p-2.5 rounded-xl border border-amber-100 text-[10px] text-amber-900 font-mono space-y-0.5">
+                  <p className="font-bold text-amber-950">Kolom Sheet:</p>
+                  <p className="break-all text-slate-700">id_jadwal, hari, id_jam, jam_ke, jam_mulai, jam_selesai, kelas, mapel, id_guru, nama_guru, ruangan</p>
+                </div>
+              </div>
+
+              {/* Sheet 3: PresensiGuru */}
               <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="px-2.5 py-1 bg-indigo-600 text-white text-[11px] font-black rounded-lg uppercase tracking-wider">
@@ -1076,9 +1094,9 @@ export default function Settings() {
                   </span>
                   <CheckCircle2 className="w-4 h-4 text-indigo-600" />
                 </div>
-                <h3 className="text-xs font-extrabold text-indigo-950">Presensi Harian Guru (Jam Fleksibel)</h3>
+                <h3 className="text-xs font-extrabold text-indigo-950">Pencatatan Presensi Guru (Jadwal Fleksibel)</h3>
                 <p className="text-[11px] text-indigo-800 leading-relaxed">
-                  Menyimpan log kehadiran harian guru dengan jam kerja fleksibel / harian (Masuk & Pulang sekolah).
+                  Menyimpan log kehadiran harian guru berdasarkan jam fleksibel / harian (Masuk & Pulang sekolah).
                 </p>
                 <div className="bg-white/80 p-2.5 rounded-xl border border-indigo-100 text-[10px] text-indigo-900 font-mono space-y-0.5">
                   <p className="font-bold text-indigo-950">Kolom Sheet:</p>
@@ -1086,7 +1104,7 @@ export default function Settings() {
                 </div>
               </div>
 
-              {/* Sheet 3: AbsensiMengajar */}
+              {/* Sheet 4: AbsensiMengajar */}
               <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-200/80 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="px-2.5 py-1 bg-purple-600 text-white text-[11px] font-black rounded-lg uppercase tracking-wider">
@@ -1094,9 +1112,9 @@ export default function Settings() {
                   </span>
                   <CheckCircle2 className="w-4 h-4 text-purple-600" />
                 </div>
-                <h3 className="text-xs font-extrabold text-purple-950">Presensi Guru Sesuai Jadwal Mengajar</h3>
+                <h3 className="text-xs font-extrabold text-purple-950">Pencatatan Absensi Guru (Jadwal Pelajaran)</h3>
                 <p className="text-[11px] text-purple-800 leading-relaxed">
-                  Menyimpan jurnal & presensi mengajar guru per jam pelajaran, kelas, mata pelajaran, serta status keterlambatan kelas.
+                  Menyimpan jurnal & presensi mengajar guru per jam pelajaran di kelas sesuai jadwal pelajaran aktif.
                 </p>
                 <div className="bg-white/80 p-2.5 rounded-xl border border-purple-100 text-[10px] text-purple-900 font-mono space-y-0.5">
                   <p className="font-bold text-purple-950">Kolom Sheet:</p>
@@ -1105,17 +1123,17 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* Other Sheets Summary */}
+            {/* Additional Sheets Summary */}
             <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2 mt-4">
               <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-2">
                 <Layers className="w-4 h-4 text-slate-600" />
-                <span>Sheet Master Lainnya pada Google Spreadsheet:</span>
+                <span>Sheet Database Lainnya pada Google Spreadsheet:</span>
               </h4>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-[11px]">
+                <div className="bg-white p-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-700 text-center">PresensiSiswa</div>
                 <div className="bg-white p-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-700 text-center">DataSiswa</div>
                 <div className="bg-white p-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-700 text-center">DataGuru</div>
                 <div className="bg-white p-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-700 text-center">DataKelas</div>
-                <div className="bg-white p-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-700 text-center">JadwalPelajaran</div>
                 <div className="bg-white p-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-700 text-center">JamPelajaran</div>
                 <div className="bg-white p-2 rounded-xl border border-slate-200 font-mono font-bold text-slate-700 text-center">Pengaturan</div>
               </div>
@@ -1138,10 +1156,12 @@ export default function Settings() {
                 onClick={() => {
                   const gasCodeText = `/**
  * SIAS Google Apps Script Backend Web App
- * Target Sheets:
- * 1. PresensiSiswa (Presensi Siswa Harian)
- * 2. PresensiGuru (Presensi Guru Fleksibel / Harian)
- * 3. AbsensiMengajar (Presensi Guru Jadwal Mengajar)
+ * Target Database Sheets:
+ * 1. JadwalGuru      -> Jadwal Fleksibel Guru [id_jadwal, id_guru, nama_guru, hari, jam_masuk_mulai, jam_masuk_batas, jam_pulang_mulai]
+ * 2. JadwalPelajaran -> Jadwal Pelajaran Guru [id_jadwal, hari, id_jam, jam_ke, jam_mulai, jam_selesai, kelas, mapel, id_guru, nama_guru, ruangan]
+ * 3. PresensiGuru    -> Pencatatan Presensi Guru Fleksibel [id_log_guru, tanggal, id_guru, nama_guru, jam_masuk, status_masuk, jam_pulang, status_pulang, ket]
+ * 4. AbsensiMengajar -> Pencatatan Presensi Guru Jadwal Mengajar [id_log_mengajar, tanggal, waktu_absen, hari, id_guru, nama_guru, kelas, mapel, jam_ke, jam_mulai_jadwal, jam_selesai_jadwal, status, catatan_materi]
+ * 5. PresensiSiswa   -> Presensi Harian Siswa [id_log_siswa, tanggal, id_siswa, nama_siswa, kelas_jurusan, jam_masuk, status_masuk, jam_pulang, status_pulang, ket]
  */
 function doPost(e) {
   var lock = LockService.getScriptLock();
@@ -1160,22 +1180,39 @@ function doPost(e) {
       return s;
     }
     
-    if (action === "getPresensiSiswa" || action === "getLaporanSiswa") {
-      var s = getOrMakeSheet("PresensiSiswa", ["id_log_siswa", "tanggal", "id_siswa", "nama_siswa", "kelas_jurusan", "jam_masuk", "status_masuk", "jam_pulang", "status_pulang", "ket"]);
+    // 1. JadwalGuru (Jadwal Fleksibel Guru)
+    if (action === "getJadwalGuruSemua" || action === "getJadwalGuru") {
+      var s = getOrMakeSheet("JadwalGuru", ["id_jadwal", "id_guru", "nama_guru", "hari", "jam_masuk_mulai", "jam_masuk_batas", "jam_pulang_mulai"]);
       var data = getSheetObjects(s);
-      return jsonResponse({ success: true, data: data, PresensiSiswa: data });
+      return jsonResponse({ success: true, data: data, JadwalGuru: data });
     }
-    
+
+    // 2. JadwalPelajaran (Jadwal Pelajaran Guru)
+    if (action === "getJadwalPelajaranSemua" || action === "getJadwalPelajaran" || action === "getJadwalSemua") {
+      var s = getOrMakeSheet("JadwalPelajaran", ["id_jadwal", "hari", "id_jam", "jam_ke", "jam_mulai", "jam_selesai", "kelas", "mapel", "id_guru", "nama_guru", "ruangan"]);
+      var data = getSheetObjects(s);
+      return jsonResponse({ success: true, data: data, JadwalPelajaran: data });
+    }
+
+    // 3. PresensiGuru (Presensi Guru Fleksibel / Harian)
     if (action === "getPresensiGuru" || action === "getLaporanGuru") {
       var s = getOrMakeSheet("PresensiGuru", ["id_log_guru", "tanggal", "id_guru", "nama_guru", "jam_masuk", "status_masuk", "jam_pulang", "status_pulang", "ket"]);
       var data = getSheetObjects(s);
       return jsonResponse({ success: true, data: data, PresensiGuru: data });
     }
     
+    // 4. AbsensiMengajar (Presensi Guru Berdasarkan Jadwal Pelajaran)
     if (action === "getAbsensiMengajarGuru" || action === "getAbsensiMengajar") {
       var s = getOrMakeSheet("AbsensiMengajar", ["id_log_mengajar", "tanggal", "waktu_absen", "hari", "id_guru", "nama_guru", "kelas", "mapel", "jam_ke", "jam_mulai_jadwal", "jam_selesai_jadwal", "status", "catatan_materi"]);
       var data = getSheetObjects(s);
       return jsonResponse({ success: true, data: data, AbsensiMengajar: data });
+    }
+
+    // 5. PresensiSiswa (Presensi Siswa Harian)
+    if (action === "getPresensiSiswa" || action === "getLaporanSiswa") {
+      var s = getOrMakeSheet("PresensiSiswa", ["id_log_siswa", "tanggal", "id_siswa", "nama_siswa", "kelas_jurusan", "jam_masuk", "status_masuk", "jam_pulang", "status_pulang", "ket"]);
+      var data = getSheetObjects(s);
+      return jsonResponse({ success: true, data: data, PresensiSiswa: data });
     }
     
     return jsonResponse({ success: true, message: "OK" });
@@ -1218,10 +1255,12 @@ function jsonResponse(obj) {
 
             <div className="bg-slate-950 p-4 rounded-xl font-mono text-[11px] text-slate-300 overflow-x-auto max-h-60 border border-slate-800">
               <pre>
-{`// Target Sheets SIAS:
-// 1. PresensiSiswa  -> [id_log_siswa, tanggal, id_siswa, nama_siswa, kelas_jurusan, jam_masuk, status_masuk, jam_pulang, status_pulang, ket]
-// 2. PresensiGuru   -> [id_log_guru, tanggal, id_guru, nama_guru, jam_masuk, status_masuk, jam_pulang, status_pulang, ket]
-// 3. AbsensiMengajar-> [id_log_mengajar, tanggal, waktu_absen, hari, id_guru, nama_guru, kelas, mapel, jam_ke, jam_mulai_jadwal, jam_selesai_jadwal, status, catatan_materi]`}
+{`// Target Database Sheets SIAS:
+// 1. JadwalGuru      -> [id_jadwal, id_guru, nama_guru, hari, jam_masuk_mulai, jam_masuk_batas, jam_pulang_mulai]
+// 2. JadwalPelajaran -> [id_jadwal, hari, id_jam, jam_ke, jam_mulai, jam_selesai, kelas, mapel, id_guru, nama_guru, ruangan]
+// 3. PresensiGuru    -> [id_log_guru, tanggal, id_guru, nama_guru, jam_masuk, status_masuk, jam_pulang, status_pulang, ket]
+// 4. AbsensiMengajar -> [id_log_mengajar, tanggal, waktu_absen, hari, id_guru, nama_guru, kelas, mapel, jam_ke, jam_mulai_jadwal, jam_selesai_jadwal, status, catatan_materi]
+// 5. PresensiSiswa   -> [id_log_siswa, tanggal, id_siswa, nama_siswa, kelas_jurusan, jam_masuk, status_masuk, jam_pulang, status_pulang, ket]`}
               </pre>
             </div>
           </div>
