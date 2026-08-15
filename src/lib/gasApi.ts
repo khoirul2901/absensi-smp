@@ -1087,7 +1087,8 @@ export function callMock(action: string, args: any[] = []): any {
           
           const statusMengajar = (nowMin <= firstStartMin + toleransiGuruVal) ? "Hadir Tepat Waktu" : "Terlambat Masuk Kelas";
 
-          // Save ALL hours in the multi-jam block into absensi_mengajar_guru
+          // Save ALL hours in the multi-jam block into absensi_mengajar_guru (sheet AbsensiMengajar)
+          const savedLogItems: any[] = [];
           for (const schedItem of multiJamBlock) {
             const existingIdx = absLogs.findIndex((a: any) => 
               a.tanggal === tgl && 
@@ -1114,32 +1115,11 @@ export function callMock(action: string, args: any[] = []): any {
 
             if (existingIdx !== -1) absLogs[existingIdx] = logItem;
             else absLogs.push(logItem);
+
+            savedLogItems.push(logItem);
           }
 
           setStorage("absensi_mengajar_guru", absLogs);
-
-          // ALSO ensure daily school attendance (laporan_guru) is recorded as Masuk
-          const statusMasuk = (jam <= guruJamMasukBatas) ? "Tepat Waktu" : "Terlambat";
-          if (index === -1) {
-            const idLog = "LOG-G-" + new Date().getTime();
-            reports.push({
-              id_log_guru: idLog,
-              tanggal: tgl,
-              id_guru: idTarget,
-              nama_guru: nama,
-              jam_masuk: jam,
-              status_masuk: statusMasuk,
-              jam_pulang: "-",
-              status_pulang: "-",
-              ket: `Hadir Mengajar (${activeSlotMatch.mapel})`
-            });
-            setStorage(reportsKey, reports);
-          } else if (!reports[index].jam_masuk || reports[index].jam_masuk === "-") {
-            reports[index].jam_masuk = jam;
-            reports[index].status_masuk = statusMasuk;
-            reports[index].ket = `Hadir Mengajar (${activeSlotMatch.mapel})`;
-            setStorage(reportsKey, reports);
-          }
 
           const jamNumbers = multiJamBlock.map((s: any) => Number(s.jam_ke)).sort((a: number, b: number) => a - b);
           const jamLabel = jamNumbers.length > 1
@@ -1149,62 +1129,42 @@ export function callMock(action: string, args: any[] = []): any {
           return {
             success: true,
             type: "mengajar",
+            targetSheet: "AbsensiMengajar",
             message: `Presensi Mengajar Berhasil: ${nama} (${activeSlotMatch.mapel} - ${activeSlotMatch.kelas}, ${jamLabel})`,
             data: {
               ...activeSlotMatch,
               nama_guru: nama,
               id_guru: idTarget,
+              tanggal: tgl,
+              waktu_absen: jam,
+              hari: hariIni,
+              kelas: activeSlotMatch.kelas || "-",
+              mapel: activeSlotMatch.mapel || "-",
+              jam_ke: Number(activeSlotMatch.jam_ke || 1),
               status: statusMengajar,
-              jam_ke_label: jamLabel
+              jam_ke_label: jamLabel,
+              id_log_mengajar: savedLogItems[0]?.id_log_mengajar,
+              multiJamBlock: savedLogItems
             }
           };
         }
 
-        // 4. If all classes for today are already recorded, or morning arrival before first class
-        if (index === -1 || !reports[index].jam_masuk || reports[index].jam_masuk === "-") {
-          // Record morning daily check-in
-          const statusMasuk = (jam <= guruJamMasukBatas) ? "Tepat Waktu" : "Terlambat";
-          const idLog = "LOG-G-" + new Date().getTime();
-          const firstClass = teacherDaySchedules[0];
-
-          const newRow = {
-            id_log_guru: idLog,
-            tanggal: tgl,
-            id_guru: idTarget,
-            nama_guru: nama,
-            jam_masuk: jam,
-            status_masuk: statusMasuk,
-            jam_pulang: "-",
-            status_pulang: "-",
-            ket: `Jadwal: ${firstClass.mapel} (${firstClass.kelas})`
-          };
-          if (index !== -1) {
-            reports[index].jam_masuk = jam;
-            reports[index].status_masuk = statusMasuk;
-            reports[index].ket = newRow.ket;
-          } else {
-            reports.push(newRow);
-          }
-          setStorage(reportsKey, reports);
-
-          return { 
-            success: true, 
-            type: "masuk", 
-            message: `Presensi Masuk Berhasil: ${nama} (${statusMasuk}). Jadwal pertama: ${firstClass.mapel} (${firstClass.kelas}) Jam ke-${firstClass.jam_ke} (${firstClass.slotMulai} WIB)`, 
-            data: newRow 
-          };
-        }
-
-        // 5. Already recorded daily masuk & already recorded active class
+        // 4. If all classes for today are already recorded
         if (allTeachingClassesDone) {
           return {
             success: true,
             type: "info",
-            message: `${nama} sudah menyelesaikan seluruh jadwal mengajar hari ini (${totalTeachingClasses} jam pelajaran). Jam pulang dibuka pk ${guruJamPulangMulai} WIB.`,
-            data: reports[index]
+            targetSheet: "AbsensiMengajar",
+            message: `${nama} sudah menyelesaikan seluruh jadwal mengajar hari ini (${totalTeachingClasses} jam pelajaran). Seluruh presensi telah tercatat di sheet AbsensiMengajar.`,
+            data: {
+              nama_guru: nama,
+              id_guru: idTarget,
+              status: "Selesai Mengajar"
+            }
           };
         }
 
+        // 5. If currently scanned class is already recorded, find the next class
         const nextPending = teacherDaySchedules.find((s: any) => 
           !alreadyAttendedTeachingKeys.has(makeKey(s.jam_ke, s.kelas, s.mapel))
         );
@@ -1212,8 +1172,13 @@ export function callMock(action: string, args: any[] = []): any {
         return {
           success: true,
           type: "info",
-          message: `${nama} sudah presensi masuk. Jadwal mengajar berikutnya: ${nextPending?.mapel || "Pelajaran"} (${nextPending?.kelas || "-"}) Jam Ke-${nextPending?.jam_ke || "-"} (${nextPending?.slotMulai || ""} WIB).`,
-          data: reports[index]
+          targetSheet: "AbsensiMengajar",
+          message: `${nama} sudah presensi kelas sebelumnya. Jadwal mengajar berikutnya: ${nextPending?.mapel || "Pelajaran"} (${nextPending?.kelas || "-"}) Jam Ke-${nextPending?.jam_ke || "-"} (${nextPending?.slotMulai || ""} WIB).`,
+          data: {
+            nama_guru: nama,
+            id_guru: idTarget,
+            nextSchedule: nextPending
+          }
         };
       }
 
@@ -2375,50 +2340,27 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
       const actLower = String(action || "").toLowerCase();
       const firstArg = typeof args[0] === "string" ? args[0] : "";
       const secondArg = typeof args[1] === "string" ? args[1] : "";
+      const thirdArg = typeof args[2] === "string" ? args[2] : "";
+      const fifthArg = typeof args[4] === "string" ? args[4] : "";
+
+      let resolvedSheet = "";
 
       if (
+        actLower.includes("absensimengajar") ||
+        actLower.includes("jadwalmengajar") ||
+        firstArg === "AbsensiMengajar" ||
+        secondArg === "AbsensiMengajar" ||
+        fifthArg === "AbsensiMengajar"
+      ) {
+        resolvedSheet = "AbsensiMengajar";
+      } else if (
         action === "getPresensiSiswa" ||
         action === "catatAbsensiSiswa" ||
         (actLower.includes("laporan") && (firstArg === "Siswa" || secondArg === "Siswa")) ||
-        (action === "prosesScanQR" && (secondArg === "Siswa" || firstArg === "Siswa")) ||
-        (action === "simpanAbsenManual" && secondArg === "Siswa")
+        (action === "simpanAbsenManual" && secondArg === "Siswa") ||
+        (action === "prosesScanQR" && (secondArg === "Siswa" || firstArg === "Siswa"))
       ) {
-        bodyObj.sheet_name = "PresensiSiswa";
-        bodyObj.sheetName = "PresensiSiswa";
-        bodyObj.target_sheet = "PresensiSiswa";
-        bodyObj.targetSheet = "PresensiSiswa";
-      } else if (
-        action === "getPresensiGuru" ||
-        action === "catatAbsensiGuru" ||
-        (actLower.includes("laporan") && (firstArg === "Guru" || secondArg === "Guru")) ||
-        (action === "prosesScanQR" && (secondArg === "Guru" || firstArg === "Guru")) ||
-        (action === "simpanAbsenManual" && secondArg === "Guru")
-      ) {
-        bodyObj.sheet_name = "PresensiGuru";
-        bodyObj.sheetName = "PresensiGuru";
-        bodyObj.target_sheet = "PresensiGuru";
-        bodyObj.targetSheet = "PresensiGuru";
-      } else if (
-        actLower.includes("absensimengajar") ||
-        actLower.includes("jadwalmengajar")
-      ) {
-        bodyObj.sheet_name = "AbsensiMengajar";
-        bodyObj.sheetName = "AbsensiMengajar";
-        bodyObj.target_sheet = "AbsensiMengajar";
-        bodyObj.targetSheet = "AbsensiMengajar";
-      } else if (
-        action === "getJadwalGuru" ||
-        action === "getJadwalGuruSemua" ||
-        action === "tambahJadwalGuru" ||
-        action === "editJadwalGuru" ||
-        action === "hapusJadwalGuru" ||
-        action === "simpanJadwalGuru" ||
-        (actLower.includes("jadwalguru") && !actLower.includes("pelajaran"))
-      ) {
-        bodyObj.sheet_name = "JadwalGuru";
-        bodyObj.sheetName = "JadwalGuru";
-        bodyObj.target_sheet = "JadwalGuru";
-        bodyObj.targetSheet = "JadwalGuru";
+        resolvedSheet = "PresensiSiswa";
       } else if (
         action === "getJadwalPelajaran" ||
         action === "getJadwalPelajaranSemua" ||
@@ -2429,10 +2371,61 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
         action === "simpanJadwalPelajaran" ||
         actLower.includes("jadwalpelajaran")
       ) {
-        bodyObj.sheet_name = "JadwalPelajaran";
-        bodyObj.sheetName = "JadwalPelajaran";
-        bodyObj.target_sheet = "JadwalPelajaran";
-        bodyObj.targetSheet = "JadwalPelajaran";
+        resolvedSheet = "JadwalPelajaran";
+      } else if (
+        action === "getJadwalGuru" ||
+        action === "getJadwalGuruSemua" ||
+        action === "tambahJadwalGuru" ||
+        action === "editJadwalGuru" ||
+        action === "hapusJadwalGuru" ||
+        action === "simpanJadwalGuru" ||
+        (actLower.includes("jadwalguru") && !actLower.includes("pelajaran"))
+      ) {
+        resolvedSheet = "JadwalGuru";
+      } else if (
+        action === "getPresensiGuru" ||
+        action === "catatAbsensiGuru" ||
+        (actLower.includes("laporan") && (firstArg === "Guru" || secondArg === "Guru")) ||
+        (action === "simpanAbsenManual" && secondArg === "Guru")
+      ) {
+        resolvedSheet = "PresensiGuru";
+      } else if (action === "prosesScanQR") {
+        // Smart routing for teacher: Teaching Schedule (AbsensiMengajar) vs Flexible Schedule (PresensiGuru)
+        const code = firstArg;
+        const role = secondArg;
+        if (role === "Guru" || !role) {
+          const allTeaching = getStorage("jadwal_pelajaran") || [];
+          const dataGuru = getStorage("data_guru") || [];
+          const gObj = dataGuru.find((g: any) => 
+            String(g.id_guru || "").toLowerCase() === code.toLowerCase() ||
+            String(g.nip_nuptk || "").toLowerCase() === code.toLowerCase() ||
+            String(g.nama_guru || "").toLowerCase() === code.toLowerCase()
+          );
+          const gName = (gObj?.nama_guru || code).trim().toLowerCase();
+          const gId = (gObj?.id_guru || code).trim().toLowerCase();
+          const daysMap: Record<number, string> = { 0: "Minggu", 1: "Senin", 2: "Selasa", 3: "Rabu", 4: "Kamis", 5: "Jumat", 6: "Sabtu" };
+          const todayName = daysMap[new Date().getDay()] || "Senin";
+          
+          const hasTodayTeaching = allTeaching.some((s: any) => {
+            const matchName = s.nama_guru && String(s.nama_guru).trim().toLowerCase() === gName;
+            const matchId = s.id_guru && String(s.id_guru).trim().toLowerCase() === gId;
+            const matchDay = (s.hari || "").trim().toLowerCase() === todayName.toLowerCase();
+            return (matchName || matchId) && matchDay;
+          });
+
+          if (hasTodayTeaching) {
+            resolvedSheet = "AbsensiMengajar";
+          } else {
+            resolvedSheet = "PresensiGuru";
+          }
+        }
+      }
+
+      if (resolvedSheet) {
+        bodyObj.sheet_name = resolvedSheet;
+        bodyObj.sheetName = resolvedSheet;
+        bodyObj.target_sheet = resolvedSheet;
+        bodyObj.targetSheet = resolvedSheet;
       }
 
       for (const a of args) {
