@@ -935,6 +935,7 @@ export function callMock(action: string, args: any[] = []): any {
       }
 
       const flexSchedule = todayFlexSchedule;
+      const guruJamMasukMulai = flexSchedule?.jam_masuk_mulai || "06:30";
       const guruJamMasukBatas = flexSchedule?.jam_masuk_batas || defaultJamMasukBatas;
       const guruJamPulangMulai = flexSchedule?.jam_pulang_mulai || defaultJamPulangMulai;
 
@@ -971,7 +972,22 @@ export function callMock(action: string, args: any[] = []): any {
       const [hP, mP] = guruJamPulangMulai.split(":").map(Number);
       const pulangMulaiMin = (!isNaN(hP) && !isNaN(mP)) ? (hP * 60 + mP) : (15 * 60 + 30);
 
+      const toleransiAwalVal = Number(cfg.toleransi_awal_menit || 15);
+      const toleransiAkhirVal = Number(cfg.toleransi_akhir_menit || 30);
       const toleransiGuruVal = Number(cfg.toleransi_guru ?? cfg.toleransi_mengajar_guru ?? 15);
+      const batasiJamJadwal = cfg.batasi_jam_jadwal !== false;
+
+      // Check flexible schedule morning check-in window
+      if (flexSchedule && teacherDaySchedules.length === 0) {
+        const [hMulai, mMulai] = guruJamMasukMulai.split(":").map(Number);
+        const masukMulaiMin = (!isNaN(hMulai) && !isNaN(mMulai)) ? (hMulai * 60 + mMulai) : (6 * 60 + 30);
+        if (mode === "Masuk" && nowMin < masukMulaiMin - toleransiAwalVal) {
+          return {
+            success: false,
+            message: `Presensi Masuk Belum Dibuka: Jam masuk untuk ${nama} hari ${hariIni} dibuka mulai pukul ${guruJamMasukMulai} WIB.`
+          };
+        }
+      }
 
       // Find the end time of teacher's last class today
       let lastClassEndMin = 0;
@@ -1007,6 +1023,7 @@ export function callMock(action: string, args: any[] = []): any {
           return { 
             success: true, 
             type: "pulang", 
+            targetSheet: "PresensiGuru",
             message: `Presensi Pulang Berhasil: ${nama} (${allTeachingClassesDone ? "Seluruh Jam Mengajar Selesai" : "Tepat Waktu"})`, 
             data: reports[index] 
           };
@@ -1025,7 +1042,7 @@ export function callMock(action: string, args: any[] = []): any {
           };
           reports.push(newRow);
           setStorage(reportsKey, reports);
-          return { success: true, type: "pulang", message: `Presensi Pulang Berhasil: ${nama} (Lupa Scan Masuk)`, data: newRow };
+          return { success: true, type: "pulang", targetSheet: "PresensiGuru", message: `Presensi Pulang Berhasil: ${nama} (Lupa Scan Masuk)`, data: newRow };
         }
       }
 
@@ -1040,8 +1057,34 @@ export function callMock(action: string, args: any[] = []): any {
       // CASE B: TEACHER HAS TEACHING SCHEDULES TODAY
       // -------------------------------------------------------------
       if (teacherDaySchedules.length > 0) {
-        // 1. Check if current time matches an active teaching slot window (from 15 min before start until end + 25 min)
-        let activeSlotMatch: any = null;
+        // 1. Check active teaching slot windows based on time restriction
+        const activeSchedMatches = teacherDaySchedules.filter((sched: any) => {
+          if (!sched.slotMulai || sched.slotMulai === "-" || !sched.slotSelesai || sched.slotSelesai === "-") return true;
+          const [hM, mM] = sched.slotMulai.split(":").map(Number);
+          const [hS, mS] = sched.slotSelesai.split(":").map(Number);
+          if (isNaN(hM) || isNaN(mM) || isNaN(hS) || isNaN(mS)) return true;
+          const startMin = hM * 60 + mM;
+          const endMin = hS * 60 + mS;
+          return nowMin >= startMin - toleransiAwalVal && nowMin <= endMin + toleransiAkhirVal;
+        });
+
+        if (batasiJamJadwal && activeSchedMatches.length === 0) {
+          const schedListTimes = teacherDaySchedules.map((s: any) => {
+            return `Jam ${s.jam_ke} (${s.mapel} ${s.kelas}: ${s.slotMulai} - ${s.slotSelesai})`;
+          }).join("; ");
+
+          return {
+            success: false,
+            message: `Presensi Mengajar Ditolak: Di luar jam jadwal pelajaran. Guru '${nama}' (jam ${jam} WIB) tidak memiliki jadwal aktif saat ini. Jadwal hari ${hariIni}: ${schedListTimes}`
+          };
+        }
+
+        // 2. Determine target schedule (first unrecorded active slot, or next pending)
+        const candidateSchedules = activeSchedMatches.length > 0 ? activeSchedMatches : teacherDaySchedules;
+        let activeSlotMatch = candidateSchedules.find((s: any) => 
+          !alreadyAttendedTeachingKeys.has(makeKey(s.jam_ke, s.kelas, s.mapel))
+        ) || candidateSchedules[0];
+
         let multiJamBlock: any[] = [];
 
         for (const sched of teacherDaySchedules) {
