@@ -1169,6 +1169,7 @@ function doPost(e) {
   try {
     var rawData = e && e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : {};
     var action = rawData.action || "";
+    var targetSheet = rawData.target_sheet || rawData.sheet_name || "";
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     
     function getOrMakeSheet(name, headers) {
@@ -1179,12 +1180,18 @@ function doPost(e) {
       }
       return s;
     }
-    
+
     // 1. JadwalGuru (Jadwal Fleksibel Guru)
     if (action === "getJadwalGuruSemua" || action === "getJadwalGuru") {
       var s = getOrMakeSheet("JadwalGuru", ["id_jadwal", "id_guru", "nama_guru", "hari", "jam_masuk_mulai", "jam_masuk_batas", "jam_pulang_mulai"]);
       var data = getSheetObjects(s);
       return jsonResponse({ success: true, data: data, JadwalGuru: data });
+    }
+    if (action === "tambahJadwalGuru" || action === "simpanJadwalGuru") {
+      var s = getOrMakeSheet("JadwalGuru", ["id_jadwal", "id_guru", "nama_guru", "hari", "jam_masuk_mulai", "jam_masuk_batas", "jam_pulang_mulai"]);
+      var p = rawData;
+      s.appendRow([p.id_jadwal || ("J-" + Date.now()), p.id_guru || "", p.nama_guru || "", p.hari || "", p.jam_masuk_mulai || "07:00", p.jam_masuk_batas || "07:30", p.jam_pulang_mulai || "14:00"]);
+      return jsonResponse({ success: true, message: "Jadwal guru berhasil disimpan!" });
     }
 
     // 2. JadwalPelajaran (Jadwal Pelajaran Guru)
@@ -1193,12 +1200,24 @@ function doPost(e) {
       var data = getSheetObjects(s);
       return jsonResponse({ success: true, data: data, JadwalPelajaran: data });
     }
+    if (action === "tambahJadwalPelajaran" || action === "simpanJadwalPelajaran") {
+      var s = getOrMakeSheet("JadwalPelajaran", ["id_jadwal", "hari", "id_jam", "jam_ke", "jam_mulai", "jam_selesai", "kelas", "mapel", "id_guru", "nama_guru", "ruangan"]);
+      var p = rawData;
+      s.appendRow([p.id_jadwal || ("JPEL-" + Date.now()), p.hari || "", p.id_jam || "", p.jam_ke || 1, p.jam_mulai || "", p.jam_selesai || "", p.kelas || "", p.mapel || "", p.id_guru || "", p.nama_guru || "", p.ruangan || "-"]);
+      return jsonResponse({ success: true, message: "Jadwal pelajaran berhasil disimpan!" });
+    }
 
     // 3. PresensiGuru (Presensi Guru Fleksibel / Harian)
     if (action === "getPresensiGuru" || action === "getLaporanGuru") {
       var s = getOrMakeSheet("PresensiGuru", ["id_log_guru", "tanggal", "id_guru", "nama_guru", "jam_masuk", "status_masuk", "jam_pulang", "status_pulang", "ket"]);
       var data = getSheetObjects(s);
       return jsonResponse({ success: true, data: data, PresensiGuru: data });
+    }
+    if (action === "catatAbsensiGuru" || (action === "simpanAbsenManual" && rawData.kategori === "Guru") || (action === "prosesScanQR" && targetSheet === "PresensiGuru")) {
+      var s = getOrMakeSheet("PresensiGuru", ["id_log_guru", "tanggal", "id_guru", "nama_guru", "jam_masuk", "status_masuk", "jam_pulang", "status_pulang", "ket"]);
+      var p = rawData;
+      upsertPresensiGuru(s, p);
+      return jsonResponse({ success: true, message: "Presensi guru berhasil dicatat di PresensiGuru!" });
     }
     
     // 4. AbsensiMengajar (Presensi Guru Berdasarkan Jadwal Pelajaran)
@@ -1207,12 +1226,24 @@ function doPost(e) {
       var data = getSheetObjects(s);
       return jsonResponse({ success: true, data: data, AbsensiMengajar: data });
     }
+    if (action === "simpanAbsensiMengajar" || action === "simpanAbsensiMengajarGuru" || action === "catatAbsensiMengajar" || (action === "prosesScanQR" && targetSheet === "AbsensiMengajar")) {
+      var s = getOrMakeSheet("AbsensiMengajar", ["id_log_mengajar", "tanggal", "waktu_absen", "hari", "id_guru", "nama_guru", "kelas", "mapel", "jam_ke", "jam_mulai_jadwal", "jam_selesai_jadwal", "status", "catatan_materi"]);
+      var p = rawData;
+      upsertAbsensiMengajar(s, p);
+      return jsonResponse({ success: true, message: "Presensi mengajar guru berhasil dicatat di AbsensiMengajar!" });
+    }
 
     // 5. PresensiSiswa (Presensi Siswa Harian)
     if (action === "getPresensiSiswa" || action === "getLaporanSiswa") {
       var s = getOrMakeSheet("PresensiSiswa", ["id_log_siswa", "tanggal", "id_siswa", "nama_siswa", "kelas_jurusan", "jam_masuk", "status_masuk", "jam_pulang", "status_pulang", "ket"]);
       var data = getSheetObjects(s);
       return jsonResponse({ success: true, data: data, PresensiSiswa: data });
+    }
+    if (action === "catatAbsensiSiswa" || (action === "simpanAbsenManual" && rawData.kategori === "Siswa") || (action === "prosesScanQR" && targetSheet === "PresensiSiswa")) {
+      var s = getOrMakeSheet("PresensiSiswa", ["id_log_siswa", "tanggal", "id_siswa", "nama_siswa", "kelas_jurusan", "jam_masuk", "status_masuk", "jam_pulang", "status_pulang", "ket"]);
+      var p = rawData;
+      upsertPresensiSiswa(s, p);
+      return jsonResponse({ success: true, message: "Presensi siswa berhasil dicatat di PresensiSiswa!" });
     }
     
     return jsonResponse({ success: true, message: "OK" });
@@ -1221,6 +1252,117 @@ function doPost(e) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function upsertAbsensiMengajar(sheet, p) {
+  var data = sheet.getDataRange().getValues();
+  var tgl = p.tanggal || Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyy-MM-dd");
+  var idGuru = String(p.id_guru || "").trim().toLowerCase();
+  var kelas = String(p.kelas || "").trim().toLowerCase();
+  var jamKe = Number(p.jam_ke || 1);
+
+  for (var i = 1; i < data.length; i++) {
+    var rowTgl = String(data[i][1]);
+    var rowGuru = String(data[i][4]).trim().toLowerCase();
+    var rowKelas = String(data[i][6]).trim().toLowerCase();
+    var rowJamKe = Number(data[i][8]);
+
+    if (rowTgl.indexOf(tgl) !== -1 && rowGuru === idGuru && rowKelas === rowKelas && rowJamKe === jamKe) {
+      sheet.getRange(i + 1, 3).setValue(p.waktu_absen || Utilities.formatDate(new Date(), "Asia/Jakarta", "HH:mm"));
+      sheet.getRange(i + 1, 12).setValue(p.status || "Hadir Tepat Waktu");
+      if (p.catatan_materi) sheet.getRange(i + 1, 13).setValue(p.catatan_materi);
+      return;
+    }
+  }
+
+  sheet.appendRow([
+    p.id_log_mengajar || ("LOG-MENG-" + Date.now()),
+    tgl,
+    p.waktu_absen || Utilities.formatDate(new Date(), "Asia/Jakarta", "HH:mm"),
+    p.hari || "Senin",
+    p.id_guru || "",
+    p.nama_guru || "",
+    p.kelas || "-",
+    p.mapel || "-",
+    jamKe,
+    p.jam_mulai_jadwal || "07:00",
+    p.jam_selesai_jadwal || "07:45",
+    p.status || "Hadir Tepat Waktu",
+    p.catatan_materi || "Presensi Barcode/QR"
+  ]);
+}
+
+function upsertPresensiGuru(sheet, p) {
+  var data = sheet.getDataRange().getValues();
+  var tgl = p.tanggal || Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyy-MM-dd");
+  var idGuru = String(p.id_guru || p.id_target || "").trim().toLowerCase();
+
+  for (var i = 1; i < data.length; i++) {
+    var rowTgl = String(data[i][1]);
+    var rowGuru = String(data[i][2]).trim().toLowerCase();
+
+    if (rowTgl.indexOf(tgl) !== -1 && rowGuru === idGuru) {
+      if (p.jam_masuk && p.jam_masuk !== "-") {
+        sheet.getRange(i + 1, 5).setValue(p.jam_masuk);
+        sheet.getRange(i + 1, 6).setValue(p.status_masuk || "Tepat Waktu");
+      }
+      if (p.jam_pulang && p.jam_pulang !== "-") {
+        sheet.getRange(i + 1, 7).setValue(p.jam_pulang);
+        sheet.getRange(i + 1, 8).setValue(p.status_pulang || "Sudah Pulang");
+      }
+      if (p.ket) sheet.getRange(i + 1, 9).setValue(p.ket);
+      return;
+    }
+  }
+
+  sheet.appendRow([
+    p.id_log_guru || ("LOG-G-" + Date.now()),
+    tgl,
+    p.id_guru || p.id_target || "",
+    p.nama_guru || "",
+    p.jam_masuk || "-",
+    p.status_masuk || "Tepat Waktu",
+    p.jam_pulang || "-",
+    p.status_pulang || "-",
+    p.ket || "Scan Auto Board"
+  ]);
+}
+
+function upsertPresensiSiswa(sheet, p) {
+  var data = sheet.getDataRange().getValues();
+  var tgl = p.tanggal || Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyy-MM-dd");
+  var idSiswa = String(p.id_siswa || p.id_target || "").trim().toLowerCase();
+
+  for (var i = 1; i < data.length; i++) {
+    var rowTgl = String(data[i][1]);
+    var rowSiswa = String(data[i][2]).trim().toLowerCase();
+
+    if (rowTgl.indexOf(tgl) !== -1 && rowSiswa === idSiswa) {
+      if (p.jam_masuk && p.jam_masuk !== "-") {
+        sheet.getRange(i + 1, 6).setValue(p.jam_masuk);
+        sheet.getRange(i + 1, 7).setValue(p.status_masuk || "Tepat Waktu");
+      }
+      if (p.jam_pulang && p.jam_pulang !== "-") {
+        sheet.getRange(i + 1, 8).setValue(p.jam_pulang);
+        sheet.getRange(i + 1, 9).setValue(p.status_pulang || "Sudah Pulang");
+      }
+      if (p.ket) sheet.getRange(i + 1, 10).setValue(p.ket);
+      return;
+    }
+  }
+
+  sheet.appendRow([
+    p.id_log_siswa || ("LOG-S-" + Date.now()),
+    tgl,
+    p.id_siswa || p.id_target || "",
+    p.nama_siswa || "",
+    p.kelas_jurusan || "-",
+    p.jam_masuk || "-",
+    p.status_masuk || "Tepat Waktu",
+    p.jam_pulang || "-",
+    p.status_pulang || "-",
+    p.ket || "Scan Auto Board"
+  ]);
 }
 
 function getSheetObjects(sheet) {
