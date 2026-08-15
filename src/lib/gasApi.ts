@@ -90,6 +90,8 @@ export function extractArrayData(res: any): any[] {
   if (res.PresensiSiswa && Array.isArray(res.PresensiSiswa)) return res.PresensiSiswa;
   if (res.PresensiGuru && Array.isArray(res.PresensiGuru)) return res.PresensiGuru;
   if (res.AbsensiMengajar && Array.isArray(res.AbsensiMengajar)) return res.AbsensiMengajar;
+  if (res.JadwalGuru && Array.isArray(res.JadwalGuru)) return res.JadwalGuru;
+  if (res.JadwalPelajaran && Array.isArray(res.JadwalPelajaran)) return res.JadwalPelajaran;
   if (res.presensi_siswa && Array.isArray(res.presensi_siswa)) return res.presensi_siswa;
   if (res.presensi_guru && Array.isArray(res.presensi_guru)) return res.presensi_guru;
   if (res.absensi_mengajar && Array.isArray(res.absensi_mengajar)) return res.absensi_mengajar;
@@ -103,6 +105,8 @@ export function extractArrayData(res: any): any[] {
   if (res.presensiSiswa && Array.isArray(res.presensiSiswa)) return res.presensiSiswa;
   if (res.presensiGuru && Array.isArray(res.presensiGuru)) return res.presensiGuru;
   if (res.absensiMengajar && Array.isArray(res.absensiMengajar)) return res.absensiMengajar;
+  if (res.jadwalGuru && Array.isArray(res.jadwalGuru)) return res.jadwalGuru;
+  if (res.jadwalPelajaran && Array.isArray(res.jadwalPelajaran)) return res.jadwalPelajaran;
   if (res.laporan_siswa && Array.isArray(res.laporan_siswa)) return res.laporan_siswa;
   if (res.laporan_guru && Array.isArray(res.laporan_guru)) return res.laporan_guru;
   if (res.laporanSiswa && Array.isArray(res.laporanSiswa)) return res.laporanSiswa;
@@ -849,16 +853,6 @@ export function callMock(action: string, args: any[] = []): any {
       // ==========================================
       // 2. MODEL GURU (Fleksibel & Jadwal Mengajar)
       // ==========================================
-      const flexList = getStorage("jadwal_guru") || [];
-      const flexSchedule = flexList.find((j: any) => 
-        (String(j.id_guru || "").toLowerCase() === String(idTarget).toLowerCase() || 
-         String(j.nama_guru || "").toLowerCase() === String(nama).toLowerCase() ||
-         isTeacherScheduleMatch(j)) &&
-        ((j.hari || "").trim().toLowerCase() === hariIni.toLowerCase() || hariIni === "Minggu")
-      );
-
-      const guruJamMasukBatas = flexSchedule?.jam_masuk_batas || defaultJamMasukBatas;
-      const guruJamPulangMulai = flexSchedule?.jam_pulang_mulai || defaultJamPulangMulai;
 
       // Helper for fuzzy & title-agnostic teacher name matching
       const normalizeName = (str: string) => {
@@ -898,8 +892,53 @@ export function callMock(action: string, args: any[] = []): any {
         return false;
       };
 
-      // Load teaching schedules and jam slots
+      // 1. Flexible schedule lookup
+      const flexList = getStorage("jadwal_guru") || [];
+      const allTeacherFlexSchedules = flexList.filter((j: any) => isTeacherScheduleMatch(j));
+      const todayFlexSchedule = allTeacherFlexSchedules.find((j: any) => 
+        (j.hari || "").trim().toLowerCase() === hariIni.toLowerCase()
+      );
+
+      // 2. Teaching schedule lookup
       const allSchedules = getStorage("jadwal_pelajaran") || [];
+      const allTeacherTeachingSchedules = allSchedules.filter((s: any) => isTeacherScheduleMatch(s));
+      const todayTeachingSchedules = allTeacherTeachingSchedules.filter((s: any) => 
+        (s.hari || "").trim().toLowerCase() === hariIni.toLowerCase()
+      );
+
+      // =========================================================================
+      // PEMBATASAN JADWAL FLEKSIBEL & JADWAL GURU (Strict Schedule Day Restriction)
+      // Jika guru terdaftar di Jadwal Fleksibel (Jadwal Guru), guru HANYA boleh absen pada hari yang telah ditentukan!
+      // Contoh: Guru A dijadwalkan di hari Selasa, lalu dia scan di hari Senin maka presensi DITOLAK.
+      // =========================================================================
+      if (allTeacherFlexSchedules.length > 0 && !todayFlexSchedule) {
+        // Guru memiliki jadwal fleksibel tetapi BUKAN untuk hari ini
+        if (todayTeachingSchedules.length === 0) {
+          const validDays = Array.from(new Set(allTeacherFlexSchedules.map((f: any) => f.hari).filter(Boolean))).join(", ");
+          return {
+            success: false,
+            message: `Presensi Ditolak: ${nama} tidak memiliki jadwal presensi di hari ${hariIni}. Jadwal fleksibel terdaftar pada hari: ${validDays}.`
+          };
+        }
+      }
+
+      // Jika guru tidak memiliki jadwal fleksibel, tapi memiliki jadwal mengajar di hari tertentu saja:
+      if (allTeacherFlexSchedules.length === 0 && allTeacherTeachingSchedules.length > 0 && todayTeachingSchedules.length === 0) {
+        const batasiJadwal = cfg.batasi_jam_jadwal !== false;
+        if (batasiJadwal) {
+          const validTeachingDays = Array.from(new Set(allTeacherTeachingSchedules.map((s: any) => s.hari).filter(Boolean))).join(", ");
+          return {
+            success: false,
+            message: `Presensi Ditolak: ${nama} tidak memiliki jadwal mengajar di hari ${hariIni}. Jadwal mengajar terdaftar pada hari: ${validTeachingDays}.`
+          };
+        }
+      }
+
+      const flexSchedule = todayFlexSchedule;
+      const guruJamMasukBatas = flexSchedule?.jam_masuk_batas || defaultJamMasukBatas;
+      const guruJamPulangMulai = flexSchedule?.jam_pulang_mulai || defaultJamPulangMulai;
+
+      // Load jam slots for lesson schedule mapping
       const jamSlots = getStorage("jam_pelajaran") || [
         { jam_ke: 1, jam_mulai: "07:00", jam_selesai: "07:45" },
         { jam_ke: 2, jam_mulai: "07:45", jam_selesai: "08:30" },
@@ -911,28 +950,13 @@ export function callMock(action: string, args: any[] = []): any {
         { jam_ke: 8, jam_mulai: "13:45", jam_selesai: "14:30" }
       ];
 
-      // Filter teaching schedules for this teacher today
-      let teacherDaySchedules = allSchedules.filter((s: any) => 
-        isTeacherScheduleMatch(s) && ((s.hari || "").trim().toLowerCase() === hariIni.toLowerCase() || hariIni === "Minggu" || !s.hari)
-      ).map((s: any) => {
+      // Filter teaching schedules for this teacher strictly TODAY
+      let teacherDaySchedules = todayTeachingSchedules.map((s: any) => {
         const slot = jamSlots.find((j: any) => Number(j.jam_ke) === Number(s.jam_ke));
         const slotMulai = s.jam_mulai || slot?.jam_mulai || "07:00";
         const slotSelesai = s.jam_selesai || slot?.jam_selesai || "07:45";
         return { ...s, slotMulai, slotSelesai };
       }).sort((a: any, b: any) => Number(a.jam_ke || 0) - Number(b.jam_ke || 0));
-
-      // Fallback: if no schedule on Sunday/testing day, check if teacher has any schedule in system
-      if (teacherDaySchedules.length === 0 && (hariIni === "Minggu" || allSchedules.length > 0)) {
-        const anySched = allSchedules.filter((s: any) => isTeacherScheduleMatch(s));
-        if (anySched.length > 0) {
-          teacherDaySchedules = anySched.map((s: any) => {
-            const slot = jamSlots.find((j: any) => Number(j.jam_ke) === Number(s.jam_ke));
-            const slotMulai = s.jam_mulai || slot?.jam_mulai || "07:00";
-            const slotSelesai = s.jam_selesai || slot?.jam_selesai || "07:45";
-            return { ...s, slotMulai, slotSelesai };
-          }).sort((a: any, b: any) => Number(a.jam_ke || 0) - Number(b.jam_ke || 0));
-        }
-      }
 
       const absLogs = getStorage("absensi_mengajar_guru") || [];
       const makeKey = (jKe: any, k: any, m: any) => `${Number(jKe)}_${String(k || "").trim().toLowerCase()}_${String(m || "").trim().toLowerCase()}`;
@@ -1003,6 +1027,13 @@ export function callMock(action: string, args: any[] = []): any {
           setStorage(reportsKey, reports);
           return { success: true, type: "pulang", message: `Presensi Pulang Berhasil: ${nama} (Lupa Scan Masuk)`, data: newRow };
         }
+      }
+
+      if (mode === "Pulang" && !isTeacherPulangTime) {
+        return {
+          success: false,
+          message: `Presensi Pulang Belum Dibuka: Jam pulang untuk ${nama} hari ${hariIni} dibuka mulai pukul ${guruJamPulangMulai} WIB.`
+        };
       }
 
       // -------------------------------------------------------------
@@ -2375,6 +2406,33 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
         bodyObj.sheetName = "AbsensiMengajar";
         bodyObj.target_sheet = "AbsensiMengajar";
         bodyObj.targetSheet = "AbsensiMengajar";
+      } else if (
+        action === "getJadwalGuru" ||
+        action === "getJadwalGuruSemua" ||
+        action === "tambahJadwalGuru" ||
+        action === "editJadwalGuru" ||
+        action === "hapusJadwalGuru" ||
+        action === "simpanJadwalGuru" ||
+        (actLower.includes("jadwalguru") && !actLower.includes("pelajaran"))
+      ) {
+        bodyObj.sheet_name = "JadwalGuru";
+        bodyObj.sheetName = "JadwalGuru";
+        bodyObj.target_sheet = "JadwalGuru";
+        bodyObj.targetSheet = "JadwalGuru";
+      } else if (
+        action === "getJadwalPelajaran" ||
+        action === "getJadwalPelajaranSemua" ||
+        action === "getJadwalSemua" ||
+        action === "tambahJadwalPelajaran" ||
+        action === "editJadwalPelajaran" ||
+        action === "hapusJadwalPelajaran" ||
+        action === "simpanJadwalPelajaran" ||
+        actLower.includes("jadwalpelajaran")
+      ) {
+        bodyObj.sheet_name = "JadwalPelajaran";
+        bodyObj.sheetName = "JadwalPelajaran";
+        bodyObj.target_sheet = "JadwalPelajaran";
+        bodyObj.targetSheet = "JadwalPelajaran";
       }
 
       for (const a of args) {
