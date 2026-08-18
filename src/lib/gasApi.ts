@@ -1164,6 +1164,32 @@ export function callMock(action: string, args: any[] = []): any {
 
           setStorage("absensi_mengajar_guru", absLogs);
 
+          // JIKA GURU MEMILIKI JADWAL FLEKSIBEL (PIKET) DI HARI INI, CATAT JUGA KE SHEET PresensiGuru
+          if (flexSchedule) {
+            const statusMasukPiket = (jam <= (flexSchedule.jam_masuk_batas || "07:15")) ? "Tepat Waktu" : "Terlambat";
+            if (index === -1) {
+              const idLog = "LOG-G-" + Date.now();
+              const newGuruRow = {
+                id_log_guru: idLog,
+                tanggal: tgl,
+                id_guru: idTarget,
+                nama_guru: nama,
+                jam_masuk: jam,
+                status_masuk: statusMasukPiket,
+                jam_pulang: "-",
+                status_pulang: "-",
+                ket: `Piket & Mengajar: ${activeSlotMatch.mapel} ${activeSlotMatch.kelas}`
+              };
+              reports.push(newGuruRow);
+              setStorage(reportsKey, reports);
+            } else if (!reports[index].jam_masuk || reports[index].jam_masuk === "-") {
+              reports[index].jam_masuk = jam;
+              reports[index].status_masuk = statusMasukPiket;
+              reports[index].ket = `Piket & Mengajar: ${activeSlotMatch.mapel} ${activeSlotMatch.kelas}`;
+              setStorage(reportsKey, reports);
+            }
+          }
+
           const jamNumbers = multiJamBlock.map((s: any) => Number(s.jam_ke)).sort((a: number, b: number) => a - b);
           const jamLabel = jamNumbers.length > 1
             ? `Jam Ke-${jamNumbers[0]} s/d ${jamNumbers[jamNumbers.length - 1]}`
