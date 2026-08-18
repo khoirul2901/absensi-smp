@@ -612,6 +612,15 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
           // Perbarui state log presensi mengajar lokal
           setAbsensiMengajarLogs(prev => [...savedLogs, ...prev]);
 
+          // JIKA GURU JUGA MEMILIKI JADWAL FLEKSIBEL (PIKET) DI HARI INI, CATAT JUGA KE SHEET PresensiGuru
+          let flexStatusNote = "";
+          if (todayFlex) {
+            const autoModePiket: "Masuk" | "Pulang" = currentHour >= 12 ? "Pulang" : "Masuk";
+            const effectiveCode = personObj ? (personObj.id_guru || personObj.nip_nuptk || code) : code;
+            await callGas("prosesScanQR", [effectiveCode, "Guru", autoModePiket, dateString]);
+            flexStatusNote = " • Piket & Mengajar (Tercatat di AbsensiMengajar & PresensiGuru)";
+          }
+
           const jamNumbers = targetList.map((s: any) => Number(s.jam_ke)).sort((a: number, b: number) => a - b);
           const minJam = jamNumbers[0] || targetSched.jam_ke;
           const maxJam = jamNumbers[jamNumbers.length - 1] || targetSched.jam_ke;
@@ -623,14 +632,14 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
             id: guruId,
             name: guruNama,
             role: "Guru",
-            subDetail: `NIP: ${guruNip}`,
+            subDetail: `NIP: ${guruNip}${todayFlex ? ' • Guru Piket & Mengajar' : ''}`,
             mode: "Masuk",
             status: statusMengajar,
             timestamp: timeString,
             dateStr: dateString,
-            scheduleDetail: `Mengajar: ${targetSched.mapel} (${targetSched.kelas}) • ${jamLabel}`,
+            scheduleDetail: `Mengajar: ${targetSched.mapel} (${targetSched.kelas}) • ${jamLabel}${flexStatusNote ? ' (Tercatat di 2 Sheet: AbsensiMengajar & PresensiGuru)' : ''}`,
             success: true,
-            message: `Presensi Mengajar Berhasil: ${guruNama} (${targetSched.mapel} ${targetSched.kelas}, ${jamLabel}) - ${statusMengajar}`
+            message: `Presensi Berhasil: ${guruNama} (${targetSched.mapel} ${targetSched.kelas}, ${jamLabel}) - ${statusMengajar}${flexStatusNote}`
           };
 
           setLastResult(successResult);
