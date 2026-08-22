@@ -58,7 +58,7 @@ export function getGasUrl(): string {
     const saved = localStorage.getItem(GAS_URL_STORAGE_KEY);
     if (saved && saved.trim()) return saved.trim();
   } catch (e) {}
-  return "https://script.google.com/macros/s/AKfycbzQ4b8j2R3mXz0YV4X_O/exec";
+  return "https://script.google.com/macros/s/AKfycbzCjuiKC99_2xw6E8KY7wOOHLMrqWo3O6LjsU7LX0XZWMCie9_qXtTB-IyhRXxvUKkz9Q/exec";
 }
 
 export function setGasUrl(url: string): void {
