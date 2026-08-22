@@ -113,6 +113,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
   const [recentLogs, setRecentLogs] = useState<LiveAbsen[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterKelas, setFilterKelas] = useState("Semua");
+  const [filterHariGuru, setFilterHariGuru] = useState<string>("Sesuai Tanggal");
+  const [flexTeacherSchedules, setFlexTeacherSchedules] = useState<any[]>([]);
   const [classList, setClassList] = useState<string[]>([]);
   const [filterTanggal, setFilterTanggal] = useState<string>(
     new Date().toISOString().split("T")[0]
@@ -315,8 +317,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
     fetchClasses();
   }, [currentUser]);
 
-  // Load live logs based on selected date, category, and class filter
-  const loadLiveLogs = async (targetDate = filterTanggal, currentKelas = filterKelas) => {
+  // Load live logs based on selected date, category, class filter, and teacher day filter
+  const loadLiveLogs = async (targetDate = filterTanggal, currentKelas = filterKelas, currentHariGuru = filterHariGuru) => {
     setIsLoadingLogs(true);
     try {
       // 1. Fetch real master data from Google Sheets database
@@ -333,18 +335,55 @@ export default function AbsensiScanner({ session }: { session?: any }) {
         setStorage(storageKey, masterData);
       }
 
+      // Determine day name for teacher flexible schedule check
+      const dObj = new Date(targetDate + "T00:00:00");
+      const dateDayName = !isNaN(dObj.getTime()) ? (HARI_MAP_INDEX[dObj.getDay()] || "Senin") : "Senin";
+      const targetDayGuru = (currentHariGuru && currentHariGuru !== "Sesuai Tanggal") ? currentHariGuru : dateDayName;
+
+      // Fetch flexible schedules if category is Guru
+      let scheduledTeacherIds = new Set<string>();
+      let scheduledTeacherNames = new Set<string>();
+      const flexInfoMap = new Map<string, any>();
+      let flexList: any[] = [];
+
+      if (kategori === "Guru") {
+        const flexRes = await callGas("getJadwalGuruSemua");
+        flexList = extractArrayData(flexRes);
+        if (!flexList || flexList.length === 0) {
+          flexList = getStorage("jadwal_guru") || [];
+        }
+        setFlexTeacherSchedules(flexList);
+
+        const dayFlexList = targetDayGuru === "Semua" 
+          ? flexList 
+          : flexList.filter((f: any) => String(f.hari || "").trim().toLowerCase() === targetDayGuru.trim().toLowerCase());
+
+        dayFlexList.forEach((f: any) => {
+          const fId = String(f.id_guru || "").trim().toLowerCase();
+          const fName = String(f.nama_guru || "").trim().toLowerCase();
+          if (fId) {
+            scheduledTeacherIds.add(fId);
+            flexInfoMap.set(fId, f);
+          }
+          if (fName) {
+            scheduledTeacherNames.add(fName);
+            flexInfoMap.set(fName, f);
+          }
+        });
+      }
+
       // 2. Call live attendance action
-      const res = await callGas("getLiveAbsenHariIni", [kategori, targetDate, currentKelas]);
+      const res = await callGas("getLiveAbsenHariIni", [kategori, targetDate, currentKelas, targetDayGuru]);
       let list = Array.isArray(res) 
         ? res 
         : (res && Array.isArray(res.data) ? res.data : (res?.data || []));
 
-      // 3. Merge master data with attendance list so ALL students/teachers appear in the table
+      // 3. Merge master data with attendance list
       if (masterData.length > 0) {
         const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
         const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
 
-        // Filter masterData by currentKelas if category is Siswa and currentKelas !== "Semua"
+        // Filter masterData
         let filteredMaster = masterData;
         if (kategori === "Siswa" && currentKelas && currentKelas !== "Semua") {
           const kFilter = String(currentKelas).toLowerCase().replace(/[\s-]+/g, "");
@@ -355,6 +394,19 @@ export default function AbsensiScanner({ session }: { session?: any }) {
             const combined = `${kVal}${jVal}`;
             return kjVal.includes(kFilter) || kFilter.includes(kjVal) || kVal.includes(kFilter) || kFilter.includes(kVal) || combined.includes(kFilter) || kFilter.includes(combined);
           });
+        } else if (kategori === "Guru") {
+          // HANYA tampilkan guru yang ada di jadwal fleksibel untuk hari yang difilter
+          if (scheduledTeacherIds.size > 0 || scheduledTeacherNames.size > 0) {
+            filteredMaster = masterData.filter((m: any) => {
+              const gId = String(m[idKey] || m.id || m.nip_nuptk || "").trim().toLowerCase();
+              const gNip = String(m.nip_nuptk || "").trim().toLowerCase();
+              const gName = String(m[nameKey] || m.nama || m.name || "").trim().toLowerCase();
+              return scheduledTeacherIds.has(gId) || scheduledTeacherIds.has(gNip) || scheduledTeacherNames.has(gName);
+            });
+          } else if (targetDayGuru !== "Semua" && flexList.length > 0) {
+            // Jika ada data jadwal guru tetapi tidak ada jadwal di hari ini
+            filteredMaster = [];
+          }
         }
 
         // Map live attendance records by id_target
@@ -400,6 +452,11 @@ export default function AbsensiScanner({ session }: { session?: any }) {
             } else if (jVal) {
               kelasStr = jVal;
             }
+          } else {
+            const flexObj = flexInfoMap.get(idTarget.toLowerCase()) || flexInfoMap.get(namaTarget.toLowerCase());
+            if (flexObj) {
+              kelasStr = `Piket: ${flexObj.jam_masuk_mulai || "06:00"}-${flexObj.jam_pulang_mulai || "15:30"}`;
+            }
           }
 
           const existingLog = logMap.get(idTarget.toLowerCase());
@@ -409,7 +466,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
               ...existingLog,
               id_target: existingLog.id_target || idTarget,
               nama_target: existingLog.nama_target || namaTarget,
-              kelas_jurusan: existingLog.kelas_jurusan || kelasStr,
+              kelas_jurusan: existingLog.kelas_jurusan && existingLog.kelas_jurusan !== "-" ? existingLog.kelas_jurusan : kelasStr,
               tanggal: targetDate,
               status_masuk: existingLog.status_masuk && existingLog.status_masuk !== "-" ? existingLog.status_masuk : "Belum Absen",
               status_pulang: existingLog.status_pulang && existingLog.status_pulang !== "-" ? existingLog.status_pulang : "-"
@@ -431,12 +488,15 @@ export default function AbsensiScanner({ session }: { session?: any }) {
           };
         });
 
-        // Include any scanned records that were not in filteredMaster
+        // Include any scanned records that were not in filteredMaster (e.g. if they scanned on this date)
         if (Array.isArray(list)) {
           const matchedIds = new Set(filteredMaster.map((m: any) => String(m[idKey] || m.id || m.nisn || m.nip_nuptk || "").trim().toLowerCase()));
           for (const item of list) {
             const itemKey = String(item.id_target || item.id_siswa || item.id_guru || "").trim().toLowerCase();
-            if (itemKey && !matchedIds.has(itemKey)) {
+            const hasAttended = (item.jam_masuk && item.jam_masuk !== "-") || 
+                                (item.status_masuk && item.status_masuk !== "-" && item.status_masuk !== "Belum Absen") || 
+                                (item.jam_pulang && item.jam_pulang !== "-");
+            if (itemKey && !matchedIds.has(itemKey) && hasAttended) {
               mergedList.push({
                 ...item,
                 tanggal: targetDate,
@@ -524,8 +584,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
   };
 
   useEffect(() => {
-    loadLiveLogs(filterTanggal, filterKelas);
-  }, [kategori, filterTanggal, filterKelas]);
+    loadLiveLogs(filterTanggal, filterKelas, filterHariGuru);
+  }, [kategori, filterTanggal, filterKelas, filterHariGuru, selectedDay]);
 
   useEffect(() => {
     fetchMengajarData();
@@ -1299,7 +1359,15 @@ export default function AbsensiScanner({ session }: { session?: any }) {
           item.id === queueId ? { ...item, status: "error", message: errorMsg } : item
         ));
 
-        if (speechEnabled) speakText("Gagal.");
+        if (speechEnabled) {
+          if (errorMsg.toLowerCase().includes("tidak memiliki jadwal")) {
+            speakText("Presensi ditolak. Tidak ada jadwal hari ini.");
+          } else if (errorMsg.toLowerCase().includes("belum dibuka")) {
+            speakText("Presensi pulang belum dibuka.");
+          } else {
+            speakText("Presensi gagal.");
+          }
+        }
       }
     } catch (err: any) {
       setScanStatus({ 
@@ -1392,15 +1460,54 @@ export default function AbsensiScanner({ session }: { session?: any }) {
       if (!showManualModal) return;
       try {
         const res = await callGas("getDataMaster", [kategori]);
-        if (res && res.success) {
-          setEntitiesList(res.data);
+        let data = res && res.success && Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : []);
+        
+        if (kategori === "Guru") {
+          const dObj = new Date(filterTanggal + "T00:00:00");
+          const targetDay = !isNaN(dObj.getTime()) ? (HARI_MAP_INDEX[dObj.getDay()] || "Senin") : "Senin";
+          const currentTargetDay = (filterHariGuru && filterHariGuru !== "Sesuai Tanggal") ? filterHariGuru : targetDay;
+
+          let flexList = flexTeacherSchedules;
+          if (!flexList || flexList.length === 0) {
+            const flexRes = await callGas("getJadwalGuruSemua");
+            flexList = extractArrayData(flexRes);
+            if (!flexList || flexList.length === 0) {
+              flexList = getStorage("jadwal_guru") || [];
+            }
+          }
+
+          if (currentTargetDay !== "Semua" && flexList.length > 0) {
+            const scheduledGuruIds = new Set(
+              flexList
+                .filter((f: any) => String(f.hari || "").trim().toLowerCase() === currentTargetDay.trim().toLowerCase())
+                .map((f: any) => String(f.id_guru || "").trim().toLowerCase())
+                .filter(Boolean)
+            );
+            const scheduledGuruNames = new Set(
+              flexList
+                .filter((f: any) => String(f.hari || "").trim().toLowerCase() === currentTargetDay.trim().toLowerCase())
+                .map((f: any) => String(f.nama_guru || "").trim().toLowerCase())
+                .filter(Boolean)
+            );
+
+            if (scheduledGuruIds.size > 0 || scheduledGuruNames.size > 0) {
+              data = data.filter((ent: any) => {
+                const gId = String(ent.id_guru || ent.id || ent.nip_nuptk || "").trim().toLowerCase();
+                const gNip = String(ent.nip_nuptk || "").trim().toLowerCase();
+                const gName = String(ent.nama_guru || ent.nama || ent.name || "").trim().toLowerCase();
+                return scheduledGuruIds.has(gId) || scheduledGuruIds.has(gNip) || scheduledGuruNames.has(gName);
+              });
+            }
+          }
         }
+
+        setEntitiesList(data);
       } catch (e) {
         console.error(e);
       }
     }
     loadEntities();
-  }, [showManualModal, kategori]);
+  }, [showManualModal, kategori, filterTanggal, filterHariGuru, flexTeacherSchedules]);
 
   // Sync existing attendance record for selected manualTarget on filterTanggal
   useEffect(() => {
@@ -2227,6 +2334,27 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                 </div>
               )}
 
+              {kategori === "Guru" && (
+                <div className="relative">
+                  <select 
+                    value={filterHariGuru}
+                    onChange={(e) => setFilterHariGuru(e.target.value)}
+                    className="appearance-none bg-gray-50 border border-gray-200 rounded-xl py-1.5 pl-3 pr-8 text-xs font-bold text-gray-700 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="Sesuai Tanggal">Jadwal: Sesuai Tanggal ({selectedDay})</option>
+                    <option value="Senin">Hari: Senin</option>
+                    <option value="Selasa">Hari: Selasa</option>
+                    <option value="Rabu">Hari: Rabu</option>
+                    <option value="Kamis">Hari: Kamis</option>
+                    <option value="Jumat">Hari: Jumat</option>
+                    <option value="Sabtu">Hari: Sabtu</option>
+                    <option value="Minggu">Hari: Minggu</option>
+                    <option value="Semua">Semua Hari Fleksibel</option>
+                  </select>
+                  <Filter className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-2.5 pointer-events-none" />
+                </div>
+              )}
+
               <div className="relative flex-grow sm:flex-grow-0">
                 <input 
                   type="text"
@@ -2310,7 +2438,7 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                   )}
                   <th className="py-3 px-4">Tanggal</th>
                   <th className="py-3 px-4">Nama</th>
-                  {kategori === "Siswa" && <th className="py-3 px-4">Kelas</th>}
+                  <th className="py-3 px-4">{kategori === "Siswa" ? "Kelas" : "Jadwal Piket"}</th>
                   <th className="py-3 px-4">Jam Masuk</th>
                   <th className="py-3 px-4">Jam Pulang</th>
                   {!isGuru && <th className="py-3 px-4 text-center">Aksi</th>}
@@ -2319,8 +2447,8 @@ export default function AbsensiScanner({ session }: { session?: any }) {
               <tbody className="divide-y divide-gray-50 text-xs text-gray-700">
                 {filteredLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={kategori === "Siswa" ? (!isGuru ? 7 : 5) : (!isGuru ? 6 : 4)} className="py-10 text-center text-gray-400 font-medium">
-                      Belum ada data presensi terekam tanggal {filterTanggal}
+                    <td colSpan={!isGuru ? 7 : 5} className="py-10 text-center text-gray-400 font-medium">
+                      Belum ada data presensi {kategori === "Guru" ? `guru piket hari ${filterHariGuru === "Sesuai Tanggal" ? selectedDay : filterHariGuru}` : ""} terekam tanggal {filterTanggal}
                     </td>
                   </tr>
                 ) : (
@@ -2351,8 +2479,15 @@ export default function AbsensiScanner({ session }: { session?: any }) {
                           <div className="font-bold text-gray-900">{log.nama_target}</div>
                           <div className="text-[10px] text-gray-400 font-mono">{log.id_target}</div>
                         </td>
-                        {kategori === "Siswa" && (
+                        {kategori === "Siswa" ? (
                           <td className="py-3 px-4 text-gray-500 font-medium">{log.kelas_jurusan}</td>
+                        ) : (
+                          <td className="py-3 px-4 text-gray-600 font-medium">
+                            <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                              <Clock className="w-3 h-3 text-amber-600" />
+                              {log.kelas_jurusan && log.kelas_jurusan !== "-" ? log.kelas_jurusan : "Jadwal Fleksibel"}
+                            </span>
+                          </td>
                         )}
                         <td className="py-3 px-4">
                           <div className="font-bold text-gray-800">{log.jam_masuk && log.jam_masuk !== "-" ? log.jam_masuk : "-"}</div>
