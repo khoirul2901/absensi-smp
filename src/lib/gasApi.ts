@@ -14,6 +14,16 @@ export interface SchoolProfile {
   telepon?: string;
 }
 
+const HARI_MAP_INDEX: { [key: number]: string } = {
+  0: "Minggu",
+  1: "Senin",
+  2: "Selasa",
+  3: "Rabu",
+  4: "Kamis",
+  5: "Jumat",
+  6: "Sabtu"
+};
+
 export const DEFAULT_SCHOOL_PROFILE: SchoolProfile = {
   namaSekolah: "AL-HIKAM SCHOOL",
   alamatSekolah: "SENDANG AGUNG",
@@ -48,7 +58,7 @@ export function getGasUrl(): string {
     const saved = localStorage.getItem(GAS_URL_STORAGE_KEY);
     if (saved && saved.trim()) return saved.trim();
   } catch (e) {}
-  return "https://script.google.com/macros/s/AKfycbzCjuiKC99_2xw6E8KY7wOOHLMrqWo3O6LjsU7LX0XZWMCie9_qXtTB-IyhRXxvUKkz9Q/exec";
+  return "https://script.google.com/macros/s/AKfycbzQ4b8j2R3mXz0YV4X_O/exec";
 }
 
 export function setGasUrl(url: string): void {
@@ -1637,7 +1647,7 @@ export function callMock(action: string, args: any[] = []): any {
     }
 
     case "getLiveAbsenHariIni": {
-      const [kategori, tanggal, filterKelas] = args;
+      const [kategori, tanggal, filterKelas, filterHari] = args;
       const tgl = tanggal || new Date().toISOString().split("T")[0];
       const masterKey = kategori === "Siswa" ? "data_siswa" : "data_guru";
       let master = getStorage(masterKey);
@@ -1662,6 +1672,37 @@ export function callMock(action: string, args: any[] = []): any {
           }
         }
       }
+
+      // Filter guru berdasarkan jadwal fleksibel hari ini
+      const scheduledTeacherIds = new Set<string>();
+      const scheduledTeacherNames = new Set<string>();
+      const flexInfoMap = new Map<string, any>();
+
+      if (kategori === "Guru") {
+        const dObj = new Date(tgl + "T00:00:00");
+        const dayFromDate = !isNaN(dObj.getTime()) ? (HARI_MAP_INDEX[dObj.getDay()] || "Senin") : "Senin";
+        const targetDay = (filterHari && filterHari !== "Semua" && filterHari !== "Sesuai Tanggal") ? filterHari : dayFromDate;
+
+        const flexSchedules = getStorage("jadwal_guru") || [];
+        if (Array.isArray(flexSchedules) && flexSchedules.length > 0) {
+          const flexForDay = targetDay === "Semua" 
+            ? flexSchedules 
+            : flexSchedules.filter((f: any) => String(f.hari || "").trim().toLowerCase() === targetDay.trim().toLowerCase());
+
+          flexForDay.forEach((f: any) => {
+            const fId = String(f.id_guru || "").trim().toLowerCase();
+            const fName = String(f.nama_guru || "").trim().toLowerCase();
+            if (fId) {
+              scheduledTeacherIds.add(fId);
+              flexInfoMap.set(fId, f);
+            }
+            if (fName) {
+              scheduledTeacherNames.add(fName);
+              flexInfoMap.set(fName, f);
+            }
+          });
+        }
+      }
       
       const result = master.map((m: any) => {
         const idTarget = m[idKey] || m.id || m.nisn || m.nip_nuptk || "";
@@ -1681,6 +1722,11 @@ export function callMock(action: string, args: any[] = []): any {
             }
           } else if (jVal) {
             kelasStr = jVal;
+          }
+        } else {
+          const flexObj = flexInfoMap.get(String(idTarget).toLowerCase()) || flexInfoMap.get(String(namaTarget).toLowerCase());
+          if (flexObj) {
+            kelasStr = `Piket: ${flexObj.jam_masuk_mulai || "06:00"}-${flexObj.jam_pulang_mulai || "15:30"}`;
           }
         }
 
@@ -1706,6 +1752,15 @@ export function callMock(action: string, args: any[] = []): any {
           const kTarget = String(item.kelas_jurusan || "").toLowerCase().replace(/\s+/g, "");
           const kFilter = String(filterKelas).toLowerCase().replace(/\s+/g, "");
           return kTarget.includes(kFilter) || kFilter.includes(kTarget);
+        }
+        if (kategori === "Guru" && scheduledTeacherIds.size > 0) {
+          const gId = String(item.id_target || "").trim().toLowerCase();
+          const gName = String(item.nama_target || "").trim().toLowerCase();
+          const isScheduled = scheduledTeacherIds.has(gId) || scheduledTeacherNames.has(gName);
+          const hasAttended = (item.jam_masuk && item.jam_masuk !== "-") || 
+                              (item.status_masuk && item.status_masuk !== "-" && item.status_masuk !== "Belum Absen") || 
+                              (item.jam_pulang && item.jam_pulang !== "-");
+          return isScheduled || hasAttended;
         }
         return true;
       });
