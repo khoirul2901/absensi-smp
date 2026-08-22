@@ -23,9 +23,24 @@ import {
   Check,
   Building2,
   RefreshCw,
-  Info
+  Info,
+  ListOrdered,
+  Layers,
+  Loader2,
+  ArrowRight
 } from "lucide-react";
 import { callGas, getStorageKey, setStorage, getStorage, extractArrayData, getSchoolProfile } from "../lib/gasApi";
+
+export interface QueueItem {
+  queueId: string;
+  rawCode: string;
+  enqueuedAt: string;
+  previewName?: string;
+  previewRole?: "Siswa" | "Guru";
+  previewSubDetail?: string;
+  status: "pending" | "processing" | "completed" | "error";
+  result?: AutoScanResult;
+}
 
 interface AutoScanResult {
   id: string;
@@ -46,6 +61,12 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
   const [barcodeInput, setBarcodeInput] = useState("");
   const [autoFocusLock, setAutoFocusLock] = useState(true);
   const barcodeRef = useRef<HTMLInputElement | null>(null);
+
+  // Queue Architecture States for Rapid Consecutive Scanning
+  const [scanQueue, setScanQueue] = useState<QueueItem[]>([]);
+  const scanQueueRef = useRef<QueueItem[]>([]);
+  const isProcessingQueueRef = useRef<boolean>(false);
+  const recentScannedCodesRef = useRef<{ [code: string]: number }>({});
 
   // Processing & Audio states
   const [isProcessing, setIsProcessing] = useState(false);
@@ -278,7 +299,7 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
     }
   };
 
-  const playBeep = (type: "success" | "error" | "info") => {
+  const playBeep = (type: "success" | "error" | "info" | "capture") => {
     if (audioMuted) return;
     try {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -287,7 +308,14 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
       osc.connect(gain);
       gain.connect(ctx.destination);
 
-      if (type === "success") {
+      if (type === "capture") {
+        // Instant soft high-pitch chirp for rapid card capture into queue
+        osc.frequency.setValueAtTime(1400, ctx.currentTime);
+        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.005, ctx.currentTime + 0.07);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.07);
+      } else if (type === "success") {
         osc.frequency.setValueAtTime(880, ctx.currentTime);
         osc.frequency.setValueAtTime(1200, ctx.currentTime + 0.1);
         gain.gain.setValueAtTime(0.2, ctx.currentTime);
@@ -311,12 +339,76 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
     } catch (e) {}
   };
 
-  // CORE AUTO DETECT & SCAN PROCESSOR
+  // Instant Quick Match for Queue Visualizer
+  const peekPersonPreview = (code: string) => {
+    const cleanCode = code.toLowerCase().trim();
+    const cleanWithoutPrefix = cleanCode.replace(/^(qr|id|s|g|nisn|nip|siswa|guru|jad|jadwal)[_:\-\s]+/i, '').trim();
+
+    // 1. Direct match in schedules
+    const matchedDirectSched = allJadwalList.find((s: any) => {
+      const idJ = String(s.id_jadwal || "").trim().toLowerCase();
+      return idJ && (idJ === cleanCode || idJ === cleanWithoutPrefix);
+    });
+    if (matchedDirectSched) {
+      return {
+        name: matchedDirectSched.nama_guru || "Guru Pengampu",
+        role: "Guru" as const,
+        subDetail: `${matchedDirectSched.mapel || "Pelajaran"} (${matchedDirectSched.kelas || "-"})`
+      };
+    }
+
+    // 2. Siswa
+    const matchedSiswa = siswaList.find((s: any) => {
+      const idS = String(s.id_siswa || "").trim().toLowerCase();
+      const nisS = String(s.nisn || s.nis || "").trim().toLowerCase();
+      const qrS = String(s.qr_content || s.qr_code || "").trim().toLowerCase();
+      return (idS && (idS === cleanCode || idS === cleanWithoutPrefix)) ||
+             (nisS && (nisS === cleanCode || nisS === cleanWithoutPrefix)) ||
+             (qrS && (qrS === cleanCode || qrS === cleanWithoutPrefix)) ||
+             isNameMatch(s.nama_siswa, cleanCode) ||
+             isNameMatch(s.nama_siswa, cleanWithoutPrefix);
+    });
+    if (matchedSiswa) {
+      return {
+        name: matchedSiswa.nama_siswa || matchedSiswa.nama || "Siswa",
+        role: "Siswa" as const,
+        subDetail: matchedSiswa.kelas ? `Kelas ${matchedSiswa.kelas}` : "Siswa"
+      };
+    }
+
+    // 3. Guru
+    const matchedGuru = guruList.find((g: any) => {
+      const idG = String(g.id_guru || "").trim().toLowerCase();
+      const nipG = String(g.nip_nuptk || g.nip || "").trim().toLowerCase();
+      const qrG = String(g.qr_content || g.qr_code || "").trim().toLowerCase();
+      return (idG && (idG === cleanCode || idG === cleanWithoutPrefix)) ||
+             (nipG && (nipG === cleanCode || nipG === cleanWithoutPrefix)) ||
+             (qrG && (qrG === cleanCode || qrG === cleanWithoutPrefix)) ||
+             isNameMatch(g.nama_guru, cleanCode) ||
+             isNameMatch(g.nama_guru, cleanWithoutPrefix);
+    });
+    if (matchedGuru) {
+      return {
+        name: matchedGuru.nama_guru || matchedGuru.nama || "Guru",
+        role: "Guru" as const,
+        subDetail: matchedGuru.nip_nuptk ? `NIP: ${matchedGuru.nip_nuptk}` : "Guru"
+      };
+    }
+
+    // Default fallback
+    const isGuruPrefix = cleanCode.startsWith("g-") || cleanCode.startsWith("guru") || cleanCode.startsWith("nip") || cleanCode.startsWith("g_") || cleanCode.startsWith("jpel") || cleanCode.startsWith("jad");
+    return {
+      name: code,
+      role: isGuruPrefix ? ("Guru" as const) : ("Siswa" as const),
+      subDetail: "ID: " + code
+    };
+  };
+
+  // CORE AUTO DETECT & SCAN PROCESSOR (PRESERVING ALL 3 ACUAN RULES)
   const processAutoScan = async (rawCode: string) => {
     const code = rawCode.trim();
-    if (!code || isProcessing) return;
+    if (!code) return;
 
-    setIsProcessing(true);
     const now = new Date();
     const timeString = now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
     const dateString = now.toISOString().split("T")[0];
@@ -975,19 +1067,86 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
       playBeep("error");
       speakText("Presensi gagal.");
     } finally {
-      setIsProcessing(false);
-      setBarcodeInput("");
-      if (barcodeRef.current) {
-        barcodeRef.current.value = "";
+      if (barcodeRef.current && autoFocusLock && document.activeElement !== barcodeRef.current) {
         barcodeRef.current.focus();
       }
     }
   };
 
+  // BACKGROUND FIFO QUEUE WORKER
+  const triggerQueueWorker = async () => {
+    if (isProcessingQueueRef.current) return;
+    isProcessingQueueRef.current = true;
+    setIsProcessing(true);
+
+    while (scanQueueRef.current.length > 0) {
+      const currentItem = scanQueueRef.current[0];
+      currentItem.status = "processing";
+      setScanQueue([...scanQueueRef.current]);
+
+      try {
+        await processAutoScan(currentItem.rawCode);
+      } catch (err) {
+        console.error("Queue execution error:", err);
+      }
+
+      // Pop processed item from FIFO queue
+      scanQueueRef.current.shift();
+      setScanQueue([...scanQueueRef.current]);
+    }
+
+    isProcessingQueueRef.current = false;
+    setIsProcessing(false);
+  };
+
+  // RAPID SCAN ENQUEUE HANDLER
+  const enqueueScan = (rawCode: string) => {
+    const code = rawCode.trim();
+    if (!code) return;
+
+    const nowMs = Date.now();
+    const lastScanTime = recentScannedCodesRef.current[code.toLowerCase()] || 0;
+    
+    // Cooldown only for exact duplicate code within 2.5 seconds (prevent barcode beam repeat bounce)
+    if (nowMs - lastScanTime < 2500) {
+      playBeep("info");
+      return;
+    }
+    recentScannedCodesRef.current[code.toLowerCase()] = nowMs;
+
+    const preview = peekPersonPreview(code);
+
+    const newItem: QueueItem = {
+      queueId: `Q-${nowMs}-${Math.floor(Math.random() * 1000)}`,
+      rawCode: code,
+      enqueuedAt: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      previewName: preview.name,
+      previewRole: preview.role,
+      previewSubDetail: preview.subDetail,
+      status: "pending"
+    };
+
+    // Immediate acoustic & optical feedback for instant card capture
+    playBeep("capture");
+
+    scanQueueRef.current.push(newItem);
+    setScanQueue([...scanQueueRef.current]);
+
+    // Trigger queue processor seamlessly
+    triggerQueueWorker();
+  };
+
   const handleBarcodeSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (barcodeInput.trim()) {
-      processAutoScan(barcodeInput.trim());
+      const code = barcodeInput.trim();
+      // Instantly clear input so next person can scan in 0 milliseconds
+      setBarcodeInput("");
+      enqueueScan(code);
+      if (barcodeRef.current) {
+        barcodeRef.current.value = "";
+        barcodeRef.current.focus();
+      }
     }
   };
 
@@ -1205,29 +1364,50 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
           
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-gray-100 pb-4">
             <div>
-              <h2 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
-                <Zap className="w-4 h-4 text-amber-500" />
-                Input Auto Scanner (Hardware USB / Barcode / RFID)
-              </h2>
-              <p className="text-xs text-gray-500">
-                Penerimaan instan dari alat scanner hardware / barcode gun / RFID reader
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-amber-500" />
+                  Input Auto Scanner (Hardware USB / Barcode / RFID)
+                </h2>
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                  <ListOrdered className="w-3 h-3" />
+                  Model Antrian Aktif
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Bisa scan kartu berturut-turut tanpa jeda. Sistem memproses antrian secara otomatis di latar belakang.
               </p>
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                Scanner Siap
-              </span>
+              {scanQueue.length > 0 ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 text-amber-800 border border-amber-300 text-xs font-bold animate-pulse">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                  Memproses {scanQueue.length} Antrian
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                  Siap Scan Cepat
+                </span>
+              )}
             </div>
           </div>
 
           {/* HARDWARE USB SCANNER INPUT */}
           <div className="space-y-4">
             <form onSubmit={handleBarcodeSubmit} className="space-y-3">
-              <label className="text-xs font-bold text-gray-600 block">
-                Scan Barcode / Tempel Kartu ID di Alat Scanner:
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-gray-700 block">
+                  Scan Barcode / Tempel Kartu ID di Alat Scanner:
+                </label>
+                {scanQueue.length > 0 && (
+                  <span className="text-[11px] font-semibold text-amber-600 flex items-center gap-1">
+                    <Layers className="w-3 h-3" />
+                    {scanQueue.length} kartu sedang dalam jalur pemrosesan
+                  </span>
+                )}
+              </div>
               
               <div className="relative">
                 <input
@@ -1235,21 +1415,86 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
                   type="text"
                   value={barcodeInput}
                   onChange={(e) => setBarcodeInput(e.target.value)}
-                  placeholder="Standby menunggu scan kartu... (Contoh: S-1001 / G-001)"
-                  className="w-full bg-slate-900 text-white font-mono text-base font-bold rounded-xl py-3.5 pl-11 pr-24 border border-slate-800 focus:outline-none focus:border-rose-500 shadow-inner"
-                  disabled={isProcessing}
+                  placeholder="Scan cepat tanpa jeda... (Contoh: S-1001 / G-001)"
+                  className="w-full bg-slate-900 text-white font-mono text-base font-bold rounded-xl py-3.5 pl-11 pr-28 border border-slate-800 focus:outline-none focus:border-rose-500 shadow-inner"
+                  autoComplete="off"
                 />
                 <Usb className="w-5 h-5 text-rose-400 absolute left-3.5 top-3.5" />
                 
                 <button
                   type="submit"
-                  disabled={isProcessing || !barcodeInput.trim()}
-                  className="absolute right-2 top-2 bottom-2 bg-rose-600 text-white font-bold text-xs px-4 rounded-lg hover:bg-rose-700 transition disabled:opacity-50 cursor-pointer"
+                  disabled={!barcodeInput.trim()}
+                  className="absolute right-2 top-2 bottom-2 bg-rose-600 text-white font-bold text-xs px-4 rounded-lg hover:bg-rose-700 transition disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
                 >
-                  {isProcessing ? "Proses..." : "Scan"}
+                  {scanQueue.length > 0 ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Antrian ({scanQueue.length})
+                    </>
+                  ) : (
+                    "Scan"
+                  )}
                 </button>
               </div>
             </form>
+
+            {/* LIVE QUEUE PIPELINE DRAWER (JIKA ADA ANTRIAN) */}
+            {scanQueue.length > 0 && (
+              <div className="p-3.5 bg-slate-900 rounded-xl border border-slate-800 text-white space-y-2 animate-fade-in shadow-md">
+                <div className="flex items-center justify-between text-xs text-slate-400 border-b border-slate-800 pb-2">
+                  <span className="font-bold text-slate-200 flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-amber-400" />
+                    Jalur Antrian Berjalan (FIFO)
+                  </span>
+                  <span className="font-mono text-[11px] text-amber-300">
+                    Total: {scanQueue.length} scan
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-xs">
+                  {scanQueue.map((qItem, idx) => (
+                    <div 
+                      key={qItem.queueId}
+                      className={`p-2 rounded-lg flex items-center justify-between gap-2 border transition ${
+                        idx === 0 
+                          ? "bg-amber-500/15 border-amber-500/40 text-amber-200 font-bold" 
+                          : "bg-slate-800/60 border-slate-700/50 text-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-black ${
+                          idx === 0 ? "bg-amber-500 text-slate-950" : "bg-slate-700 text-slate-300"
+                        }`}>
+                          #{idx + 1}
+                        </span>
+                        
+                        <div className="truncate">
+                          <span className="font-extrabold text-white text-xs mr-1.5">
+                            {qItem.previewName || qItem.rawCode}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-normal">
+                            ({qItem.previewRole || "ID"} • {qItem.previewSubDetail || qItem.rawCode})
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 flex items-center gap-1.5 text-[10px] font-mono">
+                        {idx === 0 ? (
+                          <span className="text-amber-400 flex items-center gap-1 font-bold">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Memproses...
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">
+                            Antri ({qItem.enqueuedAt})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center justify-between bg-rose-50/50 p-3 rounded-xl border border-rose-100 text-xs">
               <span className="text-rose-900 font-semibold flex items-center gap-1.5">
