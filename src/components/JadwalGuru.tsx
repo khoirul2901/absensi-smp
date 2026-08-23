@@ -22,7 +22,9 @@ import {
   X,
   Filter,
   Eye,
-  Loader2
+  Loader2,
+  RotateCcw,
+  SlidersHorizontal
 } from "lucide-react";
 import { callGas, callMock, getStorageKey, setStorage, getStorage, extractArrayData } from "../lib/gasApi";
 import { ScheduleLessonItem, JamPelajaranItem, AbsensiMengajarItem, TeacherItem } from "../types";
@@ -149,8 +151,15 @@ export default function JadwalGuru({ session }: { session?: any }) {
     catatan_materi: ""
   });
 
-  // Legacy Modal: Flex teacher limits
+  // Flex Teacher Limits (Jadwal Fleksibel Khusus Guru)
   const [showFlexModal, setShowFlexModal] = useState(false);
+  const [showTopFlexForm, setShowTopFlexForm] = useState(false);
+  const [editFlexId, setEditFlexId] = useState<string | null>(null);
+  const [flexFilterGuru, setFlexFilterGuru] = useState<string>("Semua");
+  const [flexFilterHari, setFlexFilterHari] = useState<string>("Semua");
+  const [flexSearchQuery, setFlexSearchQuery] = useState<string>("");
+  const [flexCurrentPage, setFlexCurrentPage] = useState<number>(1);
+  const [flexItemsPerPage, setFlexItemsPerPage] = useState<number>(10);
   const [flexForm, setFlexForm] = useState({
     id_jadwal: "",
     id_guru: "",
@@ -618,6 +627,81 @@ export default function JadwalGuru({ session }: { session?: any }) {
     setShowAbsensiModal(true);
   };
 
+  // Handlers for Flex Schedules (Jadwal Fleksibel Khusus Guru)
+  const handleOpenAddFlex = () => {
+    setEditFlexId(null);
+    setFlexForm({
+      id_jadwal: "",
+      id_guru: teachers[0]?.id_guru || "",
+      hari: "Senin",
+      jam_masuk_mulai: "06:00",
+      jam_masuk_batas: "07:15",
+      jam_pulang_mulai: "15:30"
+    });
+    setShowTopFlexForm(true);
+  };
+
+  const handleOpenEditFlex = (item: any) => {
+    setEditFlexId(item.id_jadwal);
+    setFlexForm({
+      id_jadwal: item.id_jadwal,
+      id_guru: item.id_guru,
+      hari: item.hari,
+      jam_masuk_mulai: item.jam_masuk_mulai || "06:00",
+      jam_masuk_batas: item.jam_masuk_batas || "07:15",
+      jam_pulang_mulai: item.jam_pulang_mulai || "15:30"
+    });
+    setShowTopFlexForm(true);
+  };
+
+  const handleSaveFlexSchedule = async (e: FormEvent) => {
+    e.preventDefault();
+    setLoadingAction(editFlexId ? "Mengupdate jadwal fleksibel guru..." : "Menyimpan jadwal fleksibel guru...");
+    try {
+      const teacher = teachers.find(t => t.id_guru === flexForm.id_guru);
+      const payload = {
+        id_jadwal: editFlexId || flexForm.id_jadwal || "",
+        id_guru: flexForm.id_guru,
+        nama_guru: teacher ? teacher.nama_guru : "",
+        hari: flexForm.hari,
+        jam_masuk_mulai: flexForm.jam_masuk_mulai,
+        jam_masuk_batas: flexForm.jam_masuk_batas,
+        jam_pulang_mulai: flexForm.jam_pulang_mulai
+      };
+      const res = await callGas("tambahJadwalGuru", [payload]);
+      if (res && res.success) {
+        setShowTopFlexForm(false);
+        setShowFlexModal(false);
+        setEditFlexId(null);
+        await fetchAllData();
+      } else {
+        alert(res?.message || "Gagal menyimpan jadwal fleksibel.");
+      }
+    } catch (err: any) {
+      alert("Terjadi kesalahan: " + err.toString());
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleDeleteFlexSchedule = async (idJadwal: string, namaGuru: string, hari: string) => {
+    if (confirm(`Hapus jadwal fleksibel ${namaGuru} untuk hari ${hari}?`)) {
+      setLoadingAction("Menghapus jadwal fleksibel...");
+      try {
+        const res = await callGas("hapusJadwalGuru", [idJadwal]);
+        if (res && res.success) {
+          await fetchAllData();
+        } else {
+          alert(res?.message || "Gagal menghapus jadwal fleksibel.");
+        }
+      } catch (e: any) {
+        alert("Terjadi kesalahan: " + e.toString());
+      } finally {
+        setLoadingAction(null);
+      }
+    }
+  };
+
   // Filtered schedule list
   const filteredSchedules = lessonSchedules.filter(item => {
     const matchHari = selectedHariFilter === "Semua" || item.hari === selectedHariFilter;
@@ -632,6 +716,31 @@ export default function JadwalGuru({ session }: { session?: any }) {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedSchedules = filteredSchedules.slice(startIndex, startIndex + itemsPerPage);
   const totalPages = Math.ceil(filteredSchedules.length / itemsPerPage);
+
+  // Filtered & Paginated Flex Schedules (Tab Jadwal Khusus Guru)
+  const filteredFlexSchedules = flexSchedules.filter((item) => {
+    const matchGuru = flexFilterGuru === "Semua" || 
+      String(item.id_guru || "").toLowerCase() === flexFilterGuru.toLowerCase() ||
+      String(item.nama_guru || "").toLowerCase() === flexFilterGuru.toLowerCase();
+    
+    const matchHari = flexFilterHari === "Semua" ||
+      String(item.hari || "").toLowerCase().trim() === flexFilterHari.toLowerCase().trim();
+
+    const q = flexSearchQuery.toLowerCase().trim();
+    const matchSearch = !q || 
+      String(item.nama_guru || "").toLowerCase().includes(q) ||
+      String(item.id_guru || "").toLowerCase().includes(q) ||
+      String(item.hari || "").toLowerCase().includes(q) ||
+      String(item.jam_masuk_mulai || "").includes(q) ||
+      String(item.jam_masuk_batas || "").includes(q) ||
+      String(item.jam_pulang_mulai || "").includes(q);
+
+    return matchGuru && matchHari && matchSearch;
+  });
+
+  const totalFlexPages = Math.max(1, Math.ceil(filteredFlexSchedules.length / flexItemsPerPage));
+  const flexStartIndex = (flexCurrentPage - 1) * flexItemsPerPage;
+  const paginatedFlexSchedules = filteredFlexSchedules.slice(flexStartIndex, flexStartIndex + flexItemsPerPage);
 
   const activeSlot = getActiveSlotNow();
   const todayHari = getHariIniStr();
@@ -1385,80 +1494,380 @@ export default function JadwalGuru({ session }: { session?: any }) {
       {/* TAB 4: JADWAL KHUSUS GURU (FLEKSIBEL OPERASIONAL HARIAN) */}
       {activeTab === "jadwal_khusus" && (
         <div className="space-y-6">
+          {/* Header Bar */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col md:flex-row items-center justify-between gap-4">
             <div>
               <h3 className="font-extrabold text-gray-900 text-sm flex items-center gap-2">
                 <Users className="w-5 h-5 text-amber-500" />
-                Jadwal Operasional Harian Khusus Guru
+                Jadwal Operasional Harian Khusus Guru (Fleksibel)
               </h3>
               <p className="text-xs text-gray-500 font-medium mt-0.5">
-                Pengaturan batas jam datang & jam pulang harian guru (apabila ada guru yang jam kerja fleksibel di luar default sekolah).
+                Pengaturan jam masuk, batas toleransi terlambat, dan jam pulang khusus guru per hari (di luar jam default sekolah).
               </p>
             </div>
 
             <button
-              onClick={() => {
-                setFlexForm({
-                  id_jadwal: "",
-                  id_guru: teachers[0]?.id_guru || "",
-                  hari: "Senin",
-                  jam_masuk_mulai: "06:00",
-                  jam_masuk_batas: "07:15",
-                  jam_pulang_mulai: "15:30"
-                });
-                setShowFlexModal(true);
-              }}
-              className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-1.5 shrink-0"
+              onClick={handleOpenAddFlex}
+              className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               + Tambah Batas Fleksibel Guru
             </button>
           </div>
 
+          {/* FORM TAMBAH / EDIT JADWAL FLEKSIBEL DI ATAS */}
+          {showTopFlexForm && (
+            <div className="bg-white rounded-2xl border-2 border-amber-400 shadow-lg p-5 sm:p-6 space-y-4 animate-fade-in">
+              <div className="flex justify-between items-center pb-3 border-b border-gray-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-amber-500 text-white shadow-xs">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-sm text-gray-900">
+                      {editFlexId ? "Edit Jadwal Fleksibel Harian Guru" : "Form Tambah Jadwal Fleksibel Harian Guru (Khusus)"}
+                    </h4>
+                    <p className="text-xs text-gray-500 font-medium">
+                      Atur batas jam datang, toleransi terlambat, dan jam pulang khusus guru terpilih.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTopFlexForm(false);
+                    setEditFlexId(null);
+                  }}
+                  className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveFlexSchedule} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                  <div className="space-y-1 sm:col-span-2 lg:col-span-2">
+                    <label className="text-xs font-bold text-gray-700">Pilih Guru</label>
+                    <select
+                      value={flexForm.id_guru}
+                      onChange={(e) => setFlexForm({ ...flexForm, id_guru: e.target.value })}
+                      required
+                      className="w-full bg-gray-50 border border-gray-300 rounded-xl p-2.5 text-xs text-gray-900 font-bold focus:outline-none focus:border-amber-500 focus:bg-white transition"
+                    >
+                      <option value="" disabled>-- Pilih Guru --</option>
+                      {teachers.map((t) => (
+                        <option key={t.id_guru} value={t.id_guru}>
+                          {t.nama_guru} ({t.nip_nuptk || "No NIP"})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-700">Hari</label>
+                    <select
+                      value={flexForm.hari}
+                      onChange={(e) => setFlexForm({ ...flexForm, hari: e.target.value })}
+                      required
+                      className="w-full bg-gray-50 border border-gray-300 rounded-xl p-2.5 text-xs text-gray-900 font-bold focus:outline-none focus:border-amber-500 focus:bg-white transition"
+                    >
+                      {["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"].map((h) => (
+                        <option key={h} value={h}>{h}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-700">Jam Masuk Mulai</label>
+                    <input
+                      type="time"
+                      value={flexForm.jam_masuk_mulai}
+                      onChange={(e) => setFlexForm({ ...flexForm, jam_masuk_mulai: e.target.value })}
+                      required
+                      className="w-full bg-gray-50 border border-gray-300 rounded-xl p-2 text-xs text-gray-900 font-mono font-bold focus:outline-none focus:border-amber-500 focus:bg-white transition"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-700">Batas Masuk (Terlambat)</label>
+                    <input
+                      type="time"
+                      value={flexForm.jam_masuk_batas}
+                      onChange={(e) => setFlexForm({ ...flexForm, jam_masuk_batas: e.target.value })}
+                      required
+                      className="w-full bg-gray-50 border border-gray-300 rounded-xl p-2 text-xs text-rose-600 font-mono font-bold focus:outline-none focus:border-amber-500 focus:bg-white transition"
+                    />
+                  </div>
+
+                  <div className="space-y-1 sm:col-span-2 lg:col-span-1">
+                    <label className="text-xs font-bold text-gray-700">Jam Pulang Mulai</label>
+                    <input
+                      type="time"
+                      value={flexForm.jam_pulang_mulai}
+                      onChange={(e) => setFlexForm({ ...flexForm, jam_pulang_mulai: e.target.value })}
+                      required
+                      className="w-full bg-gray-50 border border-gray-300 rounded-xl p-2 text-xs text-emerald-600 font-mono font-bold focus:outline-none focus:border-amber-500 focus:bg-white transition"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowTopFlexForm(false);
+                      setEditFlexId(null);
+                    }}
+                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition cursor-pointer"
+                  >
+                    Batal / Tutup
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" />
+                    {editFlexId ? "Update Jadwal Fleksibel" : "Simpan Jadwal Fleksibel"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* FILTER BAR: FILTER GURU, HARI, DAN PENCARIAN */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
+            <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full md:w-auto flex-1">
+                {/* Search Filter */}
+                <div className="relative">
+                  <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    placeholder="Cari guru / NIP / jam..."
+                    value={flexSearchQuery}
+                    onChange={(e) => {
+                      setFlexSearchQuery(e.target.value);
+                      setFlexCurrentPage(1);
+                    }}
+                    className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:border-amber-500 focus:bg-white transition"
+                  />
+                </div>
+
+                {/* Guru Filter */}
+                <div className="relative">
+                  <Users className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                  <select
+                    value={flexFilterGuru}
+                    onChange={(e) => {
+                      setFlexFilterGuru(e.target.value);
+                      setFlexCurrentPage(1);
+                    }}
+                    className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:border-amber-500 focus:bg-white transition"
+                  >
+                    <option value="Semua">Semua Guru ({teachers.length})</option>
+                    {teachers.map((t) => (
+                      <option key={t.id_guru} value={t.id_guru}>
+                        {t.nama_guru}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Hari Filter */}
+                <div className="relative">
+                  <Calendar className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                  <select
+                    value={flexFilterHari}
+                    onChange={(e) => {
+                      setFlexFilterHari(e.target.value);
+                      setFlexCurrentPage(1);
+                    }}
+                    className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:border-amber-500 focus:bg-white transition"
+                  >
+                    <option value="Semua">Semua Hari</option>
+                    {["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"].map((h) => (
+                      <option key={h} value={h}>
+                        Hari {h}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Reset & Status Info */}
+              <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                {(flexFilterGuru !== "Semua" || flexFilterHari !== "Semua" || flexSearchQuery) && (
+                  <button
+                    onClick={() => {
+                      setFlexFilterGuru("Semua");
+                      setFlexFilterHari("Semua");
+                      setFlexSearchQuery("");
+                      setFlexCurrentPage(1);
+                    }}
+                    className="px-3 py-2 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-xl border border-amber-200 transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Reset Filter
+                  </button>
+                )}
+                <span className="text-xs font-semibold text-gray-500 px-2.5 py-1 bg-gray-100 rounded-lg">
+                  Total: <strong className="text-gray-900">{filteredFlexSchedules.length}</strong> jadwal
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* TABEL DATA & PAGINASI */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            {flexSchedules.length === 0 ? (
-              <div className="p-12 text-center text-gray-400 font-medium">
-                Belum ada batasan jadwal fleksibel harian khusus guru. Semua guru mengikuti jam operasional default sekolah.
+            {filteredFlexSchedules.length === 0 ? (
+              <div className="p-12 text-center space-y-2">
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center mx-auto">
+                  <Users className="w-6 h-6" />
+                </div>
+                <p className="text-sm font-bold text-gray-700">Tidak ada jadwal fleksibel yang cocok</p>
+                <p className="text-xs text-gray-400">
+                  {flexSchedules.length === 0 
+                    ? "Belum ada batasan jadwal fleksibel harian khusus guru. Semua guru mengikuti jam operasional default sekolah."
+                    : "Coba ubah kata kunci pencarian atau filter hari / guru."}
+                </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100 font-bold text-gray-500 uppercase">
-                      <th className="py-3 px-5">Nama Guru</th>
-                      <th className="py-3 px-5">Hari</th>
-                      <th className="py-3 px-5">Jam Masuk Mulai</th>
-                      <th className="py-3 px-5">Batas Terlambat</th>
-                      <th className="py-3 px-5">Jam Pulang Mulai</th>
-                      <th className="py-3 px-5 text-center">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {flexSchedules.map((item) => (
-                      <tr key={item.id_jadwal} className="hover:bg-amber-50/20">
-                        <td className="py-3 px-5 font-bold text-gray-900">{item.nama_guru}</td>
-                        <td className="py-3 px-5 font-bold text-amber-800">{item.hari}</td>
-                        <td className="py-3 px-5 font-mono">{item.jam_masuk_mulai}</td>
-                        <td className="py-3 px-5 font-mono text-rose-600 font-bold">{item.jam_masuk_batas}</td>
-                        <td className="py-3 px-5 font-mono text-emerald-600 font-bold">{item.jam_pulang_mulai}</td>
-                        <td className="py-3 px-5 text-center">
-                          <button
-                            onClick={async () => {
-                              if (confirm("Hapus jadwal fleksibel harian guru ini?")) {
-                                await callGas("hapusJadwalGuru", [item.id_jadwal]);
-                                fetchAllData();
-                              }
-                            }}
-                            className="p-1 text-rose-600 hover:bg-rose-50 rounded-lg"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-gray-50/80 border-b border-gray-100 font-bold text-gray-500 uppercase tracking-wider">
+                        <th className="py-3.5 px-4 w-12 text-center">No</th>
+                        <th className="py-3.5 px-4">Nama Guru</th>
+                        <th className="py-3.5 px-4">Hari</th>
+                        <th className="py-3.5 px-4">Jam Masuk Mulai</th>
+                        <th className="py-3.5 px-4">Batas Terlambat</th>
+                        <th className="py-3.5 px-4">Jam Pulang Mulai</th>
+                        <th className="py-3.5 px-4 text-center w-28">Aksi</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {paginatedFlexSchedules.map((item, idx) => (
+                        <tr key={item.id_jadwal || idx} className="hover:bg-amber-50/30 transition">
+                          <td className="py-3.5 px-4 text-center font-mono text-gray-400 font-bold">
+                            {flexStartIndex + idx + 1}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <div className="font-extrabold text-gray-900">{item.nama_guru}</div>
+                            <div className="text-[10px] text-gray-400 font-mono">ID: {item.id_guru}</div>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="px-2.5 py-1 rounded-lg bg-amber-100/70 text-amber-900 font-extrabold text-[11px] border border-amber-200/60">
+                              {item.hari}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 font-mono font-bold text-gray-700">
+                            {item.jam_masuk_mulai || "-"}
+                          </td>
+                          <td className="py-3.5 px-4 font-mono font-bold text-rose-600">
+                            {item.jam_masuk_batas || "-"}
+                          </td>
+                          <td className="py-3.5 px-4 font-mono font-bold text-emerald-600">
+                            {item.jam_pulang_mulai || "-"}
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                title="Edit Jadwal"
+                                onClick={() => handleOpenEditFlex(item)}
+                                className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition cursor-pointer"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                title="Hapus Jadwal"
+                                onClick={() => handleDeleteFlexSchedule(item.id_jadwal, item.nama_guru, item.hari)}
+                                className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* PAGINATION CONTROLS */}
+                <div className="p-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 text-gray-500 font-medium">
+                    <span>Baris per halaman:</span>
+                    <select
+                      value={flexItemsPerPage}
+                      onChange={(e) => {
+                        setFlexItemsPerPage(Number(e.target.value));
+                        setFlexCurrentPage(1);
+                      }}
+                      className="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 font-bold text-gray-800 focus:outline-none focus:border-amber-500"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                    </select>
+                    <span>
+                      ({flexStartIndex + 1} - {Math.min(flexStartIndex + flexItemsPerPage, filteredFlexSchedules.length)} dari <strong>{filteredFlexSchedules.length}</strong>)
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={flexCurrentPage === 1}
+                      onClick={() => setFlexCurrentPage((p) => Math.max(1, p - 1))}
+                      className="p-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+
+                    {Array.from({ length: totalFlexPages }, (_, i) => i + 1).map((pageNum) => {
+                      if (
+                        pageNum === 1 || 
+                        pageNum === totalFlexPages || 
+                        (pageNum >= flexCurrentPage - 1 && pageNum <= flexCurrentPage + 1)
+                      ) {
+                        return (
+                          <button
+                            key={pageNum}
+                            type="button"
+                            onClick={() => setFlexCurrentPage(pageNum)}
+                            className={`w-8 h-8 rounded-xl font-bold text-xs transition cursor-pointer ${
+                              flexCurrentPage === pageNum
+                                ? "bg-amber-600 text-white shadow-sm"
+                                : "text-gray-600 hover:bg-gray-100 border border-gray-200"
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      } else if (
+                        pageNum === flexCurrentPage - 2 || 
+                        pageNum === flexCurrentPage + 2
+                      ) {
+                        return <span key={pageNum} className="px-1 text-gray-400 font-bold">...</span>;
+                      }
+                      return null;
+                    })}
+
+                    <button
+                      type="button"
+                      disabled={flexCurrentPage === totalFlexPages}
+                      onClick={() => setFlexCurrentPage((p) => Math.min(totalFlexPages, p + 1))}
+                      className="p-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -1466,8 +1875,8 @@ export default function JadwalGuru({ session }: { session?: any }) {
 
       {/* MODAL 1: ADD / EDIT LESSON SCHEDULE */}
       {showScheduleModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl max-w-lg w-full overflow-hidden">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 sm:p-6 pt-4 sm:pt-10 overflow-y-auto z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl max-w-lg w-full overflow-hidden my-auto sm:my-0">
             <div className="p-5 bg-amber-500 text-white flex justify-between items-center">
               <h3 className="font-extrabold text-sm tracking-tight flex items-center gap-2">
                 <BookOpen className="w-4.5 h-4.5" />
@@ -1678,8 +2087,8 @@ export default function JadwalGuru({ session }: { session?: any }) {
 
       {/* MODAL 2: ADD / EDIT JAM SLOT */}
       {showJamModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl max-w-md w-full overflow-hidden">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 sm:p-6 pt-4 sm:pt-10 overflow-y-auto z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl max-w-md w-full overflow-hidden my-auto sm:my-0">
             <div className="p-5 bg-amber-600 text-white flex justify-between items-center">
               <h3 className="font-extrabold text-sm tracking-tight flex items-center gap-2">
                 <Clock className="w-4.5 h-4.5" />
@@ -1943,128 +2352,6 @@ export default function JadwalGuru({ session }: { session?: any }) {
         </div>
       )}
 
-      {/* MODAL 4: FLEX TEACHER LIMITS FORM (LEGACY) */}
-      {showFlexModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-xl max-w-md w-full overflow-hidden">
-            <div className="p-5 bg-amber-600 text-white flex justify-between items-center">
-              <h3 className="font-extrabold text-sm tracking-tight flex items-center gap-2">
-                <Users className="w-4.5 h-4.5" />
-                Tambah Jam Fleksibel Harian Guru
-              </h3>
-              <button 
-                onClick={() => setShowFlexModal(false)}
-                className="text-white/80 hover:text-white text-lg font-bold"
-              >
-                ×
-              </button>
-            </div>
-
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const teacher = teachers.find(t => t.id_guru === flexForm.id_guru);
-                const payload = {
-                  id_guru: flexForm.id_guru,
-                  nama_guru: teacher ? teacher.nama_guru : "",
-                  hari: flexForm.hari,
-                  jam_masuk_mulai: flexForm.jam_masuk_mulai,
-                  jam_masuk_batas: flexForm.jam_masuk_batas,
-                  jam_pulang_mulai: flexForm.jam_pulang_mulai
-                };
-                const res = await callGas("tambahJadwalGuru", [payload]);
-                if (res && res.success) {
-                  setShowFlexModal(false);
-                  alert("Jadwal fleksibel guru disimpan.");
-                  fetchAllData();
-                } else {
-                  alert(res?.message || "Gagal menyimpan.");
-                }
-              }}
-              className="p-6 space-y-4"
-            >
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-600">Pilih Guru</label>
-                <select
-                  value={flexForm.id_guru}
-                  onChange={(e) => setFlexForm({ ...flexForm, id_guru: e.target.value })}
-                  required
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
-                >
-                  {teachers.map((t) => (
-                    <option key={t.id_guru} value={t.id_guru}>{t.nama_guru}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-600">Hari</label>
-                <select
-                  value={flexForm.hari}
-                  onChange={(e) => setFlexForm({ ...flexForm, hari: e.target.value })}
-                  required
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-amber-500"
-                >
-                  {HARI_LIST.map((h) => (
-                    <option key={h} value={h}>{h}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-600">Jam Masuk Mulai</label>
-                  <input
-                    type="time"
-                    value={flexForm.jam_masuk_mulai}
-                    onChange={(e) => setFlexForm({ ...flexForm, jam_masuk_mulai: e.target.value })}
-                    required
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-mono focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-600">Batas Masuk</label>
-                  <input
-                    type="time"
-                    value={flexForm.jam_masuk_batas}
-                    onChange={(e) => setFlexForm({ ...flexForm, jam_masuk_batas: e.target.value })}
-                    required
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-mono text-rose-600 font-bold focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-600">Jam Pulang Mulai</label>
-                <input
-                  type="time"
-                  value={flexForm.jam_pulang_mulai}
-                  onChange={(e) => setFlexForm({ ...flexForm, jam_pulang_mulai: e.target.value })}
-                  required
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-mono text-emerald-600 font-bold focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div className="pt-3 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowFlexModal(false)}
-                  className="px-4 py-2 bg-gray-100 text-gray-700 font-bold text-xs rounded-xl"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-sm"
-                >
-                  Simpan Jadwal Fleksibel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
       {/* Global Loading Overlay */}
       {loadingAction && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs animate-fade-in">
