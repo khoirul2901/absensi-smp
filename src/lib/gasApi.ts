@@ -168,7 +168,14 @@ function initMockDb() {
     localStorage.setItem(getKey("data_siswa"), JSON.stringify([
       { id_siswa: "S-001", nisn: "0081234567", nama_siswa: "Ahmad Dani", jenis_kelamin: "Laki-laki", kelas: "XI", jurusan: "RPL 1", no_hp_ortu: "08571234567", qr_content: "QR-S-001" },
       { id_siswa: "S-002", nisn: "0098765432", nama_siswa: "Siti Aminah", jenis_kelamin: "Perempuan", kelas: "XI", jurusan: "RPL 1", no_hp_ortu: "08129876543", qr_content: "QR-S-002" },
-      { id_siswa: "S-003", nisn: "0076543210", nama_siswa: "Rizky Pratama", jenis_kelamin: "Laki-laki", kelas: "X", jurusan: "RPL 2", no_hp_ortu: "08132435465", qr_content: "QR-S-003" }
+      { id_siswa: "S-003", nisn: "0076543210", nama_siswa: "Rizky Pratama", jenis_kelamin: "Laki-laki", kelas: "X", jurusan: "RPL 1", no_hp_ortu: "08132435465", qr_content: "QR-S-003" },
+      { id_siswa: "S-004", nisn: "0076543211", nama_siswa: "Dewi Lestari", jenis_kelamin: "Perempuan", kelas: "X", jurusan: "RPL 1", no_hp_ortu: "08132435466", qr_content: "QR-S-004" },
+      { id_siswa: "S-005", nisn: "0076543212", nama_siswa: "Budi Santoso", jenis_kelamin: "Laki-laki", kelas: "X", jurusan: "RPL 2", no_hp_ortu: "08132435467", qr_content: "QR-S-005" },
+      { id_siswa: "S-006", nisn: "0076543213", nama_siswa: "Nurlaila Fitri", jenis_kelamin: "Perempuan", kelas: "X", jurusan: "RPL 2", no_hp_ortu: "08132435468", qr_content: "QR-S-006" },
+      { id_siswa: "S-007", nisn: "0081234568", nama_siswa: "Fajar Ramadhan", jenis_kelamin: "Laki-laki", kelas: "XI", jurusan: "RPL 2", no_hp_ortu: "08571234568", qr_content: "QR-S-007" },
+      { id_siswa: "S-008", nisn: "0081234569", nama_siswa: "Putri Anggraeni", jenis_kelamin: "Perempuan", kelas: "XI", jurusan: "RPL 2", no_hp_ortu: "08571234569", qr_content: "QR-S-008" },
+      { id_siswa: "S-009", nisn: "0091234570", nama_siswa: "Dimas Arya", jenis_kelamin: "Laki-laki", kelas: "XII", jurusan: "RPL 1", no_hp_ortu: "08571234570", qr_content: "QR-S-009" },
+      { id_siswa: "S-010", nisn: "0091234571", nama_siswa: "Zahra Salsabila", jenis_kelamin: "Perempuan", kelas: "XII", jurusan: "RPL 1", no_hp_ortu: "08571234571", qr_content: "QR-S-010" }
     ]));
   }
   if (!localStorage.getItem(getKey("data_guru"))) {
