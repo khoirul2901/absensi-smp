@@ -48,7 +48,7 @@ import {
 } from "recharts";
 import { toPng } from "html-to-image";
 import { callGas, getStorageKey, extractArrayData, getStorage, isInvalidWali } from "../lib/gasApi";
-import { DashboardMetrics } from "../types";
+import { DashboardMetrics, AutoAlfaResult } from "../types";
 import { IdCard } from "./IdCard";
 
 export default function Dashboard() {
@@ -59,6 +59,11 @@ export default function Dashboard() {
 
   const [guruData, setGuruData] = useState<any>(null);
   const [loadingGuru, setLoadingGuru] = useState(false);
+
+  // Auto-Alfa System Status
+  const [autoAlfaInfo, setAutoAlfaInfo] = useState<AutoAlfaResult | null>(null);
+  const [syncingAlfa, setSyncingAlfa] = useState(false);
+  const [alfaNotification, setAlfaNotification] = useState<string | null>(null);
 
   // Student class breakdown states
   const [siswaMasterList, setSiswaMasterList] = useState<any[]>([]);
@@ -171,10 +176,45 @@ export default function Dashboard() {
     }
   }, [currentUser]);
 
+  const handleTriggerAutoAlfa = async (force: boolean = false) => {
+    try {
+      setSyncingAlfa(true);
+      const res = await callGas("jalankanAutoAlfaSistem", [undefined, force]);
+      if (res && res.success && res.data) {
+        setAutoAlfaInfo(res.data);
+        if (res.data.executed) {
+          const totalNew = (res.data.siswa_alfa_baru || 0) + (res.data.guru_alfa_baru || 0);
+          if (totalNew > 0) {
+            setAlfaNotification(`Sistem Auto-Alfa mencatat ${res.data.siswa_alfa_baru} siswa & ${res.data.guru_alfa_baru} guru berjadwal sebagai Alfa.`);
+          } else {
+            setAlfaNotification(`Sinkronisasi Auto-Alfa selesai: Semua siswa & guru berjadwal telah terverifikasi.`);
+          }
+        }
+      }
+      // Refresh metrics
+      const mRes = await callGas("getDashboardMetrics");
+      if (mRes && mRes.success) {
+        setMetrics(mRes.data);
+      }
+    } catch (err: any) {
+      console.error("Gagal menjalankan Auto-Alfa:", err);
+    } finally {
+      setSyncingAlfa(false);
+    }
+  };
+
   useEffect(() => {
     async function loadMetrics() {
       try {
         setLoading(true);
+        // Run auto-alfa check upon dashboard load
+        try {
+          const autoRes = await callGas("jalankanAutoAlfaSistem", [undefined, false]);
+          if (autoRes && autoRes.success && autoRes.data) {
+            setAutoAlfaInfo(autoRes.data);
+          }
+        } catch (e) {}
+
         const res = await callGas("getDashboardMetrics");
         if (res && res.success) {
           setMetrics(res.data);
@@ -188,6 +228,13 @@ export default function Dashboard() {
       }
     }
     loadMetrics();
+
+    // Periodic check every 2 minutes
+    const interval = setInterval(() => {
+      handleTriggerAutoAlfa(false);
+    }, 120000);
+
+    return () => clearInterval(interval);
   }, []);
 
   // Fetch Master Data Siswa, Kelas & Guru for student distribution breakdown
@@ -559,10 +606,66 @@ export default function Dashboard() {
             <span className="bg-indigo-800/60 text-indigo-200 text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wider">
               Monitoring Real-Time
             </span>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">SIAS SMK Al-Hikam</h1>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">SIAS AL-HIKAM SCHOOL</h1>
             <p className="text-blue-100/80 text-sm md:text-base leading-relaxed">
               Sistem Informasi Absensi Sekolah modern yang terintegrasi langsung dengan database Google Spreadsheet. Pantau kehadiran siswa dan guru hari ini.
             </p>
+          </div>
+        </div>
+
+        {/* Auto-Alfa System Status & Trigger Banner */}
+        <div className="bg-gradient-to-r from-amber-50 via-orange-50/70 to-rose-50 border border-amber-200/80 rounded-2xl p-4 sm:p-5 shadow-xs transition-all">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 bg-amber-500/10 text-amber-700 rounded-xl border border-amber-300/50 shrink-0 mt-0.5">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-extrabold text-sm text-gray-900 tracking-tight">
+                    Otomatisasi Status Alfa (Batas Jam 18:00 WIB)
+                  </h3>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                    autoAlfaInfo?.is_after_cutoff || new Date().getHours() >= 18
+                      ? "bg-rose-100 text-rose-800 border-rose-200"
+                      : "bg-emerald-100 text-emerald-800 border-emerald-200"
+                  }`}>
+                    {autoAlfaInfo?.is_after_cutoff || new Date().getHours() >= 18
+                      ? "Batas 18:00 WIB Tercapai • Auto-Alfa Aktif"
+                      : "Menunggu Batas 18:00 WIB • Standby"}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  Guru dan siswa yang memiliki jadwal (mengajar/fleksibel) dan belum melakukan absensi sampai pukul <strong>18:00 WIB</strong> di hari yang sama akan secara otomatis dicatat sebagai <strong>Alfa (Tidak Hadir)</strong>.
+                </p>
+                {alfaNotification && (
+                  <p className="text-xs font-semibold text-amber-800 bg-amber-100/60 px-2.5 py-1 rounded-lg border border-amber-200/60 inline-block mt-1">
+                    ✨ {alfaNotification}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start md:self-center shrink-0">
+              <button
+                onClick={() => handleTriggerAutoAlfa(true)}
+                disabled={syncingAlfa}
+                className="bg-amber-600 hover:bg-amber-700 active:bg-amber-800 disabled:opacity-50 text-white text-xs font-extrabold px-3.5 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+                title="Jalankan pemeriksaan dan tandai siswa/guru terjadwal yang belum hadir sebagai Alfa"
+              >
+                {syncingAlfa ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Memeriksa Jadwal...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Jalankan Auto-Alfa Sekarang</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
 
