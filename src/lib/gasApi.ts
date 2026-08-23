@@ -312,6 +312,9 @@ export function jalankanAutoAlfaSistem(tanggalTarget?: string, forceCheck: boole
       siswaAlfaCount: 0,
       guruAlfaCount: 0,
       mengajarAlfaCount: 0,
+      siswa_alfa_baru: 0,
+      guru_alfa_baru: 0,
+      guru_mengajar_alfa_baru: 0,
       totalUpdated: 0,
       message: `Batas waktu jam ${batasJamAlfa} WIB belum terlewati (Waktu saat ini: ${nowTime} WIB). Pengecekan otomatis Alfa aktif setelah jam ${batasJamAlfa} WIB.`
     };
@@ -336,6 +339,9 @@ export function jalankanAutoAlfaSistem(tanggalTarget?: string, forceCheck: boole
       siswaAlfaCount: 0,
       guruAlfaCount: 0,
       mengajarAlfaCount: 0,
+      siswa_alfa_baru: 0,
+      guru_alfa_baru: 0,
+      guru_mengajar_alfa_baru: 0,
       totalUpdated: 0,
       message: `Tanggal ${targetTgl} adalah hari libur (${dayOfWeek === 0 ? "Minggu" : "Libur Sekolah"}), tidak ada pencatatan Alfa otomatis.`
     };
@@ -351,18 +357,25 @@ export function jalankanAutoAlfaSistem(tanggalTarget?: string, forceCheck: boole
   const dataSiswa = getStorage("data_siswa") || [];
   let laporanSiswa = getStorage("laporan_siswa") || [];
 
+  // Fast Hash Map lookup for existing student reports on target date
+  const existingSiswaLogMap = new Map<string, number>();
+  laporanSiswa.forEach((r: any, i: number) => {
+    if (formatToIsoDate(r.tanggal) === targetTgl) {
+      const rId = String(r.id_siswa || r.nisn || r.id_target || "").trim().toLowerCase();
+      const rName = String(r.nama_siswa || r.nama || "").trim().toLowerCase();
+      if (rId) existingSiswaLogMap.set(rId, i);
+      if (rName) existingSiswaLogMap.set(rName, i);
+    }
+  });
+
   dataSiswa.forEach((s: any, idx: number) => {
     if (!s || (!s.id_siswa && !s.nama_siswa)) return;
     const sId = String(s.id_siswa || s.nisn || "").trim().toLowerCase();
     const sName = String(s.nama_siswa || "").trim().toLowerCase();
 
-    // Check existing attendance log for today
-    const existIdx = laporanSiswa.findIndex((r: any) => {
-      if (formatToIsoDate(r.tanggal) !== targetTgl) return false;
-      const rId = String(r.id_siswa || r.nisn || r.id_target || "").trim().toLowerCase();
-      const rName = String(r.nama_siswa || r.nama || "").trim().toLowerCase();
-      return (sId && rId && sId === rId) || (sName && rName && sName === rName);
-    });
+    const existIdx = (sId && existingSiswaLogMap.has(sId))
+      ? existingSiswaLogMap.get(sId)!
+      : (sName && existingSiswaLogMap.has(sName) ? existingSiswaLogMap.get(sName)! : -1);
 
     if (existIdx === -1) {
       // Create new absent record
@@ -418,10 +431,36 @@ export function jalankanAutoAlfaSistem(tanggalTarget?: string, forceCheck: boole
   const teachingToday = allJadwalPelajaran.filter((j: any) => String(j.hari || "").trim().toLowerCase() === hariName.toLowerCase());
   const flexToday = allJadwalGuru.filter((j: any) => String(j.hari || "").trim().toLowerCase() === hariName.toLowerCase());
 
+  // Fast Hash Map lookup for existing teacher daily reports
+  const existingGuruLogMap = new Map<string, number>();
+  laporanGuru.forEach((r: any, i: number) => {
+    if (formatToIsoDate(r.tanggal) === targetTgl) {
+      const rId = String(r.id_guru || r.nip_nuptk || r.id_target || "").trim().toLowerCase();
+      const rName = String(r.nama_guru || r.nama || "").trim().toLowerCase();
+      if (rId) existingGuruLogMap.set(rId, i);
+      if (rName) existingGuruLogMap.set(rName, i);
+    }
+  });
+
+  // Fast Set lookup for logged teaching periods
+  const loggedMengajarSet = new Set<string>();
+  absensiMengajar.forEach((m: any) => {
+    if (formatToIsoDate(m.tanggal) === targetTgl) {
+      const gId = String(m.id_guru || "").trim().toLowerCase();
+      const gN = normalizeTeacherName(m.nama_guru || "");
+      const jKe = Number(m.jam_ke || 1);
+      const k = String(m.kelas || "").trim().toLowerCase();
+      const mp = String(m.mapel || "").trim().toLowerCase();
+      if (gId) loggedMengajarSet.add(`${gId}_${jKe}_${k}_${mp}`);
+      if (gN) loggedMengajarSet.add(`${gN}_${jKe}_${k}_${mp}`);
+    }
+  });
+
   dataGuru.forEach((g: any, idx: number) => {
     if (!g || (!g.id_guru && !g.nama_guru)) return;
     const gId = String(g.id_guru || g.nip_nuptk || "").trim().toLowerCase();
     const gName = String(g.nama_guru || "").trim().toLowerCase();
+    const gNorm = normalizeTeacherName(g.nama_guru || "");
 
     // Check if this teacher has schedule on target day
     const hasFlex = flexToday.some((f: any) => isTeacherMatchSchedule(f, g));
@@ -434,12 +473,9 @@ export function jalankanAutoAlfaSistem(tanggalTarget?: string, forceCheck: boole
     }
 
     // A. Daily Attendance (PresensiGuru / laporan_guru)
-    const existIdx = laporanGuru.findIndex((r: any) => {
-      if (formatToIsoDate(r.tanggal) !== targetTgl) return false;
-      const rId = String(r.id_guru || r.nip_nuptk || r.id_target || "").trim().toLowerCase();
-      const rName = String(r.nama_guru || r.nama || "").trim().toLowerCase();
-      return (gId && rId && gId === rId) || (gName && rName && gName === rName);
-    });
+    const existIdx = (gId && existingGuruLogMap.has(gId))
+      ? existingGuruLogMap.get(gId)!
+      : (gName && existingGuruLogMap.has(gName) ? existingGuruLogMap.get(gName)! : -1);
 
     if (existIdx === -1) {
       const idLog = `LOG-G-ALFA-${targetTgl.replace(/-/g, "")}-${g.id_guru || idx}`;
@@ -480,14 +516,10 @@ export function jalankanAutoAlfaSistem(tanggalTarget?: string, forceCheck: boole
         const slotKelas = String(slot.kelas || "").trim().toLowerCase();
         const slotMapel = String(slot.mapel || "").trim().toLowerCase();
 
-        const alreadyLogged = absensiMengajar.some((m: any) => {
-          if (formatToIsoDate(m.tanggal) !== targetTgl) return false;
-          if (!isTeacherMatchSchedule(m, g)) return false;
-          const mJam = Number(m.jam_ke || 1);
-          const mKelas = String(m.kelas || "").trim().toLowerCase();
-          const mMapel = String(m.mapel || "").trim().toLowerCase();
-          return mJam === slotJamKe && (mKelas === slotKelas || !slotKelas) && (mMapel === slotMapel || !slotMapel);
-        });
+        const key1 = `${gId}_${slotJamKe}_${slotKelas}_${slotMapel}`;
+        const key2 = `${gNorm}_${slotJamKe}_${slotKelas}_${slotMapel}`;
+
+        const alreadyLogged = loggedMengajarSet.has(key1) || loggedMengajarSet.has(key2);
 
         if (!alreadyLogged) {
           const idLogMeng = `LOG-MENG-ALFA-${targetTgl.replace(/-/g, "")}-${g.id_guru || idx}-${slotJamKe}`;
@@ -506,6 +538,8 @@ export function jalankanAutoAlfaSistem(tanggalTarget?: string, forceCheck: boole
             status: "Tidak Hadir (Alfa)",
             catatan_materi: "Otomatis Alfa (Batas 18:00 WIB)"
           });
+          loggedMengajarSet.add(key1);
+          loggedMengajarSet.add(key2);
           mengajarAlfaCount++;
         }
       });
@@ -524,6 +558,9 @@ export function jalankanAutoAlfaSistem(tanggalTarget?: string, forceCheck: boole
     siswaAlfaCount,
     guruAlfaCount,
     mengajarAlfaCount,
+    siswa_alfa_baru: siswaAlfaCount,
+    guru_alfa_baru: guruAlfaCount,
+    guru_mengajar_alfa_baru: mengajarAlfaCount,
     totalUpdated,
     message: totalUpdated > 0 
       ? `Auto-Alfa Berhasil (${targetTgl}): ${siswaAlfaCount} siswa, ${guruAlfaCount} presensi guru, dan ${mengajarAlfaCount} jam mengajar ditandai Alfa.`
@@ -2682,6 +2719,19 @@ export function cleanTimeHHMM(val: any): string {
 
 // Main bridge function to invoke Apps Script Web App actions
 export async function callGas(action: string, args: any[] = []): Promise<any> {
+  const actLower = String(action || "").toLowerCase();
+
+  // Instant local actions that should execute immediately (< 5ms) without waiting for network roundtrips
+  if (
+    actLower.includes("autoalfa") ||
+    action === "jalankanAutoAlfa" ||
+    action === "cekAutoAlfa" ||
+    action === "jalankanAutoAlfaSistem" ||
+    action === "triggerAutoAlfa1800"
+  ) {
+    return callMock(action, args);
+  }
+
   if (isUsingMock()) {
     await new Promise((resolve) => setTimeout(resolve, 80));
     return callMock(action, args);
