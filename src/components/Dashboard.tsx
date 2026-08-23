@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { 
   Users, 
   GraduationCap, 
@@ -22,7 +22,14 @@ import {
   Activity,
   Check,
   XCircle,
-  UserCheck
+  UserCheck,
+  Building2,
+  LayoutGrid,
+  Table as TableIcon,
+  Search,
+  RotateCcw,
+  Sparkles,
+  Info
 } from "lucide-react";
 import { 
   AreaChart, 
@@ -40,7 +47,7 @@ import {
   Legend
 } from "recharts";
 import { toPng } from "html-to-image";
-import { callGas, getStorageKey } from "../lib/gasApi";
+import { callGas, getStorageKey, extractArrayData, getStorage, isInvalidWali } from "../lib/gasApi";
 import { DashboardMetrics } from "../types";
 import { IdCard } from "./IdCard";
 
@@ -52,6 +59,14 @@ export default function Dashboard() {
 
   const [guruData, setGuruData] = useState<any>(null);
   const [loadingGuru, setLoadingGuru] = useState(false);
+
+  // Student class breakdown states
+  const [siswaMasterList, setSiswaMasterList] = useState<any[]>([]);
+  const [kelasMasterList, setKelasMasterList] = useState<any[]>([]);
+  const [guruMasterList, setGuruMasterList] = useState<any[]>([]);
+  const [loadingBreakdown, setLoadingBreakdown] = useState<boolean>(true);
+  const [classGenderSearch, setClassGenderSearch] = useState<string>("");
+  const [classGenderViewMode, setClassGenderViewMode] = useState<"grid" | "table" | "chart">("grid");
 
   const frontCardRef = useRef<HTMLDivElement>(null);
   const backCardRef = useRef<HTMLDivElement>(null);
@@ -174,6 +189,187 @@ export default function Dashboard() {
     }
     loadMetrics();
   }, []);
+
+  // Fetch Master Data Siswa, Kelas & Guru for student distribution breakdown
+  useEffect(() => {
+    async function loadMasterBreakdown() {
+      try {
+        setLoadingBreakdown(true);
+        const [resSiswa, resKelas, resGuru] = await Promise.all([
+          callGas("getDataMaster", ["Siswa"]),
+          callGas("getKelasSemua"),
+          callGas("getDataMaster", ["Guru"])
+        ]);
+
+        let sList = extractArrayData(resSiswa);
+        let kList = extractArrayData(resKelas);
+        let gList = extractArrayData(resGuru);
+
+        if (!sList || sList.length === 0) sList = getStorage("data_siswa") || [];
+        if (!kList || kList.length === 0) kList = getStorage("data_kelas") || [];
+        if (!gList || gList.length === 0) gList = getStorage("data_guru") || [];
+
+        setSiswaMasterList(sList);
+        setKelasMasterList(kList);
+        setGuruMasterList(gList);
+      } catch (err) {
+        console.error("Gagal memuat rincian siswa per kelas:", err);
+        setSiswaMasterList(getStorage("data_siswa") || []);
+        setKelasMasterList(getStorage("data_kelas") || []);
+        setGuruMasterList(getStorage("data_guru") || []);
+      } finally {
+        setLoadingBreakdown(false);
+      }
+    }
+
+    loadMasterBreakdown();
+  }, []);
+
+  // Calculate student distribution per class & gender (must be declared before any conditional returns)
+  const { classSummaries, totalSiswaMaster, totalLakiMaster, totalPerempuanMaster, totalKelasMaster } = useMemo(() => {
+    const rawSiswa = siswaMasterList || [];
+    const rawKelas = kelasMasterList || [];
+    const rawGuru = guruMasterList || [];
+
+    // Map wali kelas for each class
+    const waliMap = new Map<string, string>();
+    rawKelas.forEach((k: any) => {
+      const kName = String(typeof k === "string" ? k : (k.nama_kelas || k.kelas || "")).trim();
+      const rawWali = typeof k === "object" && k ? (k.wali_kelas || k.wali || k.waliKelas || k.guru_wali || k.nama_guru || "-") : "-";
+      let cleanWali = isInvalidWali(rawWali) ? "-" : String(rawWali).trim();
+      if (cleanWali.startsWith("G-")) {
+        const foundG = rawGuru.find((g: any) => g.id_guru === cleanWali);
+        if (foundG && foundG.nama_guru) cleanWali = foundG.nama_guru;
+      }
+      if (kName) {
+        waliMap.set(kName.toLowerCase(), cleanWali);
+      }
+    });
+
+    // Extract all defined/known classes
+    const knownClassSet = new Set<string>();
+    rawKelas.forEach((k: any) => {
+      const kName = String(typeof k === "string" ? k : (k.nama_kelas || k.kelas || "")).trim();
+      if (kName) knownClassSet.add(kName);
+    });
+
+    const countMap = new Map<string, { laki: number; perempuan: number; total: number }>();
+    let totalLaki = 0;
+    let totalPerempuan = 0;
+    let validStudentCount = 0;
+
+    rawSiswa.forEach((s: any) => {
+      if (!s || typeof s !== "object") return;
+      const name = String(s.nama_siswa || s.nama || "").trim();
+      const nisn = String(s.nisn || "").trim();
+      if (!name && !nisn) return;
+
+      validStudentCount++;
+
+      // Gender check
+      const jkRaw = String(s.jenis_kelamin || s.jk || s.gender || "").trim().toLowerCase();
+      const isMale = jkRaw.startsWith("l") || jkRaw === "pria" || jkRaw === "male";
+      const isFemale = jkRaw.startsWith("p") || jkRaw === "wanita" || jkRaw === "female" || jkRaw === "perempuan";
+
+      if (isMale) totalLaki++;
+      else if (isFemale) totalPerempuan++;
+      else totalLaki++;
+
+      // Class name
+      const rawKelas = String(s.kelas || "").trim();
+      const rawJurusan = String(s.jurusan || "").trim();
+      const rawCombined = String(s.kelas_jurusan || "").trim();
+
+      let cand = "";
+      if (rawCombined) {
+        cand = rawCombined;
+      } else if (rawKelas && rawJurusan) {
+        if (rawKelas.toLowerCase().includes(rawJurusan.toLowerCase())) {
+          cand = rawKelas;
+        } else {
+          cand = `${rawKelas} ${rawJurusan}`;
+        }
+      } else if (rawKelas) {
+        cand = rawKelas;
+      } else if (rawJurusan) {
+        cand = rawJurusan;
+      } else {
+        cand = "Tanpa Kelas";
+      }
+
+      // Try matching known classes
+      const cleanCand = cand.replace(/[\s-]+/g, "").toLowerCase();
+      const matched = Array.from(knownClassSet).find(c => {
+        const cleanC = c.replace(/[\s-]+/g, "").toLowerCase();
+        return cleanC === cleanCand || cleanCand.includes(cleanC) || cleanC.includes(cleanCand);
+      });
+
+      const finalClass = matched || cand;
+
+      if (!countMap.has(finalClass)) {
+        countMap.set(finalClass, { laki: 0, perempuan: 0, total: 0 });
+      }
+      const cur = countMap.get(finalClass)!;
+      if (isMale) cur.laki++;
+      else if (isFemale) cur.perempuan++;
+      else cur.laki++;
+      cur.total++;
+    });
+
+    // Ensure all registered classes exist even if 0 students
+    knownClassSet.forEach((kName) => {
+      if (!countMap.has(kName)) {
+        countMap.set(kName, { laki: 0, perempuan: 0, total: 0 });
+      }
+    });
+
+    const summaries = Array.from(countMap.entries()).map(([kName, counts]) => {
+      const wali = waliMap.get(kName.toLowerCase()) || "-";
+      const total = counts.total;
+      const persen_laki = total > 0 ? Math.round((counts.laki / total) * 100) : 0;
+      const persen_perempuan = total > 0 ? Math.round((counts.perempuan / total) * 100) : 0;
+      return {
+        nama_kelas: kName,
+        wali_kelas: wali,
+        laki_laki: counts.laki,
+        perempuan: counts.perempuan,
+        total,
+        persen_laki,
+        persen_perempuan
+      };
+    });
+
+    // Natural sort: X RPL 1, X RPL 2, XI RPL 1, etc.
+    summaries.sort((a, b) => a.nama_kelas.localeCompare(b.nama_kelas, undefined, { numeric: true, sensitivity: 'base' }));
+
+    return {
+      classSummaries: summaries,
+      totalSiswaMaster: validStudentCount,
+      totalLakiMaster: totalLaki,
+      totalPerempuanMaster: totalPerempuan,
+      totalKelasMaster: summaries.length
+    };
+  }, [siswaMasterList, kelasMasterList, guruMasterList]);
+
+  // Filtered summaries by search query
+  const filteredClassSummaries = useMemo(() => {
+    if (!classGenderSearch.trim()) return classSummaries;
+    const q = classGenderSearch.toLowerCase().trim();
+    return classSummaries.filter(c => 
+      c.nama_kelas.toLowerCase().includes(q) || 
+      c.wali_kelas.toLowerCase().includes(q)
+    );
+  }, [classSummaries, classGenderSearch]);
+
+  // Chart data for class gender comparison
+  const classGenderChartData = useMemo(() => {
+    return filteredClassSummaries.map(c => ({
+      name: c.nama_kelas,
+      "Laki-laki": c.laki_laki,
+      "Perempuan": c.perempuan,
+      "Total": c.total
+    }));
+  }, [filteredClassSummaries]);
 
   if (loading) {
     return (
@@ -363,7 +559,7 @@ export default function Dashboard() {
             <span className="bg-indigo-800/60 text-indigo-200 text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wider">
               Monitoring Real-Time
             </span>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">AL-HIKAM SCHOOL</h1>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">SIAS SMK Al-Hikam</h1>
             <p className="text-blue-100/80 text-sm md:text-base leading-relaxed">
               Sistem Informasi Absensi Sekolah modern yang terintegrasi langsung dengan database Google Spreadsheet. Pantau kehadiran siswa dan guru hari ini.
             </p>
@@ -539,6 +735,384 @@ export default function Dashboard() {
             </div>
           </>
         )}
+
+        {/* SECTION: RINGKASAN JUMLAH SISWA PER KELAS (LAKI-LAKI & PEREMPUAN) */}
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="w-1.5 h-6 bg-sky-600 rounded-full"></span>
+              <div>
+                <h2 className="text-lg font-bold text-gray-800 tracking-tight flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-sky-600" />
+                  Ringkasan Jumlah Siswa per Kelas
+                </h2>
+                <p className="text-xs text-gray-500">
+                  Distribusi dan proporsi murid berdasarkan kelas dan jenis kelamin (Laki-laki & Perempuan)
+                </p>
+              </div>
+            </div>
+
+            {/* View Mode & Search Controls */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Search Input */}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Cari kelas / wali..."
+                  value={classGenderSearch}
+                  onChange={(e) => setClassGenderSearch(e.target.value)}
+                  className="bg-white border border-gray-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-sky-500 w-44 sm:w-52 shadow-xs font-medium"
+                />
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                {classGenderSearch && (
+                  <button
+                    onClick={() => setClassGenderSearch("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-bold"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+
+              {/* View Mode Tabs */}
+              <div className="flex bg-gray-100 p-0.5 rounded-xl border border-gray-200 text-xs font-bold">
+                <button
+                  onClick={() => setClassGenderViewMode("grid")}
+                  className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                    classGenderViewMode === "grid"
+                      ? "bg-white text-sky-700 shadow-xs"
+                      : "text-gray-500 hover:text-gray-800"
+                  }`}
+                  title="Tampilan Grid Kartu"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Grid</span>
+                </button>
+                <button
+                  onClick={() => setClassGenderViewMode("table")}
+                  className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                    classGenderViewMode === "table"
+                      ? "bg-white text-sky-700 shadow-xs"
+                      : "text-gray-500 hover:text-gray-800"
+                  }`}
+                  title="Tampilan Tabel Rinci"
+                >
+                  <TableIcon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Tabel</span>
+                </button>
+                <button
+                  onClick={() => setClassGenderViewMode("chart")}
+                  className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                    classGenderViewMode === "chart"
+                      ? "bg-white text-sky-700 shadow-xs"
+                      : "text-gray-500 hover:text-gray-800"
+                  }`}
+                  title="Tampilan Grafik Batang"
+                >
+                  <BarChart2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Grafik</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 4 Mini Summary Stats Header Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Total Siswa Master */}
+            <div className="bg-white rounded-xl border border-blue-100 p-3.5 flex items-center justify-between shadow-xs bg-blue-50/30">
+              <div className="space-y-0.5">
+                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Total Siswa Terdata</p>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-extrabold text-blue-950">{totalSiswaMaster}</span>
+                  <span className="text-[11px] text-gray-500 font-medium">siswa</span>
+                </div>
+              </div>
+              <div className="p-2.5 bg-blue-500 text-white rounded-xl shadow-xs">
+                <GraduationCap className="w-5 h-5" />
+              </div>
+            </div>
+
+            {/* Siswa Laki-laki */}
+            <div className="bg-white rounded-xl border border-sky-100 p-3.5 flex items-center justify-between shadow-xs bg-sky-50/30">
+              <div className="space-y-0.5">
+                <p className="text-[11px] font-bold text-sky-800 uppercase tracking-wider">Laki-laki (L)</p>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-extrabold text-sky-950">{totalLakiMaster}</span>
+                  <span className="text-[11px] font-bold text-sky-600 bg-sky-100 px-1.5 py-0.5 rounded-md">
+                    {totalSiswaMaster > 0 ? Math.round((totalLakiMaster / totalSiswaMaster) * 100) : 0}%
+                  </span>
+                </div>
+              </div>
+              <div className="p-2.5 bg-sky-600 text-white rounded-xl shadow-xs">
+                <Users className="w-5 h-5" />
+              </div>
+            </div>
+
+            {/* Siswa Perempuan */}
+            <div className="bg-white rounded-xl border border-rose-100 p-3.5 flex items-center justify-between shadow-xs bg-rose-50/30">
+              <div className="space-y-0.5">
+                <p className="text-[11px] font-bold text-rose-800 uppercase tracking-wider">Perempuan (P)</p>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-extrabold text-rose-950">{totalPerempuanMaster}</span>
+                  <span className="text-[11px] font-bold text-rose-600 bg-rose-100 px-1.5 py-0.5 rounded-md">
+                    {totalSiswaMaster > 0 ? Math.round((totalPerempuanMaster / totalSiswaMaster) * 100) : 0}%
+                  </span>
+                </div>
+              </div>
+              <div className="p-2.5 bg-rose-500 text-white rounded-xl shadow-xs">
+                <Users className="w-5 h-5" />
+              </div>
+            </div>
+
+            {/* Total Rombel Kelas */}
+            <div className="bg-white rounded-xl border border-emerald-100 p-3.5 flex items-center justify-between shadow-xs bg-emerald-50/30">
+              <div className="space-y-0.5">
+                <p className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">Total Rombel Kelas</p>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-extrabold text-emerald-950">{totalKelasMaster}</span>
+                  <span className="text-[11px] text-gray-500 font-medium">kelas</span>
+                </div>
+              </div>
+              <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-xs">
+                <Building2 className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+
+          {/* Main View Area */}
+          {loadingBreakdown ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 flex flex-col items-center justify-center space-y-2 shadow-xs">
+              <Loader2 className="w-6 h-6 text-sky-600 animate-spin" />
+              <p className="text-xs text-gray-500 font-medium">Memuat data rincian siswa per kelas...</p>
+            </div>
+          ) : filteredClassSummaries.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center space-y-2 shadow-xs">
+              <Info className="w-8 h-8 text-gray-400 mx-auto" />
+              <p className="text-xs font-bold text-gray-700">Tidak ada kelas yang sesuai dengan kata kunci pencarian.</p>
+              {classGenderSearch && (
+                <button
+                  onClick={() => setClassGenderSearch("")}
+                  className="text-xs text-sky-600 font-bold hover:underline cursor-pointer"
+                >
+                  Reset Pencarian
+                </button>
+              )}
+            </div>
+          ) : classGenderViewMode === "grid" ? (
+            /* VIEW 1: GRID CARDS */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filteredClassSummaries.map((cls, idx) => (
+                <div
+                  key={idx}
+                  className="bg-white rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all duration-200 p-4 space-y-3 flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 pb-2 border-b border-gray-100">
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-sm text-gray-900 bg-sky-50 text-sky-800 border border-sky-200/60 px-2.5 py-1 rounded-lg">
+                          {cls.nama_kelas}
+                        </span>
+                      </div>
+                      <span className="text-xs font-extrabold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-md">
+                        {cls.total} Siswa
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-gray-500 mt-2 truncate">
+                      <strong className="text-gray-600">Wali:</strong> {cls.wali_kelas || "-"}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2.5 pt-1">
+                    {/* 2 Gender Count Boxes */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-sky-50/70 border border-sky-100/80 rounded-xl p-2.5 text-center">
+                        <p className="text-[10px] font-bold text-sky-700 uppercase tracking-tight">Laki-laki</p>
+                        <div className="text-base font-extrabold text-sky-950 mt-0.5">{cls.laki_laki}</div>
+                        <span className="text-[10px] font-bold text-sky-600 bg-sky-100/80 px-1.5 py-0.5 rounded inline-block mt-0.5">
+                          {cls.persen_laki}%
+                        </span>
+                      </div>
+
+                      <div className="bg-rose-50/70 border border-rose-100/80 rounded-xl p-2.5 text-center">
+                        <p className="text-[10px] font-bold text-rose-700 uppercase tracking-tight">Perempuan</p>
+                        <div className="text-base font-extrabold text-rose-950 mt-0.5">{cls.perempuan}</div>
+                        <span className="text-[10px] font-bold text-rose-600 bg-rose-100/80 px-1.5 py-0.5 rounded inline-block mt-0.5">
+                          {cls.persen_perempuan}%
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Proportion Progress Bar */}
+                    <div className="space-y-1">
+                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden flex">
+                        <div
+                          className="bg-sky-500 h-full transition-all duration-300"
+                          style={{ width: `${cls.persen_laki}%` }}
+                          title={`Laki-laki: ${cls.laki_laki} (${cls.persen_laki}%)`}
+                        ></div>
+                        <div
+                          className="bg-rose-500 h-full transition-all duration-300"
+                          style={{ width: `${cls.persen_perempuan}%` }}
+                          title={`Perempuan: ${cls.perempuan} (${cls.persen_perempuan}%)`}
+                        ></div>
+                      </div>
+                      <div className="flex justify-between text-[10px] text-gray-400 font-medium px-0.5">
+                        <span className="text-sky-700 font-semibold">{cls.laki_laki} L</span>
+                        <span className="text-rose-700 font-semibold">{cls.perempuan} P</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : classGenderViewMode === "table" ? (
+            /* VIEW 2: TABEL RINCI */
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                      <th className="py-3 px-4 w-12 text-center">No</th>
+                      <th className="py-3 px-4">Nama Kelas</th>
+                      <th className="py-3 px-4">Wali Kelas</th>
+                      <th className="py-3 px-4 text-center text-sky-800">Laki-laki (L)</th>
+                      <th className="py-3 px-4 text-center text-rose-800">Perempuan (P)</th>
+                      <th className="py-3 px-4 text-center">Total Siswa</th>
+                      <th className="py-3 px-4 w-48 text-center">Proporsi Gender (L / P)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-xs">
+                    {filteredClassSummaries.map((cls, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50/60 transition-colors">
+                        <td className="py-3 px-4 text-center font-bold text-gray-400">{idx + 1}</td>
+                        <td className="py-3 px-4">
+                          <span className="font-extrabold text-gray-900 bg-sky-50 text-sky-800 border border-sky-100 px-2 py-0.5 rounded-md">
+                            {cls.nama_kelas}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-gray-600 font-medium">{cls.wali_kelas || "-"}</td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="font-extrabold text-sky-950">{cls.laki_laki}</span>
+                          <span className="text-[10px] text-sky-600 font-bold ml-1">({cls.persen_laki}%)</span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="font-extrabold text-rose-950">{cls.perempuan}</span>
+                          <span className="text-[10px] text-rose-600 font-bold ml-1">({cls.persen_perempuan}%)</span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-extrabold text-gray-900">
+                          {cls.total}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="space-y-1">
+                            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden flex">
+                              <div
+                                className="bg-sky-500 h-full"
+                                style={{ width: `${cls.persen_laki}%` }}
+                              ></div>
+                              <div
+                                className="bg-rose-500 h-full"
+                                style={{ width: `${cls.persen_perempuan}%` }}
+                              ></div>
+                            </div>
+                            <div className="flex justify-between text-[9px] text-gray-400 font-semibold px-0.5">
+                              <span className="text-sky-600">{cls.persen_laki}% L</span>
+                              <span className="text-rose-600">{cls.persen_perempuan}% P</span>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-50 border-t-2 border-slate-200 text-xs font-extrabold text-slate-800">
+                      <td colSpan={3} className="py-3.5 px-4 text-right uppercase tracking-wider">
+                        Total Keseluruhan ({filteredClassSummaries.length} Kelas):
+                      </td>
+                      <td className="py-3.5 px-4 text-center text-sky-900">
+                        {filteredClassSummaries.reduce((sum, c) => sum + c.laki_laki, 0)}
+                      </td>
+                      <td className="py-3.5 px-4 text-center text-rose-900">
+                        {filteredClassSummaries.reduce((sum, c) => sum + c.perempuan, 0)}
+                      </td>
+                      <td className="py-3.5 px-4 text-center text-slate-900">
+                        {filteredClassSummaries.reduce((sum, c) => sum + c.total, 0)}
+                      </td>
+                      <td className="py-3.5 px-4 text-center text-[11px] text-slate-500">
+                        {totalSiswaMaster > 0
+                          ? `${Math.round((totalLakiMaster / totalSiswaMaster) * 100)}% L • ${Math.round((totalPerempuanMaster / totalSiswaMaster) * 100)}% P`
+                          : "-"}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          ) : (
+            /* VIEW 3: GRAFIK BATANG KOMPARASI GENDER */
+            <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
+                <div>
+                  <h3 className="font-extrabold text-gray-800 text-sm flex items-center gap-2">
+                    <BarChart2 className="w-4 h-4 text-sky-600" />
+                    Grafik Komparasi Siswa Laki-laki vs Perempuan per Rombel
+                  </h3>
+                  <p className="text-xs text-gray-500">Visualisasi komparatif jumlah siswa laki-laki dan perempuan pada setiap rombel kelas</p>
+                </div>
+                <div className="flex items-center gap-4 text-xs font-bold">
+                  <div className="flex items-center gap-1.5 text-sky-700">
+                    <span className="w-3 h-3 bg-sky-500 rounded-sm"></span>
+                    Laki-laki (L)
+                  </div>
+                  <div className="flex items-center gap-1.5 text-rose-700">
+                    <span className="w-3 h-3 bg-rose-500 rounded-sm"></span>
+                    Perempuan (P)
+                  </div>
+                </div>
+              </div>
+
+              <div className="h-[280px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={classGenderChartData}
+                    margin={{ top: 15, right: 15, left: -20, bottom: 25 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis
+                      dataKey="name"
+                      stroke="#64748b"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      angle={-20}
+                      textAnchor="end"
+                    />
+                    <YAxis
+                      stroke="#64748b"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      allowDecimals={false}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#0f172a",
+                        borderRadius: "12px",
+                        color: "#fff",
+                        border: "none",
+                        fontSize: "12px",
+                        padding: "8px 12px"
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
+                    <Bar dataKey="Laki-laki" fill="#0284c7" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Perempuan" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Section Diagram / Charts Interactive */}
         <div className="space-y-6">
