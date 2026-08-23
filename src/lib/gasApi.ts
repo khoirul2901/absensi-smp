@@ -252,6 +252,298 @@ export function setStorage(key: string, val: any): void {
   } catch (e) {}
 }
 
+export function normalizeTeacherName(str: string): string {
+  return String(str || "")
+    .toLowerCase()
+    .replace(/[,.]/g, " ")
+    .replace(/\b(s|m|dr|drs|dra|prof|ir|h|hj)\s*\.?\s*(pd|kom|ag|is|si|se|mm|hum|st|pt|tp|sos|ip|ed|pdi|mat|bio|fis|med)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function isTeacherMatchSchedule(scheduleItem: any, teacherObj: any): boolean {
+  if (!scheduleItem || !teacherObj) return false;
+  const sId = String(scheduleItem.id_guru || "").trim().toLowerCase();
+  const sName = String(scheduleItem.nama_guru || "").trim().toLowerCase();
+  const tId = String(teacherObj.id_guru || "").trim().toLowerCase();
+  const tNip = String(teacherObj.nip_nuptk || teacherObj.nip || "").trim().toLowerCase();
+  const tName = String(teacherObj.nama_guru || "").trim().toLowerCase();
+
+  if (sId && tId) {
+    if (sId === tId || sId === tNip) return true;
+    const sWithout = sId.replace(/^(guru|id|nip|g)[_:\-\s]+/i, '');
+    const tWithout = tId.replace(/^(guru|id|nip|g)[_:\-\s]+/i, '');
+    if (sWithout && tWithout && sWithout === tWithout) return true;
+  }
+
+  if (sName && tName) {
+    if (sName === tName || sName.includes(tName) || tName.includes(sName)) return true;
+    const n1 = normalizeTeacherName(sName);
+    const n2 = normalizeTeacherName(tName);
+    if (n1 && n2 && (n1 === n2 || n1.includes(n2) || n2.includes(n1))) return true;
+  }
+  return false;
+}
+
+/**
+ * Otomatisasi Status Alfa:
+ * Jika guru atau siswa tidak melakukan absensi di hari guru yang terdapat jadwal
+ * baik mengajar maupun fleksibel sampai batas waktu jam 18.00 di hari yang sama
+ * maka sistem akan secara otomatis menulis alfa/tidak hadir.
+ */
+export function jalankanAutoAlfaSistem(tanggalTarget?: string, forceCheck: boolean = false): any {
+  initMockDb();
+  const todayStr = new Date().toISOString().split("T")[0];
+  const targetTgl = tanggalTarget ? formatToIsoDate(tanggalTarget) : todayStr;
+  
+  const cfg = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || localStorage.getItem(getStorageKey("pengaturan_jam")) || "{}");
+  const batasJamAlfa = cfg.jam_batas_alfa || "18:00";
+  const nowTime = new Date().toTimeString().slice(0, 5);
+
+  const isToday = (targetTgl === todayStr);
+  const isPassedCutoff = !isToday || nowTime >= batasJamAlfa || forceCheck;
+
+  if (!isPassedCutoff) {
+    return {
+      tanggal: targetTgl,
+      isPassedCutoff: false,
+      isHoliday: false,
+      cutoffTime: batasJamAlfa,
+      siswaAlfaCount: 0,
+      guruAlfaCount: 0,
+      mengajarAlfaCount: 0,
+      totalUpdated: 0,
+      message: `Batas waktu jam ${batasJamAlfa} WIB belum terlewati (Waktu saat ini: ${nowTime} WIB). Pengecekan otomatis Alfa aktif setelah jam ${batasJamAlfa} WIB.`
+    };
+  }
+
+  // Parse day name (e.g. Senin, Selasa, dll)
+  const dParts = targetTgl.split("-").map(Number);
+  const dObj = new Date(dParts[0], (dParts[1] || 1) - 1, dParts[2] || 1);
+  const dayOfWeek = dObj.getDay(); // 0 is Minggu
+  const hariName = HARI_MAP_INDEX[dayOfWeek] || "Senin";
+
+  // Check holiday
+  const liburList = getStorage("hari_libur") || [];
+  const isHoliday = (dayOfWeek === 0) || liburList.some((l: any) => formatToIsoDate(l.tanggal) === targetTgl);
+
+  if (isHoliday) {
+    return {
+      tanggal: targetTgl,
+      isPassedCutoff: true,
+      isHoliday: true,
+      cutoffTime: batasJamAlfa,
+      siswaAlfaCount: 0,
+      guruAlfaCount: 0,
+      mengajarAlfaCount: 0,
+      totalUpdated: 0,
+      message: `Tanggal ${targetTgl} adalah hari libur (${dayOfWeek === 0 ? "Minggu" : "Libur Sekolah"}), tidak ada pencatatan Alfa otomatis.`
+    };
+  }
+
+  let siswaAlfaCount = 0;
+  let guruAlfaCount = 0;
+  let mengajarAlfaCount = 0;
+
+  // -------------------------------------------------------------
+  // 1. SISWA: Seluruh siswa di data_siswa yang belum absen pada hari aktif
+  // -------------------------------------------------------------
+  const dataSiswa = getStorage("data_siswa") || [];
+  let laporanSiswa = getStorage("laporan_siswa") || [];
+
+  dataSiswa.forEach((s: any, idx: number) => {
+    if (!s || (!s.id_siswa && !s.nama_siswa)) return;
+    const sId = String(s.id_siswa || s.nisn || "").trim().toLowerCase();
+    const sName = String(s.nama_siswa || "").trim().toLowerCase();
+
+    // Check existing attendance log for today
+    const existIdx = laporanSiswa.findIndex((r: any) => {
+      if (formatToIsoDate(r.tanggal) !== targetTgl) return false;
+      const rId = String(r.id_siswa || r.nisn || r.id_target || "").trim().toLowerCase();
+      const rName = String(r.nama_siswa || r.nama || "").trim().toLowerCase();
+      return (sId && rId && sId === rId) || (sName && rName && sName === rName);
+    });
+
+    if (existIdx === -1) {
+      // Create new absent record
+      const idLog = `LOG-S-ALFA-${targetTgl.replace(/-/g, "")}-${s.id_siswa || idx}`;
+      const kVal = String(s.kelas || "").trim();
+      const jVal = String(s.jurusan || "").trim();
+      const classStr = s.kelas_jurusan || (kVal ? `${kVal} ${jVal}`.trim() : "-");
+      
+      laporanSiswa.push({
+        id_log_siswa: idLog,
+        tanggal: targetTgl,
+        id_siswa: s.id_siswa || `S-${idx}`,
+        nama_siswa: s.nama_siswa || "Siswa",
+        kelas_jurusan: classStr,
+        jam_masuk: "-",
+        status_masuk: "Alfa",
+        jam_pulang: "-",
+        status_pulang: "Alfa",
+        ket: "Otomatis Alfa (Batas 18:00 WIB)"
+      });
+      siswaAlfaCount++;
+    } else {
+      // Record already exists: check if unmarked / empty / not yet attended
+      const r = laporanSiswa[existIdx];
+      const sm = String(r.status_masuk || "").toLowerCase();
+      const isAttended = sm.includes("tepat") || sm.includes("terlambat") || sm.includes("hadir") || (r.jam_masuk && r.jam_masuk !== "-");
+      const isExcused = sm.includes("sakit") || sm.includes("izin") || sm.includes("dispensasi");
+
+      if (!isAttended && !isExcused) {
+        if (r.status_masuk !== "Alfa") {
+          laporanSiswa[existIdx].status_masuk = "Alfa";
+          laporanSiswa[existIdx].status_pulang = "Alfa";
+          laporanSiswa[existIdx].jam_masuk = "-";
+          laporanSiswa[existIdx].jam_pulang = "-";
+          laporanSiswa[existIdx].ket = "Otomatis Alfa (Batas 18:00 WIB)";
+          siswaAlfaCount++;
+        }
+      }
+    }
+  });
+  setStorage("laporan_siswa", laporanSiswa);
+
+  // -------------------------------------------------------------
+  // 2. GURU: HANYA GURU YANG MEMILIKI JADWAL MENGAJAR ATAU FLEKSIBEL HARI INI
+  // -------------------------------------------------------------
+  const dataGuru = getStorage("data_guru") || [];
+  const allJadwalPelajaran = getStorage("jadwal_pelajaran") || [];
+  const allJadwalGuru = getStorage("jadwal_guru") || [];
+  let laporanGuru = getStorage("laporan_guru") || [];
+  let absensiMengajar = getStorage("absensi_mengajar_guru") || [];
+
+  // Schedules strictly for target day
+  const teachingToday = allJadwalPelajaran.filter((j: any) => String(j.hari || "").trim().toLowerCase() === hariName.toLowerCase());
+  const flexToday = allJadwalGuru.filter((j: any) => String(j.hari || "").trim().toLowerCase() === hariName.toLowerCase());
+
+  dataGuru.forEach((g: any, idx: number) => {
+    if (!g || (!g.id_guru && !g.nama_guru)) return;
+    const gId = String(g.id_guru || g.nip_nuptk || "").trim().toLowerCase();
+    const gName = String(g.nama_guru || "").trim().toLowerCase();
+
+    // Check if this teacher has schedule on target day
+    const hasFlex = flexToday.some((f: any) => isTeacherMatchSchedule(f, g));
+    const myLessons = teachingToday.filter((t: any) => isTeacherMatchSchedule(t, g));
+    const hasTeaching = myLessons.length > 0;
+
+    // IF TEACHER HAS NO SCHEDULE AT ALL TODAY (Off / Libur Tugas): Skip!
+    if (!hasFlex && !hasTeaching) {
+      return;
+    }
+
+    // A. Daily Attendance (PresensiGuru / laporan_guru)
+    const existIdx = laporanGuru.findIndex((r: any) => {
+      if (formatToIsoDate(r.tanggal) !== targetTgl) return false;
+      const rId = String(r.id_guru || r.nip_nuptk || r.id_target || "").trim().toLowerCase();
+      const rName = String(r.nama_guru || r.nama || "").trim().toLowerCase();
+      return (gId && rId && gId === rId) || (gName && rName && gName === rName);
+    });
+
+    if (existIdx === -1) {
+      const idLog = `LOG-G-ALFA-${targetTgl.replace(/-/g, "")}-${g.id_guru || idx}`;
+      laporanGuru.push({
+        id_log_guru: idLog,
+        tanggal: targetTgl,
+        id_guru: g.id_guru || `G-${idx}`,
+        nama_guru: g.nama_guru || "Guru",
+        jam_masuk: "-",
+        status_masuk: "Alfa",
+        jam_pulang: "-",
+        status_pulang: "Alfa",
+        ket: "Otomatis Alfa (Batas 18:00 WIB)"
+      });
+      guruAlfaCount++;
+    } else {
+      const r = laporanGuru[existIdx];
+      const sm = String(r.status_masuk || "").toLowerCase();
+      const isAttended = sm.includes("tepat") || sm.includes("terlambat") || sm.includes("hadir") || (r.jam_masuk && r.jam_masuk !== "-");
+      const isExcused = sm.includes("sakit") || sm.includes("izin") || sm.includes("dispensasi");
+
+      if (!isAttended && !isExcused) {
+        if (r.status_masuk !== "Alfa") {
+          laporanGuru[existIdx].status_masuk = "Alfa";
+          laporanGuru[existIdx].status_pulang = "Alfa";
+          laporanGuru[existIdx].jam_masuk = "-";
+          laporanGuru[existIdx].jam_pulang = "-";
+          laporanGuru[existIdx].ket = "Otomatis Alfa (Batas 18:00 WIB)";
+          guruAlfaCount++;
+        }
+      }
+    }
+
+    // B. Teaching Schedule Periods (AbsensiMengajar / absensi_mengajar_guru)
+    if (hasTeaching) {
+      myLessons.forEach((slot: any) => {
+        const slotJamKe = Number(slot.jam_ke || 1);
+        const slotKelas = String(slot.kelas || "").trim().toLowerCase();
+        const slotMapel = String(slot.mapel || "").trim().toLowerCase();
+
+        const alreadyLogged = absensiMengajar.some((m: any) => {
+          if (formatToIsoDate(m.tanggal) !== targetTgl) return false;
+          if (!isTeacherMatchSchedule(m, g)) return false;
+          const mJam = Number(m.jam_ke || 1);
+          const mKelas = String(m.kelas || "").trim().toLowerCase();
+          const mMapel = String(m.mapel || "").trim().toLowerCase();
+          return mJam === slotJamKe && (mKelas === slotKelas || !slotKelas) && (mMapel === slotMapel || !slotMapel);
+        });
+
+        if (!alreadyLogged) {
+          const idLogMeng = `LOG-MENG-ALFA-${targetTgl.replace(/-/g, "")}-${g.id_guru || idx}-${slotJamKe}`;
+          absensiMengajar.push({
+            id_log_mengajar: idLogMeng,
+            tanggal: targetTgl,
+            waktu_absen: "-",
+            hari: hariName,
+            id_guru: g.id_guru || `G-${idx}`,
+            nama_guru: g.nama_guru || "Guru",
+            kelas: slot.kelas || "-",
+            mapel: slot.mapel || "-",
+            jam_ke: slotJamKe,
+            jam_mulai_jadwal: slot.jam_mulai || "-",
+            jam_selesai_jadwal: slot.jam_selesai || "-",
+            status: "Tidak Hadir (Alfa)",
+            catatan_materi: "Otomatis Alfa (Batas 18:00 WIB)"
+          });
+          mengajarAlfaCount++;
+        }
+      });
+    }
+  });
+
+  setStorage("laporan_guru", laporanGuru);
+  setStorage("absensi_mengajar_guru", absensiMengajar);
+
+  const totalUpdated = siswaAlfaCount + guruAlfaCount + mengajarAlfaCount;
+  return {
+    tanggal: targetTgl,
+    isPassedCutoff: true,
+    isHoliday: false,
+    cutoffTime: batasJamAlfa,
+    siswaAlfaCount,
+    guruAlfaCount,
+    mengajarAlfaCount,
+    totalUpdated,
+    message: totalUpdated > 0 
+      ? `Auto-Alfa Berhasil (${targetTgl}): ${siswaAlfaCount} siswa, ${guruAlfaCount} presensi guru, dan ${mengajarAlfaCount} jam mengajar ditandai Alfa.`
+      : `Pengecekan Auto-Alfa selesai (${targetTgl}): Semua siswa dan guru berjadwal telah memiliki data kehadiran valid.`
+  };
+}
+
+export function jalankanAutoAlfaSistemRentang(hariKebelakang: number = 7, forceCheck: boolean = false): any[] {
+  const results: any[] = [];
+  for (let i = 0; i <= hariKebelakang; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split("T")[0];
+    const isToday = (i === 0);
+    const res = jalankanAutoAlfaSistem(dateStr, isToday ? forceCheck : true);
+    results.push(res);
+  }
+  return results;
+}
+
 // Call local mock APIs
 export function callMock(action: string, args: any[] = []): any {
   initMockDb();
@@ -1656,6 +1948,10 @@ export function callMock(action: string, args: any[] = []): any {
     case "getLiveAbsenHariIni": {
       const [kategori, tanggal, filterKelas, filterHari] = args;
       const tgl = tanggal || new Date().toISOString().split("T")[0];
+      try {
+        jalankanAutoAlfaSistem(tgl);
+      } catch (e) {}
+
       const masterKey = kategori === "Siswa" ? "data_siswa" : "data_guru";
       let master = getStorage(masterKey);
       if (!Array.isArray(master) || master.length === 0) {
@@ -1777,17 +2073,32 @@ export function callMock(action: string, args: any[] = []): any {
 
     case "getPresensiSiswa":
     case "getLaporanSiswa": {
+      try {
+        jalankanAutoAlfaSistem();
+      } catch (e) {}
       return { success: true, data: getStorage("laporan_siswa") };
     }
 
     case "getPresensiGuru":
     case "getLaporanGuru": {
+      try {
+        jalankanAutoAlfaSistem();
+      } catch (e) {}
       return { success: true, data: getStorage("laporan_guru") };
     }
 
     case "getLaporanPresensi":
     case "getLaporanFilter": {
       const [kategori, kelas, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta] = args;
+      try {
+        if (jenisFilter === "rentang" && tanggalMulai && tanggalSelesai) {
+          jalankanAutoAlfaSistem(tanggalMulai);
+          jalankanAutoAlfaSistem(tanggalSelesai);
+        } else {
+          jalankanAutoAlfaSistem();
+        }
+      } catch (e) {}
+
       const reportsKey = kategori === "Siswa" ? "laporan_siswa" : "laporan_guru";
       const reports = getStorage(reportsKey) || [];
       
@@ -1890,6 +2201,11 @@ export function callMock(action: string, args: any[] = []): any {
     }
 
     case "getDashboardMetrics": {
+      // Execute auto-alfa synchronization for today and past recent days
+      try {
+        jalankanAutoAlfaSistem();
+      } catch (e) {}
+
       const siswaList = getStorage("data_siswa");
       const guruList = getStorage("data_guru");
       const siswaLaporan = getStorage("laporan_siswa");
@@ -1929,7 +2245,7 @@ export function callMock(action: string, args: any[] = []): any {
         const pAlfa = list.length > 0 ? Math.round((rawAlfa / list.length) * 100) : 0;
         const pPulang = list.length > 0 ? Math.round((hadirPulang / list.length) * 100) : 0;
         
-        return { hadirMasuk, hadirPulang, persentaseTepat, persentaseTepatInt, pAlfa, pPulang };
+        return { hadirMasuk, hadirPulang, persentaseTepat, persentaseTepatInt, pAlfa, pPulang, rawAlfa };
       };
       
       const statsSiswa = countStat(siswaList, siswaLaporan, "id_siswa");
@@ -1975,6 +2291,19 @@ export function callMock(action: string, args: any[] = []): any {
           chartData
         }
       };
+    }
+
+    case "jalankanAutoAlfa":
+    case "cekAutoAlfa":
+    case "jalankanAutoAlfaSistem":
+    case "triggerAutoAlfa1800": {
+      const [tanggal, forceCheck] = args;
+      if (tanggal && String(tanggal).includes("rentang")) {
+        const res = jalankanAutoAlfaSistemRentang(7, Boolean(forceCheck));
+        return { success: true, data: res, message: "Pengecekan rentang Auto-Alfa berhasil dijalankan." };
+      }
+      const res = jalankanAutoAlfaSistem(tanggal, forceCheck === true);
+      return { success: true, data: res, message: res.message };
     }
 
     case "getUsersSemua": {
