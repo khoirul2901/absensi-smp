@@ -791,6 +791,68 @@ export default function Settings() {
             </div>
           </form>
 
+          {/* Konfigurasi & Uji Sistem Otomatisasi Alfa (Jam 18:00 WIB) */}
+          <div className="bg-white rounded-2xl border border-amber-200/80 shadow-sm p-6 md:p-8 space-y-6">
+            <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
+              <div className="p-2.5 bg-amber-50 rounded-xl text-amber-700 border border-amber-200">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-extrabold text-gray-900">Sistem Otomatisasi Alfa (Batas Jam 18:00 WIB)</h2>
+                <p className="text-xs text-gray-500">Mencatat otomatis status Alfa bagi Guru & Siswa berjadwal yang tidak hadir</p>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50/50 p-4 rounded-xl border border-amber-200/70 text-xs text-gray-700 space-y-3">
+              <div className="flex items-center gap-2 font-bold text-amber-900 text-sm">
+                <ShieldCheck className="w-4 h-4 text-amber-600" />
+                <span>Aturan Otomasi SIAS:</span>
+              </div>
+              <ul className="list-disc pl-5 space-y-1.5 text-gray-600">
+                <li>
+                  <strong>Siswa:</strong> Setiap siswa yang tidak memiliki log absensi masuk pada hari aktif sekolah (bukan hari libur) hingga pukul <strong>18:00 WIB</strong> otomatis dicatat berstatus <strong>Alfa</strong>.
+                </li>
+                <li>
+                  <strong>Guru (Jadwal Fleksibel & Mengajar):</strong> Setiap guru yang memiliki jadwal mengajar atau jadwal fleksibel pada hari tersebut namun belum melakukan absensi masuk hingga pukul <strong>18:00 WIB</strong> otomatis dicatat berstatus <strong>Alfa</strong> pada laporan guru dan log mengajar.
+                </li>
+                <li>
+                  <strong>Hari Libur:</strong> Sistem otomatis mendeteksi kalender hari libur dan hari Minggu sehingga tidak akan menandai alfa pada tanggal libur.
+                </li>
+              </ul>
+
+              <div className="pt-2 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={async () => {
+                    try {
+                      setLoading(true);
+                      setLoadingAction("Menjalankan pemeriksaan Auto-Alfa...");
+                      const res = await callGas("jalankanAutoAlfaSistem", [undefined, true]);
+                      if (res && res.success) {
+                        const d = res.data;
+                        alert(`Hasil Eksekusi Auto-Alfa:\n- Siswa Baru Alfa: ${d?.siswa_alfa_baru || 0}\n- Guru Baru Alfa: ${d?.guru_alfa_baru || 0}\n- Log Mengajar Alfa: ${d?.guru_mengajar_alfa_baru || 0}\n- Keterangan: ${res.message || 'Sukses'}`);
+                      } else {
+                        alert(res?.message || "Gagal menjalankan Auto-Alfa");
+                      }
+                    } catch (e: any) {
+                      alert("Error: " + e.toString());
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Uji / Jalankan Auto-Alfa Sekarang</span>
+                </button>
+                <span className="text-[11px] text-gray-500 font-medium">
+                  Sistem juga otomatis mengeksekusi pemeriksaan ini setiap kali Dashboard dibuka dan setiap interval berkala.
+                </span>
+              </div>
+            </div>
+          </div>
+
           {/* Kelola Hari Libur */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 md:p-8 space-y-6">
             <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
