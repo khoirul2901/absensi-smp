@@ -160,3 +160,15 @@ export interface AbsensiMengajarItem {
   catatan_materi?: string;
 }
 
+export interface AutoAlfaResult {
+  tanggal: string;
+  isPassedCutoff: boolean;
+  isHoliday: boolean;
+  cutoffTime: string;
+  siswaAlfaCount: number;
+  guruAlfaCount: number;
+  mengajarAlfaCount: number;
+  totalUpdated: number;
+  message: string;
+}
+
