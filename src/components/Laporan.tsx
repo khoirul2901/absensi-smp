@@ -29,7 +29,9 @@ import {
   Sparkles,
   BookOpen,
   Users,
-  Loader2
+  Loader2,
+  XCircle,
+  CheckCircle2
 } from "lucide-react";
 import { callGas, getStorageKey, extractArrayData, formatToIsoDate, getStorage, setStorage, getSchoolProfile } from "../lib/gasApi";
 import { LaporanRow, RekapPersentase, AbsensiMengajarItem } from "../types";
@@ -65,6 +67,7 @@ export default function Laporan() {
   const [bulanMinta, setBulanMinta] = useState("");
   const [selectedKelas, setSelectedKelas] = useState("Semua");
   const [selectedGuru, setSelectedGuru] = useState("Semua");
+  const [statusFilter, setStatusFilter] = useState<string>("Semua");
   const [classList, setClassList] = useState<string[]>([]);
   const [guruList, setGuruList] = useState<{ id_guru: string; nama_guru: string }[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -120,7 +123,7 @@ export default function Laporan() {
   useEffect(() => {
     setCurrentPageDetail(1);
     setCurrentPageRekap(1);
-  }, [kategori, viewMode, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta, selectedKelas, selectedGuru, searchQuery]);
+  }, [kategori, viewMode, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta, selectedKelas, selectedGuru, searchQuery, statusFilter]);
 
   // Set default current month & dates
   useEffect(() => {
@@ -1129,8 +1132,116 @@ export default function Laporan() {
     document.body.removeChild(link);
   };
 
-  // Filter local rows on search query & selected guru
-  const filteredDetailLogs = detailLogs.filter(row => {
+  // Helper: check detail log status matching
+  const matchesDetailStatus = (statusMasuk: string, jamMasuk: string, statusPulang?: string) => {
+    if (statusFilter === "Semua") return true;
+    const sm = String(statusMasuk || "").trim().toLowerCase();
+    const jm = String(jamMasuk || "").trim();
+    
+    const isAlfaOrEmpty = !sm || sm === "-" || sm.includes("alfa") || sm.includes("tidak hadir") || sm.includes("belum") || jm === "-";
+    const hasAttended = (jm !== "" && jm !== "-") || (sm !== "" && sm !== "-" && !sm.includes("alfa") && !sm.includes("tidak hadir") && !sm.includes("belum"));
+
+    if (statusFilter === "sudah_absen") {
+      return hasAttended;
+    }
+    if (statusFilter === "belum_absen") {
+      return isAlfaOrEmpty;
+    }
+    if (statusFilter === "tepat_waktu") {
+      return sm.includes("tepat");
+    }
+    if (statusFilter === "terlambat") {
+      return sm.includes("terlambat");
+    }
+    if (statusFilter === "izin_sakit") {
+      return sm.includes("izin") || sm.includes("sakit") || sm.includes("dispensasi") || sm.includes("tugas");
+    }
+    if (statusFilter === "alfa") {
+      return sm.includes("alfa") || sm.includes("tidak hadir");
+    }
+    return true;
+  };
+
+  // Helper: check mengajar log status matching
+  const matchesMengajarStatus = (status: string, waktuAbsen: string) => {
+    if (statusFilter === "Semua") return true;
+    const st = String(status || "").trim().toLowerCase();
+    const wt = String(waktuAbsen || "").trim();
+    
+    const isAlfaOrEmpty = !st || st === "-" || st.includes("alfa") || st.includes("tidak hadir") || st.includes("belum") || wt === "-";
+    const hasAttended = (wt !== "" && wt !== "-") || (st !== "" && st !== "-" && !st.includes("alfa") && !st.includes("tidak hadir") && !st.includes("belum"));
+
+    if (statusFilter === "sudah_absen") {
+      return hasAttended;
+    }
+    if (statusFilter === "belum_absen") {
+      return isAlfaOrEmpty;
+    }
+    if (statusFilter === "tepat_waktu") {
+      return st.includes("tepat");
+    }
+    if (statusFilter === "terlambat") {
+      return st.includes("terlambat");
+    }
+    if (statusFilter === "izin_sakit") {
+      return st.includes("izin") || st.includes("sakit") || st.includes("tugas");
+    }
+    if (statusFilter === "alfa") {
+      return st.includes("alfa") || st.includes("tidak hadir");
+    }
+    return true;
+  };
+
+  // Helper: check rekap % status matching
+  const matchesRekapStatus = (row: RekapPersentase) => {
+    if (statusFilter === "Semua") return true;
+    if (statusFilter === "sudah_absen") {
+      return row.hadir > 0;
+    }
+    if (statusFilter === "belum_absen") {
+      return row.hadir === 0 || row.alfa > 0;
+    }
+    if (statusFilter === "tepat_waktu") {
+      return row.hadir > 0;
+    }
+    if (statusFilter === "terlambat") {
+      return row.hadir > 0;
+    }
+    if (statusFilter === "izin_sakit") {
+      return row.izin > 0 || row.sakit > 0;
+    }
+    if (statusFilter === "alfa") {
+      return row.alfa > 0;
+    }
+    return true;
+  };
+
+  // Helper: check rekap mengajar % status matching
+  const matchesRekapMengajarStatus = (row: any) => {
+    if (statusFilter === "Semua") return true;
+    if (statusFilter === "sudah_absen") {
+      return (row.tepat + row.terlambat) > 0;
+    }
+    if (statusFilter === "belum_absen") {
+      return (row.tepat + row.terlambat) === 0 || (row.tidakHadir || 0) > 0;
+    }
+    if (statusFilter === "tepat_waktu") {
+      return row.tepat > 0;
+    }
+    if (statusFilter === "terlambat") {
+      return row.terlambat > 0;
+    }
+    if (statusFilter === "izin_sakit") {
+      return row.izinSakit > 0;
+    }
+    if (statusFilter === "alfa") {
+      return (row.tidakHadir || 0) > 0;
+    }
+    return true;
+  };
+
+  // Base filtered logs before status filter (to compute summary badge counts)
+  const baseDetailLogs = detailLogs.filter(row => {
     const name = (row.nama_siswa || row.nama_guru || "").toLowerCase();
     const id = (row.id_siswa || row.id_guru || "-").toLowerCase();
     const matchesQuery = name.includes(searchQuery.toLowerCase()) || id.includes(searchQuery.toLowerCase());
@@ -1141,7 +1252,7 @@ export default function Laporan() {
     return matchesQuery;
   });
 
-  const filteredRekapRows = rekapRows.filter(row => {
+  const baseRekapRows = rekapRows.filter(row => {
     const name = row.nama.toLowerCase();
     const id = row.id.toLowerCase();
     const matchesQuery = name.includes(searchQuery.toLowerCase()) || id.includes(searchQuery.toLowerCase());
@@ -1152,7 +1263,7 @@ export default function Laporan() {
     return matchesQuery;
   });
 
-  const filteredMengajarLogs = mengajarLogs.filter(row => {
+  const baseMengajarLogs = mengajarLogs.filter(row => {
     const name = (row.nama_guru || "").toLowerCase();
     const id = (row.id_guru || "").toLowerCase();
     const mapel = (row.mapel || "").toLowerCase();
@@ -1166,7 +1277,7 @@ export default function Laporan() {
     return matchesQuery;
   });
 
-  const filteredRekapMengajarRows = rekapMengajarRows.filter(row => {
+  const baseRekapMengajarRows = rekapMengajarRows.filter(row => {
     const name = row.nama_guru.toLowerCase();
     const id = row.id_guru.toLowerCase();
     const query = searchQuery.toLowerCase();
@@ -1177,6 +1288,58 @@ export default function Laporan() {
     }
     return matchesQuery;
   });
+
+  // Calculate status summary counts
+  const summaryCounts = {
+    total: kategori === "Mengajar"
+      ? (viewMode === "detail" ? baseMengajarLogs.length : baseRekapMengajarRows.length)
+      : (viewMode === "detail" ? baseDetailLogs.length : baseRekapRows.length),
+    sudahAbsen: kategori === "Mengajar"
+      ? (viewMode === "detail"
+          ? baseMengajarLogs.filter(r => {
+              const st = String(r.status || "").toLowerCase();
+              return st.includes("tepat") || st.includes("terlambat") || (st !== "" && st !== "-" && !st.includes("tidak hadir") && !st.includes("alfa"));
+            }).length
+          : baseRekapMengajarRows.filter(r => (r.tepat + r.terlambat) > 0).length)
+      : (viewMode === "detail"
+          ? baseDetailLogs.filter(r => {
+              const sm = String(r.status_masuk || "").toLowerCase();
+              const jm = String(r.jam_masuk || "").trim();
+              return (jm !== "" && jm !== "-") || (sm !== "" && sm !== "-" && !sm.includes("alfa") && !sm.includes("tidak hadir") && !sm.includes("belum"));
+            }).length
+          : baseRekapRows.filter(r => r.hadir > 0).length),
+    belumAbsen: kategori === "Mengajar"
+      ? (viewMode === "detail"
+          ? baseMengajarLogs.filter(r => {
+              const st = String(r.status || "").toLowerCase();
+              return !st || st === "-" || st.includes("tidak hadir") || st.includes("alfa") || String(r.waktu_absen || "").trim() === "-";
+            }).length
+          : baseRekapMengajarRows.filter(r => (r.tepat + r.terlambat) === 0 || (r.tidakHadir || 0) > 0).length)
+      : (viewMode === "detail"
+          ? baseDetailLogs.filter(r => {
+              const sm = String(r.status_masuk || "").toLowerCase();
+              const jm = String(r.jam_masuk || "").trim();
+              return !sm || sm === "-" || sm.includes("alfa") || sm.includes("tidak hadir") || sm.includes("belum") || jm === "-";
+            }).length
+          : baseRekapRows.filter(r => r.hadir === 0 || r.alfa > 0).length)
+  };
+
+  // Final filtered rows applying status filter
+  const filteredDetailLogs = baseDetailLogs.filter(row =>
+    matchesDetailStatus(row.status_masuk, row.jam_masuk, row.status_pulang)
+  );
+
+  const filteredRekapRows = baseRekapRows.filter(row =>
+    matchesRekapStatus(row)
+  );
+
+  const filteredMengajarLogs = baseMengajarLogs.filter(row =>
+    matchesMengajarStatus(row.status, row.waktu_absen)
+  );
+
+  const filteredRekapMengajarRows = baseRekapMengajarRows.filter(row =>
+    matchesRekapMengajarStatus(row)
+  );
 
   // Paginated data calculations
   const startIndexDetail = (currentPageDetail - 1) * itemsPerPage;
@@ -1234,8 +1397,8 @@ export default function Laporan() {
       </div>
 
       {/* Navigation Filter Panel (Hidden on print) */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-6 print:hidden">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5 print:hidden">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
           
           {/* View Mode Toggle */}
           <div className="space-y-1.5">
@@ -1259,6 +1422,31 @@ export default function Laporan() {
                 Rekap %
               </button>
             </div>
+          </div>
+
+          {/* Status Presensi Filter */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-gray-500 flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              Status Presensi
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPageDetail(1);
+                setCurrentPageRekap(1);
+              }}
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-xs text-gray-800 font-bold focus:outline-none focus:border-blue-500 cursor-pointer"
+            >
+              <option value="Semua">Semua Status</option>
+              <option value="sudah_absen">✅ Sudah Absen (Hadir)</option>
+              <option value="belum_absen">❌ Belum Absen / Alfa</option>
+              <option value="tepat_waktu">🟢 Hadir Tepat Waktu</option>
+              <option value="terlambat">🟡 Terlambat</option>
+              <option value="izin_sakit">🔵 Izin / Sakit / Tugas</option>
+              <option value="alfa">🔴 Alfa (Tidak Hadir)</option>
+            </select>
           </div>
 
           {/* Pagination Options */}
@@ -1390,8 +1578,79 @@ export default function Laporan() {
           </div>
         </div>
 
+        {/* Interactive Quick Status Filter Badges */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-gray-100">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-bold text-gray-400 mr-1 flex items-center gap-1">
+              <Filter className="w-3 h-3" />
+              Filter Cepat:
+            </span>
+            <button
+              type="button"
+              onClick={() => setStatusFilter("Semua")}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all duration-150 flex items-center gap-1.5 cursor-pointer ${
+                statusFilter === "Semua"
+                  ? "bg-slate-900 text-white shadow-xs"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              <span>Semua Data</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                statusFilter === "Semua" ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
+              }`}>
+                {summaryCounts.total}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter("sudah_absen")}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all duration-150 flex items-center gap-1.5 cursor-pointer ${
+                statusFilter === "sudah_absen"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60"
+              }`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Sudah Absen</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                statusFilter === "sudah_absen" ? "bg-white/20 text-white" : "bg-emerald-200/80 text-emerald-900"
+              }`}>
+                {summaryCounts.sudahAbsen}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter("belum_absen")}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all duration-150 flex items-center gap-1.5 cursor-pointer ${
+                statusFilter === "belum_absen"
+                  ? "bg-rose-600 text-white shadow-xs"
+                  : "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/60"
+              }`}
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              <span>Belum Absen / Alfa</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                statusFilter === "belum_absen" ? "bg-white/20 text-white" : "bg-rose-200/80 text-rose-900"
+              }`}>
+                {summaryCounts.belumAbsen}
+              </span>
+            </button>
+          </div>
+
+          {statusFilter !== "Semua" && statusFilter !== "sudah_absen" && statusFilter !== "belum_absen" && (
+            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+              Status Filter: {
+                statusFilter === "tepat_waktu" ? "Hadir Tepat Waktu" :
+                statusFilter === "terlambat" ? "Terlambat" :
+                statusFilter === "izin_sakit" ? "Izin / Sakit / Tugas" :
+                statusFilter === "alfa" ? "Alfa (Tidak Hadir)" : statusFilter
+              }
+            </span>
+          )}
+        </div>
+
         {/* Search input in panel */}
-        <div className="flex flex-col sm:flex-row justify-between items-center pt-4 border-t border-gray-50 gap-3">
+        <div className="flex flex-col sm:flex-row justify-between items-center pt-3 border-t border-gray-50 gap-3">
           <div className="relative w-full sm:max-w-xs">
             <input 
               type="text"
@@ -1442,6 +1701,14 @@ export default function Laporan() {
           {jenisFilter === "bulan" ? `Periode Bulan: ${bulanMinta}` : `Periode Tanggal: ${tanggalMulai} s.d ${tanggalSelesai}`}
           {(kategori === "Siswa" || kategori === "Mengajar") && ` | Kelas: ${selectedKelas}`}
           {(kategori === "Guru" || kategori === "Mengajar") && ` | Guru: ${selectedGuru}`}
+          {statusFilter !== "Semua" && ` | Status: ${
+            statusFilter === "sudah_absen" ? "Sudah Absen" :
+            statusFilter === "belum_absen" ? "Belum Absen / Alfa" :
+            statusFilter === "tepat_waktu" ? "Hadir Tepat Waktu" :
+            statusFilter === "terlambat" ? "Terlambat" :
+            statusFilter === "izin_sakit" ? "Izin / Sakit / Tugas" :
+            statusFilter === "alfa" ? "Alfa (Tidak Hadir)" : statusFilter
+          }`}
         </p>
       </div>
 
