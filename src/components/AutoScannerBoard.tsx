@@ -29,7 +29,7 @@ import {
   Loader2,
   ArrowRight
 } from "lucide-react";
-import { callGas, getStorageKey, setStorage, getStorage, extractArrayData, getSchoolProfile } from "../lib/gasApi";
+import { callGas, getStorageKey, setStorage, getStorage, extractArrayData, getSchoolProfile, parseTimeToMinutes } from "../lib/gasApi";
 
 export interface QueueItem {
   queueId: string;
@@ -85,6 +85,7 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
   const [toleransiAwal, setToleransiAwal] = useState<number>(15);
   const [toleransiAkhir, setToleransiAkhir] = useState<number>(30);
   const [toleransiGuru, setToleransiGuru] = useState<number>(15);
+  const [configJam, setConfigJam] = useState<any>(() => getStorage("pengaturan_jam") || {});
   const [loadingMaster, setLoadingMaster] = useState(false);
   const [activeTab, setActiveTab] = useState<"logs" | "jadwalToday">("logs");
 
@@ -226,6 +227,7 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
       // Process Settings
       const cfg = resCfg?.data || resCfg;
       if (cfg && typeof cfg === "object") {
+        setConfigJam(cfg);
         if (cfg.batasi_jam_jadwal !== undefined) setBatasiJamJadwal(Boolean(cfg.batasi_jam_jadwal));
         if (cfg.toleransi_awal_menit !== undefined) setToleransiAwal(Number(cfg.toleransi_awal_menit) || 15);
         if (cfg.toleransi_akhir_menit !== undefined) setToleransiAkhir(Number(cfg.toleransi_akhir_menit) || 30);
@@ -542,7 +544,12 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
           const rowData = scanRes.data || {};
           const realName = rowData.nama_siswa || personObj?.nama_siswa || personObj?.nama || code;
           const realClass = rowData.kelas_jurusan || (personObj?.kelas ? `${personObj.kelas} ${personObj.jurusan || ""}`.trim() : "Siswa");
-          const realStatus = autoModeSiswa === "Masuk" ? (rowData.status_masuk || (currentHour > 7 || (currentHour === 7 && currentMinutes > 15) ? "Terlambat" : "Tepat Waktu")) : (rowData.status_pulang || "Tepat Waktu");
+          
+          const batasMasukMin = parseTimeToMinutes(configJam.jam_masuk_batas || "07:15");
+          const toleransiSiswa = Number(configJam.toleransi_keterlambatan || configJam.toleransi_siswa || 0);
+          const isLateSiswa = nowMin > ((batasMasukMin >= 0 ? batasMasukMin : (7 * 60 + 15)) + toleransiSiswa);
+          const fallbackStatusSiswa = isLateSiswa ? "Terlambat" : "Tepat Waktu";
+          const realStatus = autoModeSiswa === "Masuk" ? (rowData.status_masuk || fallbackStatusSiswa) : (rowData.status_pulang || "Tepat Waktu");
 
           const successResult: AutoScanResult = {
             id: effectiveCode,
@@ -667,13 +674,10 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
           const firstSlot = targetList[0];
           const { mulai: firstMulai } = getJamSlotTime(firstSlot.jam_ke, firstSlot.jam_mulai, firstSlot.jam_selesai);
           let statusMengajar = "Hadir Tepat Waktu";
-          if (firstMulai && firstMulai !== "-") {
-            const [hM, mM] = firstMulai.split(":").map(Number);
-            if (!isNaN(hM) && !isNaN(mM)) {
-              const startMin = hM * 60 + mM;
-              if (nowMin > startMin + toleransiGuru) {
-                statusMengajar = "Terlambat Masuk Kelas";
-              }
+          const firstStartMin = parseTimeToMinutes(firstMulai);
+          if (firstStartMin >= 0) {
+            if (nowMin > firstStartMin + toleransiGuru) {
+              statusMengajar = "Terlambat Masuk Kelas";
             }
           }
 
@@ -900,13 +904,14 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
         }
       }
 
-      // -------------------------------------------------------------------------
+      // -------------------------------------------------------------
       // ACUAN 4: GURU REGULER (HARIAN UMUM)
       // Guru yang tidak memiliki jadwal pelajaran dan bukan piket fleksibel
       // Target: Sheet PresensiGuru
-      // -------------------------------------------------------------------------
+      // -------------------------------------------------------------
       const autoMode: "Masuk" | "Pulang" = currentHour >= 12 ? "Pulang" : "Masuk";
-      const isLate = autoMode === "Masuk" && (currentHour > 7 || (currentHour === 7 && currentMinutes > 15));
+      const guruBatasMasukMin = parseTimeToMinutes(configJam.jam_masuk_batas || "07:15");
+      const isLate = autoMode === "Masuk" && (nowMin > ((guruBatasMasukMin >= 0 ? guruBatasMasukMin : (7 * 60 + 15)) + toleransiGuru));
       const fallbackStatus = autoMode === "Masuk" ? (isLate ? "Terlambat" : "Tepat Waktu") : "Tepat Waktu";
 
       // =========================================================================
