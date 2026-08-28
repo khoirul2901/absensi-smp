@@ -285,6 +285,9 @@ export function isTeacherMatchSchedule(scheduleItem: any, teacherObj: any): bool
   return false;
 }
 
+let lastAutoAlfaRunTime = 0;
+let lastAutoAlfaResult: any = null;
+
 /**
  * Otomatisasi Status Alfa:
  * Jika guru atau siswa tidak melakukan absensi di hari guru yang terdapat jadwal
@@ -296,6 +299,10 @@ export function jalankanAutoAlfaSistem(tanggalTarget?: string, forceCheck: boole
   const todayStr = new Date().toISOString().split("T")[0];
   const targetTgl = tanggalTarget ? formatToIsoDate(tanggalTarget) : todayStr;
   
+  if (!forceCheck && !tanggalTarget && lastAutoAlfaResult && (Date.now() - lastAutoAlfaRunTime < 15000)) {
+    return lastAutoAlfaResult;
+  }
+
   const cfg = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || localStorage.getItem(getStorageKey("pengaturan_jam")) || "{}");
   const batasJamAlfa = cfg.jam_batas_alfa || "18:00";
   const nowTime = new Date().toTimeString().slice(0, 5);
@@ -550,7 +557,7 @@ export function jalankanAutoAlfaSistem(tanggalTarget?: string, forceCheck: boole
   setStorage("absensi_mengajar_guru", absensiMengajar);
 
   const totalUpdated = siswaAlfaCount + guruAlfaCount + mengajarAlfaCount;
-  return {
+  const resultPayload = {
     tanggal: targetTgl,
     isPassedCutoff: true,
     isHoliday: false,
@@ -566,6 +573,11 @@ export function jalankanAutoAlfaSistem(tanggalTarget?: string, forceCheck: boole
       ? `Auto-Alfa Berhasil (${targetTgl}): ${siswaAlfaCount} siswa, ${guruAlfaCount} presensi guru, dan ${mengajarAlfaCount} jam mengajar ditandai Alfa.`
       : `Pengecekan Auto-Alfa selesai (${targetTgl}): Semua siswa dan guru berjadwal telah memiliki data kehadiran valid.`
   };
+
+  lastAutoAlfaRunTime = Date.now();
+  lastAutoAlfaResult = resultPayload;
+
+  return resultPayload;
 }
 
 export function jalankanAutoAlfaSistemRentang(hariKebelakang: number = 7, forceCheck: boolean = false): any[] {
@@ -1130,7 +1142,9 @@ export function callMock(action: string, args: any[] = []): any {
       // ==========================================
       if (activeKategori === "Siswa") {
         const jamPulangSiswa = cfg.jam_pulang_mulai || "14:00";
-        const isTimeForPulang = jam >= jamPulangSiswa || (mode === "Pulang" && jam >= "12:00");
+        const nowMinSiswa = parseTimeToMinutes(jam);
+        const pulangMinSiswa = parseTimeToMinutes(jamPulangSiswa);
+        const isTimeForPulang = (nowMinSiswa >= pulangMinSiswa) || (mode === "Pulang" && nowMinSiswa >= (12 * 60));
 
         if (!isTimeForPulang) {
           // Masuk Period for Siswa
@@ -1143,7 +1157,9 @@ export function callMock(action: string, args: any[] = []): any {
             };
           }
 
-          const statusMasuk = (jam <= defaultJamMasukBatas) ? "Tepat Waktu" : "Terlambat";
+          const defaultBatasMin = parseTimeToMinutes(defaultJamMasukBatas || "07:15");
+          const toleransiSiswa = Number(cfg.toleransi_keterlambatan || cfg.toleransi_siswa || 0);
+          const statusMasuk = (nowMinSiswa <= defaultBatasMin + toleransiSiswa) ? "Tepat Waktu" : "Terlambat";
           const idLog = "LOG-S-" + new Date().getTime();
 
           if (index !== -1) {
@@ -1471,10 +1487,11 @@ export function callMock(action: string, args: any[] = []): any {
 
           // Determine attendance status based on schedule start time + tolerance
           const firstSlot = multiJamBlock[0];
-          const [hM, mM] = (firstSlot.slotMulai || "07:00").split(":").map(Number);
-          const firstStartMin = (!isNaN(hM) && !isNaN(mM)) ? (hM * 60 + mM) : (7 * 60);
+          const slotMulaiStr = firstSlot.slotMulai || firstSlot.jam_mulai || "07:00";
+          const firstStartMin = parseTimeToMinutes(slotMulaiStr);
+          const effectiveStartMin = firstStartMin >= 0 ? firstStartMin : (7 * 60);
           
-          const statusMengajar = (nowMin <= firstStartMin + toleransiGuruVal) ? "Hadir Tepat Waktu" : "Terlambat Masuk Kelas";
+          const statusMengajar = (nowMin <= effectiveStartMin + toleransiGuruVal) ? "Hadir Tepat Waktu" : "Terlambat Masuk Kelas";
 
           // Save ALL hours in the multi-jam block into absensi_mengajar_guru (sheet AbsensiMengajar)
           const savedLogItems: any[] = [];
@@ -1512,7 +1529,9 @@ export function callMock(action: string, args: any[] = []): any {
 
           // JIKA GURU MEMILIKI JADWAL FLEKSIBEL (PIKET) DI HARI INI, CATAT JUGA KE SHEET PresensiGuru
           if (flexSchedule) {
-            const statusMasukPiket = (jam <= (flexSchedule.jam_masuk_batas || "07:15")) ? "Tepat Waktu" : "Terlambat";
+            const flexBatasStr = flexSchedule.jam_masuk_batas || defaultJamMasukBatas || "07:15";
+            const flexBatasMin = parseTimeToMinutes(flexBatasStr);
+            const statusMasukPiket = (nowMin <= (flexBatasMin >= 0 ? flexBatasMin : (7 * 60 + 15)) + toleransiGuruVal) ? "Tepat Waktu" : "Terlambat";
             if (index === -1) {
               const idLog = "LOG-G-" + Date.now();
               const newGuruRow = {
@@ -1601,7 +1620,9 @@ export function callMock(action: string, args: any[] = []): any {
       // CASE C: TEACHER WITH NO TEACHING SCHEDULE TODAY (HANYA HARIAN / FLEKSIBEL)
       // -------------------------------------------------------------
       if (index === -1 || !reports[index].jam_masuk || reports[index].jam_masuk === "-") {
-        const statusMasuk = (jam <= guruJamMasukBatas) ? "Tepat Waktu" : "Terlambat";
+        const guruBatasMin = parseTimeToMinutes(guruJamMasukBatas || "07:15");
+        const effectiveBatasMin = guruBatasMin >= 0 ? guruBatasMin : (7 * 60 + 15);
+        const statusMasuk = (nowMin <= effectiveBatasMin + toleransiGuruVal) ? "Tepat Waktu" : "Terlambat";
         const idLog = "LOG-G-" + new Date().getTime();
 
         if (index !== -1) {
@@ -2693,28 +2714,46 @@ export function isInvalidWali(s: any): boolean {
   );
 }
 
-export function cleanTimeHHMM(val: any): string {
-  if (!val || val === "-") return "";
+export function parseTimeToMinutes(val: any): number {
+  if (val === null || val === undefined) return -1;
+  if (typeof val === "number") {
+    // If fractional day (e.g. from Google Sheets / Excel time value: 0.30208333)
+    if (val >= 0 && val <= 1) return Math.round(val * 24 * 60);
+    return val;
+  }
   let str = String(val).trim();
-  if (str.indexOf("T") !== -1) {
+  if (!str || str === "-" || str === "null" || str === "undefined") return -1;
+
+  if (str.includes("T")) {
     try {
       const d = new Date(str);
       if (!isNaN(d.getTime())) {
-        const hh = String(d.getHours()).padStart(2, "0");
-        const mm = String(d.getMinutes()).padStart(2, "0");
-        return `${hh}:${mm}`;
+        return d.getHours() * 60 + d.getMinutes();
       }
     } catch (e) {}
     const timePart = str.split("T")[1];
-    if (timePart) str = timePart.substring(0, 5);
+    if (timePart) str = timePart;
   }
-  const match = str.match(/(\d{1,2}):(\d{2})/);
+
+  // Replace dots or other separators with colon (e.g. 07.15 -> 07:15)
+  str = str.replace(/\./g, ":");
+  const match = str.match(/(\d{1,2}):(\d{1,2})/);
   if (match) {
-    const h = match[1].padStart(2, "0");
-    const m = match[2];
-    return `${h}:${m}`;
+    const h = parseInt(match[1], 10);
+    const m = parseInt(match[2], 10);
+    if (!isNaN(h) && !isNaN(m)) {
+      return h * 60 + m;
+    }
   }
-  return str;
+  return -1;
+}
+
+export function cleanTimeHHMM(val: any): string {
+  const min = parseTimeToMinutes(val);
+  if (min < 0) return "";
+  const h = Math.floor(min / 60) % 24;
+  const m = min % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
 // Main bridge function to invoke Apps Script Web App actions
