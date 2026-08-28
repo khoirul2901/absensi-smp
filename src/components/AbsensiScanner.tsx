@@ -48,7 +48,7 @@ import {
   Layers
 } from "lucide-react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
-import { callGas, getStorageKey, setStorage, getStorage, extractArrayData, isInvalidWali } from "../lib/gasApi";
+import { callGas, getStorageKey, setStorage, getStorage, extractArrayData, isInvalidWali, parseTimeToMinutes } from "../lib/gasApi";
 import { LiveAbsen, ScheduleLessonItem, AbsensiMengajarItem, JamPelajaranItem } from "../types";
 
 const HARI_LIST = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
@@ -835,64 +835,53 @@ export default function AbsensiScanner({ session }: { session?: any }) {
       const { mulai: slotMulai, selesai: slotSelesai } = getJamSlotTime(targetSched.jam_ke, targetSched.jam_mulai, targetSched.jam_selesai);
 
       let autoStatus = "Hadir Tepat Waktu";
-      if (slotMulai && slotMulai !== "-") {
-        const [hM, mM] = slotMulai.split(":").map(Number);
-        const [hN, mN] = nowTime.split(":").map(Number);
-        if (!isNaN(hM) && !isNaN(mM) && !isNaN(hN) && !isNaN(mN)) {
-          const startMin = hM * 60 + mM;
-          const nowMin = hN * 60 + mN;
-          // Toleransi keterlambatan presensi mengajar guru
-          if (nowMin > startMin + toleransiGuru) {
-            autoStatus = "Terlambat Masuk Kelas";
-          }
+      const startMin = parseTimeToMinutes(slotMulai);
+      const endMin = parseTimeToMinutes(slotSelesai);
+      const nowMin = parseTimeToMinutes(nowTime);
+
+      if (startMin >= 0 && nowMin >= 0) {
+        // Toleransi keterlambatan presensi mengajar guru
+        if (nowMin > startMin + toleransiGuru) {
+          autoStatus = "Terlambat Masuk Kelas";
         }
       }
 
       // Check Schedule Time restriction if enabled
-      if (batasiJamJadwal && slotMulai && slotMulai !== "-" && slotSelesai && slotSelesai !== "-") {
-        const [hM, mM] = slotMulai.split(":").map(Number);
-        const [hS, mS] = slotSelesai.split(":").map(Number);
-        const [hN, mN] = nowTime.split(":").map(Number);
-        if (!isNaN(hM) && !isNaN(mM) && !isNaN(hS) && !isNaN(mS) && !isNaN(hN) && !isNaN(mN)) {
-          const startMin = hM * 60 + mM;
-          const endMin = hS * 60 + mS;
-          const nowMin = hN * 60 + mN;
-
-          if (nowMin < startMin - toleransiAwal) {
-            setScanStatus({
-              type: "error",
-              msg: `Presensi Mengajar Ditolak (Belum Waktunya)`,
-              details: `Jadwal ${targetSched.mapel} (${targetSched.kelas}) dimulai jam ${slotMulai}. Saat ini jam ${nowTime}`
-            });
-            playBeep(false);
-            triggerFlash("error");
-            if (speechEnabled) speakText("Absen ditolak. Belum waktunya.");
-            if (queueId) {
-              setScanQueue(prev => prev.map(item =>
-                item.id === queueId ? { ...item, status: "error", message: "Belum waktunya" } : item
-              ));
-            }
-            setIsProcessingScan(false);
-            return;
+      if (batasiJamJadwal && startMin >= 0 && endMin >= 0 && nowMin >= 0) {
+        if (nowMin < startMin - toleransiAwal) {
+          setScanStatus({
+            type: "error",
+            msg: `Presensi Mengajar Ditolak (Belum Waktunya)`,
+            details: `Jadwal ${targetSched.mapel} (${targetSched.kelas}) dimulai jam ${slotMulai}. Saat ini jam ${nowTime}`
+          });
+          playBeep(false);
+          triggerFlash("error");
+          if (speechEnabled) speakText("Absen ditolak. Belum waktunya.");
+          if (queueId) {
+            setScanQueue(prev => prev.map(item =>
+              item.id === queueId ? { ...item, status: "error", message: "Belum waktunya" } : item
+            ));
           }
+          setIsProcessingScan(false);
+          return;
+        }
 
-          if (nowMin > endMin + toleransiAkhir) {
-            setScanStatus({
-              type: "error",
-              msg: `Presensi Mengajar Ditolak (Di Luar Jam Jadwal)`,
-              details: `Jadwal ${targetSched.mapel} (${targetSched.kelas}) telah selesai jam ${slotSelesai}. Saat ini jam ${nowTime}`
-            });
-            playBeep(false);
-            triggerFlash("error");
-            if (speechEnabled) speakText("Absen ditolak. Di luar jam jadwal.");
-            if (queueId) {
-              setScanQueue(prev => prev.map(item =>
-                item.id === queueId ? { ...item, status: "error", message: "Di luar jam jadwal" } : item
-              ));
-            }
-            setIsProcessingScan(false);
-            return;
+        if (nowMin > endMin + toleransiAkhir) {
+          setScanStatus({
+            type: "error",
+            msg: `Presensi Mengajar Ditolak (Di Luar Jam Jadwal)`,
+            details: `Jadwal ${targetSched.mapel} (${targetSched.kelas}) telah selesai jam ${slotSelesai}. Saat ini jam ${nowTime}`
+          });
+          playBeep(false);
+          triggerFlash("error");
+          if (speechEnabled) speakText("Absen ditolak. Di luar jam jadwal.");
+          if (queueId) {
+            setScanQueue(prev => prev.map(item =>
+              item.id === queueId ? { ...item, status: "error", message: "Di luar jam jadwal" } : item
+            ));
           }
+          setIsProcessingScan(false);
+          return;
         }
       }
 
