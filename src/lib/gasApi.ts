@@ -685,15 +685,31 @@ export function callMock(action: string, args: any[] = []): any {
     case "simpanPengaturanCustom": {
       const [customObj] = args;
       const current = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
-      const merged = { ...current, ...(typeof customObj === "object" ? customObj : {}) };
+      const cleanCustom = sanitizeTimeFields(typeof customObj === "object" ? customObj : {});
+      const merged = { ...current, ...cleanCustom };
       localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify(merged));
+      localStorage.setItem(getStorageKey("pengaturan_jam"), JSON.stringify(merged));
       return { success: true, message: "Pengaturan berhasil diperbarui!", data: merged };
     }
 
     case "simpanKonfigurasiJam":
     case "simpanPengaturanJam":
     case "simpanPengaturan": {
-      const [jamMasukMulai, jamMasukBatas, jamPulangMulai] = args;
+      const [arg1, arg2, arg3] = args;
+      let jamMasukMulai = "";
+      let jamMasukBatas = "";
+      let jamPulangMulai = "";
+
+      if (typeof arg1 === "object" && arg1 !== null) {
+        jamMasukMulai = cleanTimeHHMM(arg1.jam_masuk_mulai);
+        jamMasukBatas = cleanTimeHHMM(arg1.jam_masuk_batas);
+        jamPulangMulai = cleanTimeHHMM(arg1.jam_pulang_mulai);
+      } else {
+        jamMasukMulai = cleanTimeHHMM(arg1);
+        jamMasukBatas = cleanTimeHHMM(arg2);
+        jamPulangMulai = cleanTimeHHMM(arg3);
+      }
+
       const current = JSON.parse(localStorage.getItem(getStorageKey("MOCK_pengaturan_jam")) || "{}");
       const merged = {
         ...current,
@@ -702,6 +718,7 @@ export function callMock(action: string, args: any[] = []): any {
         jam_pulang_mulai: jamPulangMulai || current.jam_pulang_mulai || "15:30"
       };
       localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify(merged));
+      localStorage.setItem(getStorageKey("pengaturan_jam"), JSON.stringify(merged));
       return { success: true, message: "Pengaturan Jam Operasional disimpan!", data: merged };
     }
 
@@ -2724,11 +2741,30 @@ export function parseTimeToMinutes(val: any): number {
   let str = String(val).trim();
   if (!str || str === "-" || str === "null" || str === "undefined") return -1;
 
+  // Handle ISO Date strings (especially Google Sheets 1899-12-30 epoch dates)
   if (str.includes("T")) {
     try {
       const d = new Date(str);
       if (!isNaN(d.getTime())) {
-        return d.getHours() * 60 + d.getMinutes();
+        try {
+          const formatter = new Intl.DateTimeFormat("en-GB", {
+            timeZone: "Asia/Jakarta",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false
+          });
+          const parts = formatter.format(d).split(":");
+          const h = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10);
+          if (!isNaN(h) && !isNaN(m)) {
+            return (h % 24) * 60 + (m % 60);
+          }
+        } catch (e) {
+          // Fallback to local / UTC conversion
+          const h = (d.getHours() % 24);
+          const m = (d.getMinutes() % 60);
+          return h * 60 + m;
+        }
       }
     } catch (e) {}
     const timePart = str.split("T")[1];
@@ -2742,18 +2778,81 @@ export function parseTimeToMinutes(val: any): number {
     const h = parseInt(match[1], 10);
     const m = parseInt(match[2], 10);
     if (!isNaN(h) && !isNaN(m)) {
-      return h * 60 + m;
+      return (h % 24) * 60 + (m % 60);
     }
   }
   return -1;
 }
 
 export function cleanTimeHHMM(val: any): string {
+  if (val === null || val === undefined) return "";
   const min = parseTimeToMinutes(val);
-  if (min < 0) return "";
+  if (min < 0) {
+    // If it's already a simple valid string
+    const str = String(val).trim();
+    if (/^\d{2}:\d{2}$/.test(str)) return str;
+    return "";
+  }
   const h = Math.floor(min / 60) % 24;
   const m = min % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+const KNOWN_TIME_KEYS = new Set([
+  "jam_masuk_mulai",
+  "jam_masuk_batas",
+  "jam_pulang_mulai",
+  "jam_masuk",
+  "jam_pulang",
+  "jam_mulai",
+  "jam_selesai",
+  "waktu_absen",
+  "jam_mulai_jadwal",
+  "jam_selesai_jadwal",
+  "backupJam",
+  "jam_batas_alfa",
+  "jamMasukMulai",
+  "jamMasukBatas",
+  "jamPulangMulai"
+]);
+
+export function sanitizeTimeFields<T>(data: T): T {
+  if (data === null || data === undefined) return data;
+  if (typeof data !== "object") {
+    if (typeof data === "string" && (data.includes("1899-") || data.includes("1900-"))) {
+      return (cleanTimeHHMM(data) || data) as any;
+    }
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data.map((item) => sanitizeTimeFields(item)) as any;
+  }
+  const result: any = { ...(data as any) };
+  for (const key of Object.keys(result)) {
+    const val = result[key];
+    const kLower = key.toLowerCase();
+    const isTimeKey =
+      KNOWN_TIME_KEYS.has(key) ||
+      kLower.startsWith("jam_") ||
+      kLower.endsWith("_jam") ||
+      kLower.includes("waktu_absen") ||
+      kLower.includes("jam_mulai") ||
+      kLower.includes("jam_selesai") ||
+      kLower.includes("jam_masuk") ||
+      kLower.includes("jam_pulang");
+
+    if (isTimeKey && val !== null && val !== undefined) {
+      if (typeof val === "string" || typeof val === "number") {
+        const cleaned = cleanTimeHHMM(val);
+        if (cleaned) {
+          result[key] = cleaned;
+        }
+      }
+    } else if (typeof val === "object" && val !== null) {
+      result[key] = sanitizeTimeFields(val);
+    }
+  }
+  return result;
 }
 
 // Main bridge function to invoke Apps Script Web App actions
@@ -2984,13 +3083,15 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
       }
     }
 
+    const cleanBodyObj = sanitizeTimeFields(bodyObj);
+
     const response = await fetch(url, {
       method: "POST",
       mode: "cors",
       headers: {
         "Content-Type": "text/plain",
       },
-      body: JSON.stringify(bodyObj),
+      body: JSON.stringify(cleanBodyObj),
       signal: controller.signal
     });
     clearTimeout(timeoutId);
@@ -2999,7 +3100,9 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
       throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
     }
     
-    const result = await response.json();
+    const rawResult = await response.json();
+    const result = sanitizeTimeFields(rawResult);
+
     if (result && result.success === false && result.message && (
       result.message.includes("tidak diizinkan") || 
       result.message.includes("tidak dikenal") ||
