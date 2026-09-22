@@ -1449,54 +1449,73 @@ export default function AutoScannerBoard({ session }: { session?: any }) {
                 <div className="flex items-center justify-between text-xs text-slate-400 border-b border-slate-800 pb-2">
                   <span className="font-bold text-slate-200 flex items-center gap-1.5">
                     <Layers className="w-3.5 h-3.5 text-amber-400" />
-                    Jalur Antrian Berjalan (FIFO)
+                    Jalur Antrian Berjalan (Terbaru di Atas • Proses Tetap Urutan #1)
                   </span>
                   <span className="font-mono text-[11px] text-amber-300">
                     Total: {scanQueue.length} scan
                   </span>
                 </div>
 
-                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 text-xs">
-                  {scanQueue.map((qItem, idx) => (
-                    <div 
-                      key={qItem.queueId}
-                      className={`p-2 rounded-lg flex items-center justify-between gap-2 border transition ${
-                        idx === 0 
-                          ? "bg-amber-500/15 border-amber-500/40 text-amber-200 font-bold" 
-                          : "bg-slate-800/60 border-slate-700/50 text-slate-300"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-black ${
-                          idx === 0 ? "bg-amber-500 text-slate-950" : "bg-slate-700 text-slate-300"
-                        }`}>
-                          #{idx + 1}
-                        </span>
-                        
-                        <div className="truncate">
-                          <span className="font-extrabold text-white text-xs mr-1.5">
-                            {qItem.previewName || qItem.rawCode}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-normal">
-                            ({qItem.previewRole || "ID"} • {qItem.previewSubDetail || qItem.rawCode})
-                          </span>
-                        </div>
-                      </div>
+                <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1 text-xs">
+                  {[...scanQueue]
+                    .map((qItem, originalIdx) => ({ qItem, originalIdx }))
+                    .reverse()
+                    .map(({ qItem, originalIdx }) => {
+                      const isProcessingNow = originalIdx === 0;
+                      const isNewest = originalIdx === scanQueue.length - 1 && scanQueue.length > 1;
 
-                      <div className="shrink-0 flex items-center gap-1.5 text-[10px] font-mono">
-                        {idx === 0 ? (
-                          <span className="text-amber-400 flex items-center gap-1 font-bold">
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                            Memproses...
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">
-                            Antri ({qItem.enqueuedAt})
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                      return (
+                        <div 
+                          key={qItem.queueId}
+                          className={`p-2 rounded-lg flex items-center justify-between gap-2 border transition ${
+                            isProcessingNow 
+                              ? "bg-amber-500/15 border-amber-500/40 text-amber-200 font-bold" 
+                              : isNewest
+                              ? "bg-indigo-950/60 border-indigo-500/40 text-indigo-200"
+                              : "bg-slate-800/60 border-slate-700/50 text-slate-300"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-black ${
+                              isProcessingNow 
+                                ? "bg-amber-500 text-slate-950" 
+                                : isNewest
+                                ? "bg-indigo-500 text-white"
+                                : "bg-slate-700 text-slate-300"
+                            }`}>
+                              #{originalIdx + 1}
+                            </span>
+                            
+                            <div className="truncate">
+                              <span className="font-extrabold text-white text-xs mr-1.5">
+                                {qItem.previewName || qItem.rawCode}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-normal">
+                                ({qItem.previewRole || "ID"} • {qItem.previewSubDetail || qItem.rawCode})
+                              </span>
+                              {isNewest && (
+                                <span className="ml-1.5 text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
+                                  Baru Di-scan
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 flex items-center gap-1.5 text-[10px] font-mono">
+                            {isProcessingNow ? (
+                              <span className="text-amber-400 flex items-center gap-1 font-bold">
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                Sedang Diproses...
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">
+                                Antri #{originalIdx + 1} ({qItem.enqueuedAt})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
             )}
