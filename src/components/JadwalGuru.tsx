@@ -104,9 +104,14 @@ export default function JadwalGuru({ session }: { session?: any }) {
   const [selectedGuruFilter, setSelectedGuruFilter] = useState("Semua");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Pagination for Schedule Table
+  // Pagination for Schedule Table (Jadwal Pelajaran)
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [itemsPerPage, setItemsPerPage] = useState<number | "semua">(10);
+
+  // Pagination for Presensi Mengajar Table
+  const [currentPageAbsensi, setCurrentPageAbsensi] = useState(1);
+  const [itemsPerPageAbsensi, setItemsPerPageAbsensi] = useState<number | "semua">(10);
+  const [searchAbsensiQuery, setSearchAbsensiQuery] = useState("");
 
   // Modal: Add/Edit Schedule Lesson
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -159,7 +164,7 @@ export default function JadwalGuru({ session }: { session?: any }) {
   const [flexFilterHari, setFlexFilterHari] = useState<string>("Semua");
   const [flexSearchQuery, setFlexSearchQuery] = useState<string>("");
   const [flexCurrentPage, setFlexCurrentPage] = useState<number>(1);
-  const [flexItemsPerPage, setFlexItemsPerPage] = useState<number>(10);
+  const [flexItemsPerPage, setFlexItemsPerPage] = useState<number | "semua">(10);
   const [flexForm, setFlexForm] = useState({
     id_jadwal: "",
     id_guru: "",
@@ -713,9 +718,12 @@ export default function JadwalGuru({ session }: { session?: any }) {
     return matchHari && matchKelas && matchGuru && matchSearch;
   });
 
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedSchedules = filteredSchedules.slice(startIndex, startIndex + itemsPerPage);
-  const totalPages = Math.ceil(filteredSchedules.length / itemsPerPage);
+  const effectiveItemsPerPage = itemsPerPage === "semua" ? Math.max(1, filteredSchedules.length) : itemsPerPage;
+  const totalPages = itemsPerPage === "semua" ? 1 : Math.max(1, Math.ceil(filteredSchedules.length / effectiveItemsPerPage));
+  const startIndex = itemsPerPage === "semua" ? 0 : (currentPage - 1) * effectiveItemsPerPage;
+  const paginatedSchedules = itemsPerPage === "semua" 
+    ? filteredSchedules 
+    : filteredSchedules.slice(startIndex, startIndex + effectiveItemsPerPage);
 
   // Filtered & Paginated Flex Schedules (Tab Jadwal Khusus Guru)
   const filteredFlexSchedules = flexSchedules.filter((item) => {
@@ -738,9 +746,12 @@ export default function JadwalGuru({ session }: { session?: any }) {
     return matchGuru && matchHari && matchSearch;
   });
 
-  const totalFlexPages = Math.max(1, Math.ceil(filteredFlexSchedules.length / flexItemsPerPage));
-  const flexStartIndex = (flexCurrentPage - 1) * flexItemsPerPage;
-  const paginatedFlexSchedules = filteredFlexSchedules.slice(flexStartIndex, flexStartIndex + flexItemsPerPage);
+  const effectiveFlexPerPage = flexItemsPerPage === "semua" ? Math.max(1, filteredFlexSchedules.length) : flexItemsPerPage;
+  const totalFlexPages = flexItemsPerPage === "semua" ? 1 : Math.max(1, Math.ceil(filteredFlexSchedules.length / effectiveFlexPerPage));
+  const flexStartIndex = flexItemsPerPage === "semua" ? 0 : (flexCurrentPage - 1) * effectiveFlexPerPage;
+  const paginatedFlexSchedules = flexItemsPerPage === "semua"
+    ? filteredFlexSchedules
+    : filteredFlexSchedules.slice(flexStartIndex, flexStartIndex + effectiveFlexPerPage);
 
   const activeSlot = getActiveSlotNow();
   const todayHari = getHariIniStr();
@@ -1060,37 +1071,102 @@ export default function JadwalGuru({ session }: { session?: any }) {
                   </table>
                 </div>
 
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between border-t border-gray-100 bg-white px-6 py-4">
-                    <p className="text-xs text-gray-500 font-semibold">
-                      Menampilkan <span className="font-bold text-gray-950">{startIndex + 1}</span> -{" "}
-                      <span className="font-bold text-gray-950">
-                        {Math.min(startIndex + itemsPerPage, filteredSchedules.length)}
+                {/* Pagination Controls Jadwal Pelajaran */}
+                <div className="p-4 sm:px-6 border-t border-gray-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2 text-gray-600 font-medium">
+                      <span className="text-gray-500 font-semibold">Tampilkan:</span>
+                      <div className="inline-flex rounded-xl bg-gray-100 p-0.5 border border-gray-200/80">
+                        {([10, 20, 50, "semua"] as const).map((opt) => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => {
+                              setItemsPerPage(opt);
+                              setCurrentPage(1);
+                            }}
+                            className={`px-2.5 py-1 text-xs font-extrabold rounded-lg transition cursor-pointer ${
+                              itemsPerPage === opt
+                                ? "bg-white text-amber-800 shadow-xs border border-gray-200/60"
+                                : "text-gray-500 hover:text-gray-900"
+                            }`}
+                          >
+                            {opt === "semua" ? "Semua" : opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <span className="text-gray-300 font-medium hidden sm:inline">|</span>
+
+                    <p className="text-gray-500 font-medium">
+                      Menampilkan <span className="font-bold text-gray-900">{filteredSchedules.length > 0 ? startIndex + 1 : 0}</span> -{" "}
+                      <span className="font-bold text-gray-900">
+                        {Math.min(startIndex + (itemsPerPage === "semua" ? filteredSchedules.length : itemsPerPage), filteredSchedules.length)}
                       </span>{" "}
-                      dari <span className="font-bold text-gray-950">{filteredSchedules.length}</span> jadwal
+                      dari <span className="font-bold text-gray-900">{filteredSchedules.length}</span> jadwal
                     </p>
-                    <div className="flex gap-1">
+                  </div>
+
+                  {itemsPerPage !== "semua" && totalPages > 1 ? (
+                    <div className="flex items-center gap-1">
                       <button
+                        type="button"
                         onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
                         disabled={currentPage === 1}
-                        className="px-3 py-1 text-xs font-bold rounded-lg border border-gray-200 disabled:opacity-40"
+                        className="p-1.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer flex items-center gap-1"
+                        title="Halaman Sebelumnya"
                       >
-                        Prev
+                        <ChevronLeft className="w-4 h-4" />
+                        <span className="hidden sm:inline font-bold text-xs pr-1">Prev</span>
                       </button>
-                      <span className="px-3 py-1 text-xs font-bold text-gray-600">
-                        {currentPage} / {totalPages}
-                      </span>
+
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
+                        if (
+                          totalPages > 7 &&
+                          pageNum !== 1 &&
+                          pageNum !== totalPages &&
+                          Math.abs(pageNum - currentPage) > 1
+                        ) {
+                          if (pageNum === 2 || pageNum === totalPages - 1) {
+                            return <span key={pageNum} className="px-1 text-gray-400 font-bold">...</span>;
+                          }
+                          return null;
+                        }
+
+                        return (
+                          <button
+                            key={pageNum}
+                            type="button"
+                            onClick={() => setCurrentPage(pageNum)}
+                            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl font-bold text-xs transition cursor-pointer flex items-center justify-center ${
+                              currentPage === pageNum
+                                ? "bg-amber-600 text-white shadow-xs font-extrabold"
+                                : "text-gray-600 hover:bg-gray-100 border border-gray-200"
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+
                       <button
+                        type="button"
                         onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
                         disabled={currentPage === totalPages}
-                        className="px-3 py-1 text-xs font-bold rounded-lg border border-gray-200 disabled:opacity-40"
+                        className="p-1.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer flex items-center gap-1"
+                        title="Halaman Berikutnya"
                       >
-                        Next
+                        <span className="hidden sm:inline font-bold text-xs pl-1">Next</span>
+                        <ChevronRight className="w-4 h-4" />
                       </button>
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/60">
+                      {itemsPerPage === "semua" ? "Menampilkan Semua Jadwal" : `Halaman 1 dari ${totalPages}`}
+                    </span>
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -1162,20 +1238,39 @@ export default function JadwalGuru({ session }: { session?: any }) {
                 <p className="text-xs text-gray-500 font-medium">Log kehadiran guru di setiap sesi kelas khusus hari ini dengan filter jam</p>
               </div>
 
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-bold text-gray-500 shrink-0">Filter Jam:</label>
-                <select
-                  value={filterJamMengajar}
-                  onChange={(e) => setFilterJamMengajar(e.target.value)}
-                  className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-bold text-gray-700 focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="Semua">Semua Jam Pelajaran</option>
-                  {jamSlots.map((s) => (
-                    <option key={s.id_jam} value={s.jam_ke}>
-                      Jam ke-{s.jam_ke} ({s.jam_mulai} - {s.jam_selesai})
-                    </option>
-                  ))}
-                </select>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="Cari guru, mapel, kelas..."
+                    value={searchAbsensiQuery}
+                    onChange={(e) => {
+                      setSearchAbsensiQuery(e.target.value);
+                      setCurrentPageAbsensi(1);
+                    }}
+                    className="bg-gray-50 border border-gray-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-emerald-500 w-44 sm:w-52"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs font-bold text-gray-500 shrink-0">Filter Jam:</label>
+                  <select
+                    value={filterJamMengajar}
+                    onChange={(e) => {
+                      setFilterJamMengajar(e.target.value);
+                      setCurrentPageAbsensi(1);
+                    }}
+                    className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-bold text-gray-700 focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="Semua">Semua Jam Pelajaran</option>
+                    {jamSlots.map((s) => (
+                      <option key={s.id_jam} value={s.jam_ke}>
+                        Jam ke-{s.jam_ke} ({s.jam_mulai} - {s.jam_selesai})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -1191,7 +1286,13 @@ export default function JadwalGuru({ session }: { session?: any }) {
                 const logTgl = String(log.tanggal || "").split("T")[0].trim();
                 const isToday = !logTgl || logTgl === todayLocalStr || logTgl === todayIsoStr;
                 const matchJam = filterJamMengajar === "Semua" || Number(filterJamMengajar) === Number(log.jam_ke);
-                return isToday && matchJam;
+                const q = searchAbsensiQuery.toLowerCase().trim();
+                const matchSearch = !q ||
+                  String(log.nama_guru || "").toLowerCase().includes(q) ||
+                  String(log.mapel || "").toLowerCase().includes(q) ||
+                  String(log.kelas || "").toLowerCase().includes(q) ||
+                  String(log.status || "").toLowerCase().includes(q);
+                return isToday && matchJam && matchSearch;
               });
 
               if (filteredTodayLogs.length === 0) {
@@ -1204,69 +1305,175 @@ export default function JadwalGuru({ session }: { session?: any }) {
                 );
               }
 
+              const effectiveAbsensiPerPage = itemsPerPageAbsensi === "semua" ? Math.max(1, filteredTodayLogs.length) : itemsPerPageAbsensi;
+              const totalPagesAbsensi = itemsPerPageAbsensi === "semua" ? 1 : Math.max(1, Math.ceil(filteredTodayLogs.length / effectiveAbsensiPerPage));
+              const startAbsensiIndex = itemsPerPageAbsensi === "semua" ? 0 : (currentPageAbsensi - 1) * effectiveAbsensiPerPage;
+              const paginatedTodayLogs = itemsPerPageAbsensi === "semua"
+                ? filteredTodayLogs
+                : filteredTodayLogs.slice(startAbsensiIndex, startAbsensiIndex + effectiveAbsensiPerPage);
+
               return (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-100 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                        <th className="py-3.5 px-5">Tanggal & Waktu</th>
-                        <th className="py-3.5 px-5">Guru Pengampu</th>
-                        <th className="py-3.5 px-5">Kelas & Mapel</th>
-                        <th className="py-3.5 px-5">Jam Ke</th>
-                        <th className="py-3.5 px-5">Status Presensi</th>
-                        <th className="py-3.5 px-5">Jurnal / Catatan Materi</th>
-                        <th className="py-3.5 px-5 text-center">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50 text-xs text-gray-700">
-                      {filteredTodayLogs.map((log) => (
-                        <tr key={log.id_log_mengajar} className="hover:bg-amber-50/20 transition-all">
-                          <td className="py-3.5 px-5 font-mono">
-                            <div className="font-bold text-gray-900">{log.tanggal}</div>
-                            <div className="text-[10px] text-gray-500 flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-amber-500" />
-                              {log.waktu_absen} WIB ({log.hari})
-                            </div>
-                          </td>
-                          <td className="py-3.5 px-5 font-bold text-gray-900">
-                            {log.nama_guru}
-                          </td>
-                          <td className="py-3.5 px-5">
-                            <div className="font-extrabold text-indigo-950">{log.mapel}</div>
-                            <div className="text-[11px] font-bold text-blue-600">Kelas: {log.kelas}</div>
-                          </td>
-                          <td className="py-3.5 px-5 font-mono font-bold">
-                            Jam {log.jam_ke}
-                            <div className="text-[10px] text-gray-400">{log.jam_mulai_jadwal} - {log.jam_selesai_jadwal}</div>
-                          </td>
-                          <td className="py-3.5 px-5 font-bold">
-                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-extrabold border ${
-                              log.status === "Hadir Tepat Waktu"
-                                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                                : log.status === "Terlambat Masuk Kelas"
-                                ? "bg-rose-50 text-rose-800 border-rose-200"
-                                : "bg-amber-50 text-amber-800 border-amber-200"
-                            }`}>
-                              {log.status}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-5 text-gray-600 max-w-xs truncate">
-                            {log.catatan_materi || "-"}
-                          </td>
-                          <td className="py-3.5 px-5 text-center">
-                            <button
-                              onClick={() => handleDeleteAbsensiMengajar(log.id_log_mengajar)}
-                              className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-                              title="Hapus Log"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-100 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                          <th className="py-3.5 px-5">Tanggal & Waktu</th>
+                          <th className="py-3.5 px-5">Guru Pengampu</th>
+                          <th className="py-3.5 px-5">Kelas & Mapel</th>
+                          <th className="py-3.5 px-5">Jam Ke</th>
+                          <th className="py-3.5 px-5">Status Presensi</th>
+                          <th className="py-3.5 px-5">Jurnal / Catatan Materi</th>
+                          <th className="py-3.5 px-5 text-center">Aksi</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50 text-xs text-gray-700">
+                        {paginatedTodayLogs.map((log) => (
+                          <tr key={log.id_log_mengajar} className="hover:bg-amber-50/20 transition-all">
+                            <td className="py-3.5 px-5 font-mono">
+                              <div className="font-bold text-gray-900">{log.tanggal}</div>
+                              <div className="text-[10px] text-gray-500 flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-amber-500" />
+                                {log.waktu_absen} WIB ({log.hari})
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-5 font-bold text-gray-900">
+                              {log.nama_guru}
+                            </td>
+                            <td className="py-3.5 px-5">
+                              <div className="font-extrabold text-indigo-950">{log.mapel}</div>
+                              <div className="text-[11px] font-bold text-blue-600">Kelas: {log.kelas}</div>
+                            </td>
+                            <td className="py-3.5 px-5 font-mono font-bold">
+                              Jam {log.jam_ke}
+                              <div className="text-[10px] text-gray-400">{log.jam_mulai_jadwal} - {log.jam_selesai_jadwal}</div>
+                            </td>
+                            <td className="py-3.5 px-5 font-bold">
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-extrabold border ${
+                                log.status === "Hadir Tepat Waktu"
+                                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                  : log.status === "Terlambat Masuk Kelas"
+                                  ? "bg-rose-50 text-rose-800 border-rose-200"
+                                  : "bg-amber-50 text-amber-800 border-amber-200"
+                              }`}>
+                                {log.status}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-5 text-gray-600 max-w-xs truncate">
+                              {log.catatan_materi || "-"}
+                            </td>
+                            <td className="py-3.5 px-5 text-center">
+                              <button
+                                onClick={() => handleDeleteAbsensiMengajar(log.id_log_mengajar)}
+                                className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                                title="Hapus Log"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination Controls Presensi Mengajar */}
+                  <div className="p-4 sm:px-6 border-t border-gray-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="flex items-center gap-2 text-gray-600 font-medium">
+                        <span className="text-gray-500 font-semibold">Tampilkan:</span>
+                        <div className="inline-flex rounded-xl bg-gray-100 p-0.5 border border-gray-200/80">
+                          {([10, 20, 50, "semua"] as const).map((opt) => (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => {
+                                setItemsPerPageAbsensi(opt);
+                                setCurrentPageAbsensi(1);
+                              }}
+                              className={`px-2.5 py-1 text-xs font-extrabold rounded-lg transition cursor-pointer ${
+                                itemsPerPageAbsensi === opt
+                                  ? "bg-white text-emerald-800 shadow-xs border border-gray-200/60"
+                                  : "text-gray-500 hover:text-gray-900"
+                              }`}
+                            >
+                              {opt === "semua" ? "Semua" : opt}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <span className="text-gray-300 font-medium hidden sm:inline">|</span>
+
+                      <p className="text-gray-500 font-medium">
+                        Menampilkan <span className="font-bold text-gray-900">{filteredTodayLogs.length > 0 ? startAbsensiIndex + 1 : 0}</span> -{" "}
+                        <span className="font-bold text-gray-900">
+                          {Math.min(startAbsensiIndex + (itemsPerPageAbsensi === "semua" ? filteredTodayLogs.length : itemsPerPageAbsensi), filteredTodayLogs.length)}
+                        </span>{" "}
+                        dari <span className="font-bold text-gray-900">{filteredTodayLogs.length}</span> presensi mengajar
+                      </p>
+                    </div>
+
+                    {itemsPerPageAbsensi !== "semua" && totalPagesAbsensi > 1 ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPageAbsensi(p => Math.max(p - 1, 1))}
+                          disabled={currentPageAbsensi === 1}
+                          className="p-1.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer flex items-center gap-1"
+                          title="Halaman Sebelumnya"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                          <span className="hidden sm:inline font-bold text-xs pr-1">Prev</span>
+                        </button>
+
+                        {Array.from({ length: totalPagesAbsensi }, (_, i) => i + 1).map((pageNum) => {
+                          if (
+                            totalPagesAbsensi > 7 &&
+                            pageNum !== 1 &&
+                            pageNum !== totalPagesAbsensi &&
+                            Math.abs(pageNum - currentPageAbsensi) > 1
+                          ) {
+                            if (pageNum === 2 || pageNum === totalPagesAbsensi - 1) {
+                              return <span key={pageNum} className="px-1 text-gray-400 font-bold">...</span>;
+                            }
+                            return null;
+                          }
+
+                          return (
+                            <button
+                              key={pageNum}
+                              type="button"
+                              onClick={() => setCurrentPageAbsensi(pageNum)}
+                              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl font-bold text-xs transition cursor-pointer flex items-center justify-center ${
+                                currentPageAbsensi === pageNum
+                                  ? "bg-emerald-600 text-white shadow-xs font-extrabold"
+                                  : "text-gray-600 hover:bg-gray-100 border border-gray-200"
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        })}
+
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPageAbsensi(p => Math.min(p + 1, totalPagesAbsensi))}
+                          disabled={currentPageAbsensi === totalPagesAbsensi}
+                          className="p-1.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer flex items-center gap-1"
+                          title="Halaman Berikutnya"
+                        >
+                          <span className="hidden sm:inline font-bold text-xs pl-1">Next</span>
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200/60">
+                        {itemsPerPageAbsensi === "semua" ? "Menampilkan Semua Presensi" : `Halaman 1 dari ${totalPagesAbsensi}`}
+                      </span>
+                    )}
+                  </div>
+                </>
               );
             })()}
           </div>
@@ -1798,74 +2005,99 @@ export default function JadwalGuru({ session }: { session?: any }) {
 
                 {/* PAGINATION CONTROLS */}
                 <div className="p-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2 text-gray-500 font-medium">
-                    <span>Baris per halaman:</span>
-                    <select
-                      value={flexItemsPerPage}
-                      onChange={(e) => {
-                        setFlexItemsPerPage(Number(e.target.value));
-                        setFlexCurrentPage(1);
-                      }}
-                      className="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 font-bold text-gray-800 focus:outline-none focus:border-amber-500"
-                    >
-                      <option value={5}>5</option>
-                      <option value={10}>10</option>
-                      <option value={25}>25</option>
-                      <option value={50}>50</option>
-                    </select>
-                    <span>
-                      ({flexStartIndex + 1} - {Math.min(flexStartIndex + flexItemsPerPage, filteredFlexSchedules.length)} dari <strong>{filteredFlexSchedules.length}</strong>)
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2 text-gray-600 font-medium">
+                      <span className="text-gray-500 font-semibold">Tampilkan:</span>
+                      <div className="inline-flex rounded-xl bg-gray-100 p-0.5 border border-gray-200/80">
+                        {([10, 20, 50, "semua"] as const).map((opt) => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => {
+                              setFlexItemsPerPage(opt);
+                              setFlexCurrentPage(1);
+                            }}
+                            className={`px-2.5 py-1 text-xs font-extrabold rounded-lg transition cursor-pointer ${
+                              flexItemsPerPage === opt
+                                ? "bg-white text-amber-800 shadow-xs border border-gray-200/60"
+                                : "text-gray-500 hover:text-gray-900"
+                            }`}
+                          >
+                            {opt === "semua" ? "Semua" : opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <span className="text-gray-300 font-medium hidden sm:inline">|</span>
+
+                    <span className="text-gray-500 font-medium">
+                      Menampilkan <span className="font-bold text-gray-900">{filteredFlexSchedules.length > 0 ? flexStartIndex + 1 : 0}</span> -{" "}
+                      <span className="font-bold text-gray-900">
+                        {Math.min(flexStartIndex + (flexItemsPerPage === "semua" ? filteredFlexSchedules.length : flexItemsPerPage), filteredFlexSchedules.length)}
+                      </span>{" "}
+                      dari <span className="font-bold text-gray-900">{filteredFlexSchedules.length}</span> jadwal khusus
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      disabled={flexCurrentPage === 1}
-                      onClick={() => setFlexCurrentPage((p) => Math.max(1, p - 1))}
-                      className="p-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
+                  {flexItemsPerPage !== "semua" && totalFlexPages > 1 ? (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={flexCurrentPage === 1}
+                        onClick={() => setFlexCurrentPage((p) => Math.max(1, p - 1))}
+                        className="p-1.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer flex items-center gap-1"
+                        title="Halaman Sebelumnya"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        <span className="hidden sm:inline font-bold text-xs pr-1">Prev</span>
+                      </button>
 
-                    {Array.from({ length: totalFlexPages }, (_, i) => i + 1).map((pageNum) => {
-                      if (
-                        pageNum === 1 || 
-                        pageNum === totalFlexPages || 
-                        (pageNum >= flexCurrentPage - 1 && pageNum <= flexCurrentPage + 1)
-                      ) {
-                        return (
-                          <button
-                            key={pageNum}
-                            type="button"
-                            onClick={() => setFlexCurrentPage(pageNum)}
-                            className={`w-8 h-8 rounded-xl font-bold text-xs transition cursor-pointer ${
-                              flexCurrentPage === pageNum
-                                ? "bg-amber-600 text-white shadow-sm"
-                                : "text-gray-600 hover:bg-gray-100 border border-gray-200"
-                            }`}
-                          >
-                            {pageNum}
-                          </button>
-                        );
-                      } else if (
-                        pageNum === flexCurrentPage - 2 || 
-                        pageNum === flexCurrentPage + 2
-                      ) {
-                        return <span key={pageNum} className="px-1 text-gray-400 font-bold">...</span>;
-                      }
-                      return null;
-                    })}
+                      {Array.from({ length: totalFlexPages }, (_, i) => i + 1).map((pageNum) => {
+                        if (
+                          pageNum === 1 || 
+                          pageNum === totalFlexPages || 
+                          (pageNum >= flexCurrentPage - 1 && pageNum <= flexCurrentPage + 1)
+                        ) {
+                          return (
+                            <button
+                              key={pageNum}
+                              type="button"
+                              onClick={() => setFlexCurrentPage(pageNum)}
+                              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl font-bold text-xs transition cursor-pointer flex items-center justify-center ${
+                                flexCurrentPage === pageNum
+                                  ? "bg-amber-600 text-white shadow-xs font-extrabold"
+                                  : "text-gray-600 hover:bg-gray-100 border border-gray-200"
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        } else if (
+                          pageNum === flexCurrentPage - 2 || 
+                          pageNum === flexCurrentPage + 2
+                        ) {
+                          return <span key={pageNum} className="px-1 text-gray-400 font-bold">...</span>;
+                        }
+                        return null;
+                      })}
 
-                    <button
-                      type="button"
-                      disabled={flexCurrentPage === totalFlexPages}
-                      onClick={() => setFlexCurrentPage((p) => Math.min(totalFlexPages, p + 1))}
-                      className="p-2 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
+                      <button
+                        type="button"
+                        disabled={flexCurrentPage === totalFlexPages}
+                        onClick={() => setFlexCurrentPage((p) => Math.min(totalFlexPages, p + 1))}
+                        className="p-1.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer flex items-center gap-1"
+                        title="Halaman Berikutnya"
+                      >
+                        <span className="hidden sm:inline font-bold text-xs pl-1">Next</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/60">
+                      {flexItemsPerPage === "semua" ? "Menampilkan Semua Jadwal Khusus" : `Halaman 1 dari ${totalFlexPages}`}
+                    </span>
+                  )}
                 </div>
               </>
             )}
