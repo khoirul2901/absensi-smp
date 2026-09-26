@@ -132,7 +132,8 @@ export default function Laporan() {
     setBulanMinta(curMonth);
     
     const todayStr = d.toISOString().split("T")[0];
-    setTanggalMulai(todayStr);
+    const firstDayOfMonth = `${curMonth}-01`;
+    setTanggalMulai(firstDayOfMonth);
     setTanggalSelesai(todayStr);
   }, []);
 
@@ -303,45 +304,273 @@ export default function Laporan() {
           return matchDate && matchClass && matchGuru;
         });
 
-        setMengajarLogs(filtered);
+        // 1. Fetch teacher master list if needed
+        let currentGuruList = guruList;
+        if (!currentGuruList || currentGuruList.length === 0) {
+          try {
+            let resG = await callGas("getDataMaster", ["Guru"]);
+            let listG = extractArrayData(resG);
+            if (!listG || listG.length === 0) {
+              resG = await callGas("getDataGuru");
+              listG = extractArrayData(resG);
+            }
+            if (!listG || listG.length === 0) {
+              listG = getStorage("data_guru") || [];
+            }
+            currentGuruList = listG.map((item: any) => ({
+              id_guru: item.id_guru || item.id || "",
+              nama_guru: item.nama_guru || item.nama || item.name || String(item)
+            })).filter((g: any) => g.nama_guru);
+            if (currentGuruList.length > 0) {
+              setGuruList(currentGuruList);
+            }
+          } catch (e) {}
+        }
 
-        // Compute group rekap for Mengajar
-        const guruGroup: Record<string, { id_guru: string; nama_guru: string; total: number; tepat: number; terlambat: number; izinSakit: number; tidakHadir: number }> = {};
-        filtered.forEach((item) => {
-          const key = item.id_guru || item.nama_guru || "GURU";
-          if (!guruGroup[key]) {
-            guruGroup[key] = {
-              id_guru: item.id_guru || "-",
-              nama_guru: item.nama_guru || "-",
-              total: 0,
-              tepat: 0,
-              terlambat: 0,
-              izinSakit: 0,
-              tidakHadir: 0
-            };
+        // 2. Fetch lesson schedules (jadwal pelajaran / mengajar)
+        let schedRes = await callGas("getJadwalPelajaranSemua");
+        let rawSchedules: any[] = extractArrayData(schedRes);
+        if (!rawSchedules || rawSchedules.length === 0) {
+          const schedRes2 = await callGas("getJadwalPelajaran");
+          rawSchedules = extractArrayData(schedRes2);
+        }
+        if (!rawSchedules || rawSchedules.length === 0) {
+          rawSchedules = getStorage("jadwal_pelajaran") || [];
+        }
+
+        // 3. Determine active school days in the filtered range (excluding Sundays & holidays, up to today)
+        const todayStr = new Date().toISOString().split("T")[0];
+        let rStart = jenisFilter === "rentang" ? (tanggalMulai || todayStr) : `${bulanMinta || todayStr.substring(0, 7)}-01`;
+        let rEnd = jenisFilter === "rentang" ? (tanggalSelesai || todayStr) : todayStr;
+        if (jenisFilter === "bulan" && bulanMinta) {
+          const [yr, mo] = bulanMinta.split("-").map(Number);
+          const lastD = new Date(yr, mo, 0).getDate();
+          rEnd = `${bulanMinta}-${String(lastD).padStart(2, "0")}`;
+        }
+        if (rEnd > todayStr) rEnd = todayStr; // Absent sessions only evaluated up to current date
+
+        const holidayDates = new Set((getStorage("hari_libur") || []).map((h: any) => formatToIsoDate(h.tanggal)));
+        const indoDays = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+        const activeSchoolDates: { dateIso: string; dayName: string }[] = [];
+
+        if (rStart && rEnd && rStart <= rEnd) {
+          const curD = new Date(rStart + "T00:00:00");
+          const endD = new Date(rEnd + "T00:00:00");
+          while (curD <= endD) {
+            const dIso = curD.toISOString().split("T")[0];
+            const dWeek = curD.getDay(); // 0 is Sunday
+            if (dWeek !== 0 && !holidayDates.has(dIso)) {
+              activeSchoolDates.push({ dateIso: dIso, dayName: indoDays[dWeek] });
+            }
+            curD.setDate(curD.getDate() + 1);
           }
-          guruGroup[key].total += 1;
-          const st = String(item.status || "");
-          if (st.includes("Tepat")) {
-            guruGroup[key].tepat += 1;
-          } else if (st.includes("Terlambat")) {
-            guruGroup[key].terlambat += 1;
-          } else if (st.includes("Tidak Hadir") || st.includes("Alfa")) {
-            guruGroup[key].tidakHadir += 1;
-          } else {
-            guruGroup[key].izinSakit += 1;
+        }
+
+        // Helpers for matching teacher, class, and time
+        const isMatchGuru = (id1: string, name1: string, id2: string, name2: string) => {
+          const cleanId1 = String(id1 || "").trim().toLowerCase();
+          const cleanId2 = String(id2 || "").trim().toLowerCase();
+          if (cleanId1 && cleanId2) {
+            if (cleanId1 === cleanId2) return true;
+            const stripped1 = cleanId1.replace(/^(guru|id|nip|g)[_:\-\s]+/i, "");
+            const stripped2 = cleanId2.replace(/^(guru|id|nip|g)[_:\-\s]+/i, "");
+            if (stripped1 && stripped2 && stripped1 === stripped2) return true;
+          }
+          const cleanName1 = String(name1 || "").trim().toLowerCase();
+          const cleanName2 = String(name2 || "").trim().toLowerCase();
+          if (cleanName1 && cleanName2) {
+            if (cleanName1 === cleanName2 || cleanName1.includes(cleanName2) || cleanName2.includes(cleanName1)) {
+              return true;
+            }
+          }
+          return false;
+        };
+
+        const isMatchClass = (itemKelas: string, filterKelas: string) => {
+          if (!filterKelas || filterKelas === "Semua") return true;
+          const k1 = String(itemKelas || "").toLowerCase().replace(/[\s-]+/g, "");
+          const k2 = filterKelas.toLowerCase().replace(/[\s-]+/g, "");
+          return k1.includes(k2) || k2.includes(k1);
+        };
+
+        const isSessionDue = (dateIso: string, jamSelesai: string, jamMulai: string) => {
+          if (dateIso < todayStr) return true;
+          if (dateIso > todayStr) return false;
+          const nowHM = new Date().toTimeString().slice(0, 5);
+          const targetEnd = (jamSelesai && jamSelesai !== "-") ? jamSelesai : ((jamMulai && jamMulai !== "-") ? jamMulai : "15:30");
+          return nowHM >= targetEnd;
+        };
+
+        // 4. Combine all known teachers from master, schedules, and logs
+        const teacherMap = new Map<string, { id_guru: string; nama_guru: string }>();
+        currentGuruList.forEach(g => {
+          const key = g.id_guru || g.nama_guru;
+          if (key) teacherMap.set(key, { id_guru: g.id_guru || "-", nama_guru: g.nama_guru || "-" });
+        });
+        rawSchedules.forEach((s: any) => {
+          const key = s.id_guru || s.nama_guru;
+          if (key && !teacherMap.has(key)) {
+            let foundKey: string | null = null;
+            for (const [k, t] of teacherMap.entries()) {
+              if (isMatchGuru(t.id_guru, t.nama_guru, s.id_guru, s.nama_guru)) {
+                foundKey = k;
+                break;
+              }
+            }
+            if (!foundKey) {
+              teacherMap.set(key, { id_guru: s.id_guru || "-", nama_guru: s.nama_guru || "-" });
+            }
+          }
+        });
+        filtered.forEach((item: any) => {
+          const key = item.id_guru || item.nama_guru;
+          if (key && !teacherMap.has(key)) {
+            let foundKey: string | null = null;
+            for (const [k, t] of teacherMap.entries()) {
+              if (isMatchGuru(t.id_guru, t.nama_guru, item.id_guru, item.nama_guru)) {
+                foundKey = k;
+                break;
+              }
+            }
+            if (!foundKey) {
+              teacherMap.set(key, { id_guru: item.id_guru || "-", nama_guru: item.nama_guru || "-" });
+            }
           }
         });
 
-        const rekapList = Object.values(guruGroup).map((g) => {
-          const totalHadir = g.tepat + g.terlambat;
-          const pct = g.total > 0 ? Math.round((totalHadir / g.total) * 100) : 0;
+        // 5. Compute teaching recap based on teaching schedules (Total Jam Sesi dari Jadwal)
+        const missingSessionLogs: AbsensiMengajarItem[] = [];
+
+        const rekapList = Array.from(teacherMap.values()).map(g => {
+          // Find all schedules assigned to this teacher
+          const teacherSchedules = rawSchedules.filter((s: any) => {
+            const matchG = isMatchGuru(g.id_guru, g.nama_guru, s.id_guru, s.nama_guru);
+            const matchC = isMatchClass(s.kelas, selectedKelas);
+            return matchG && matchC;
+          });
+
+          // Teacher attendance logs already filtered by date & class
+          const teacherAttendanceLogs = filtered.filter((item: any) =>
+            isMatchGuru(g.id_guru, g.nama_guru, item.id_guru, item.nama_guru)
+          );
+
+          const matchedLogIds = new Set<string>();
+          let tepat = 0;
+          let terlambat = 0;
+          let izinSakit = 0;
+          let missedScheduledCount = 0;
+          let totalScheduledSessions = 0;
+
+          // For each active date in the range, count scheduled sessions and check attendance
+          activeSchoolDates.forEach(act => {
+            const schedsOnThisDay = teacherSchedules.filter((s: any) =>
+              String(s.hari || "").trim().toLowerCase() === act.dayName.toLowerCase()
+            );
+
+            schedsOnThisDay.forEach((s: any) => {
+              const due = isSessionDue(act.dateIso, s.jam_selesai, s.jam_mulai);
+              if (due) {
+                totalScheduledSessions++;
+
+                // Match with attendance log on this date and schedule slot
+                const matchingLog = teacherAttendanceLogs.find(log => {
+                  if (matchedLogIds.has(log.id_log_mengajar)) return false;
+                  const sameDate = formatToIsoDate(log.tanggal) === act.dateIso;
+                  if (!sameDate) return false;
+
+                  const sameJam = Number(log.jam_ke || 1) === Number(s.jam_ke || 1);
+                  const sameClass = isMatchClass(log.kelas, s.kelas);
+                  const sameMapel = String(log.mapel || "").toLowerCase() === String(s.mapel || "").toLowerCase();
+
+                  return (sameJam && sameClass) || (sameClass && sameMapel) || sameJam;
+                });
+
+                if (matchingLog) {
+                  matchedLogIds.add(matchingLog.id_log_mengajar);
+                  const st = String(matchingLog.status || "");
+                  if (st.includes("Tepat")) {
+                    tepat++;
+                  } else if (st.includes("Terlambat")) {
+                    terlambat++;
+                  } else if (st.includes("Izin") || st.includes("Sakit") || st.includes("Tugas")) {
+                    izinSakit++;
+                  } else {
+                    missedScheduledCount++;
+                  }
+                } else {
+                  // Guru memiliki jadwal tapi TIDAK ADA log presensi (alpa / tidak hadir)
+                  missedScheduledCount++;
+
+                  // Generate synthetic log so it appears with high visibility in Detail Log
+                  missingSessionLogs.push({
+                    id_log_mengajar: `UNATTENDED-${act.dateIso}-${g.id_guru || "G"}-${s.jam_ke || 1}-${Math.floor(Math.random() * 1000)}`,
+                    tanggal: act.dateIso,
+                    waktu_absen: "-",
+                    hari: act.dayName,
+                    id_guru: g.id_guru || s.id_guru || "-",
+                    nama_guru: g.nama_guru || s.nama_guru || "-",
+                    kelas: s.kelas || "-",
+                    mapel: s.mapel || "-",
+                    jam_ke: Number(s.jam_ke || 1),
+                    jam_mulai_jadwal: s.jam_mulai || "-",
+                    jam_selesai_jadwal: s.jam_selesai || "-",
+                    status: "Tidak Hadir (Alpa Jadwal)" as any,
+                    catatan_materi: "Terjadwal mengajar, tidak ada presensi (Auto-Alpa Off)"
+                  });
+                }
+              }
+            });
+          });
+
+          // Process any extra attendance logs not tied to a static schedule slot
+          teacherAttendanceLogs.forEach(log => {
+            if (!matchedLogIds.has(log.id_log_mengajar)) {
+              const st = String(log.status || "");
+              if (st.includes("Tepat")) {
+                tepat++;
+              } else if (st.includes("Terlambat")) {
+                terlambat++;
+              } else if (st.includes("Tidak Hadir") || st.includes("Alfa")) {
+                missedScheduledCount++;
+              } else {
+                izinSakit++;
+              }
+            }
+          });
+
+          // Total Jam Sesi strictly reflects scheduled teaching sessions (or attended if more)
+          const totalAttended = tepat + terlambat + izinSakit + missedScheduledCount;
+          const finalTotalSesi = totalScheduledSessions > 0
+            ? Math.max(totalScheduledSessions, totalAttended)
+            : totalAttended;
+
+          const tidakHadir = totalScheduledSessions > 0
+            ? Math.max(missedScheduledCount, finalTotalSesi - (tepat + terlambat + izinSakit))
+            : missedScheduledCount;
+
+          const totalHadir = tepat + terlambat;
+          const persentaseNum = finalTotalSesi > 0 ? Math.round((totalHadir / finalTotalSesi) * 100) : 0;
+
           return {
-            ...g,
-            persentase: `${pct}%`
+            id_guru: g.id_guru || "-",
+            nama_guru: g.nama_guru || "-",
+            total: finalTotalSesi,
+            tepat,
+            terlambat,
+            izinSakit,
+            tidakHadir,
+            persentase: `${persentaseNum}%`
           };
         });
 
+        // 6. Combine actual logs with missing session logs for Detail Log view
+        const allDetailMengajarLogs = [...filtered, ...missingSessionLogs].sort((a, b) => {
+          const cmpDate = (b.tanggal || "").localeCompare(a.tanggal || "");
+          if (cmpDate !== 0) return cmpDate;
+          return (Number(a.jam_ke || 1)) - (Number(b.jam_ke || 1));
+        });
+
+        setMengajarLogs(allDetailMengajarLogs);
         setRekapMengajarRows(rekapList);
       } else {
         // 1. Fetch from getLaporanFilter first
@@ -421,7 +650,22 @@ export default function Laporan() {
         }).filter((r: any) => Boolean(r.tanggal));
 
         if (normalizedLogs.length > 0) {
-          setStorage(kategori === "Siswa" ? "laporan_siswa" : "laporan_guru", normalizedLogs);
+          // Merge newly fetched logs into existing local storage so historical logs are preserved
+          const currentStorage = getStorage(kategori === "Siswa" ? "laporan_siswa" : "laporan_guru") || [];
+          const existingMap = new Map();
+          currentStorage.forEach((item: any) => {
+            const id = item.id_siswa || item.id_guru || item.id_target || item.id;
+            const tgl = formatToIsoDate(item.tanggal);
+            const key = `${id}_${tgl}`;
+            existingMap.set(key, item);
+          });
+          normalizedLogs.forEach((item: any) => {
+            const id = item.id_siswa || item.id_guru || item.id_target || item.id;
+            const tgl = formatToIsoDate(item.tanggal);
+            const key = `${id}_${tgl}`;
+            existingMap.set(key, item);
+          });
+          setStorage(kategori === "Siswa" ? "laporan_siswa" : "laporan_guru", Array.from(existingMap.values()));
         }
 
         // 4. Apply client-side date & class filter
@@ -443,50 +687,104 @@ export default function Laporan() {
           return matchDate && matchClass;
         });
 
-        if (viewMode === "detail") {
-          setDetailLogs(filtered);
-        } else {
-          // Compute Rekap Persentase
-          let masterRes = await callGas("getDataMaster", [kategori]);
-          let masterData = extractArrayData(masterRes);
-          if (!masterData || masterData.length === 0) {
-            masterRes = await callGas(kategori === "Siswa" ? "getDataSiswa" : "getDataGuru");
-            masterData = extractArrayData(masterRes);
-          }
-          if (!masterData || masterData.length === 0) {
-            masterData = getStorage(kategori === "Siswa" ? "data_siswa" : "data_guru") || [];
-          }
+        // Always update detailLogs
+        setDetailLogs(filtered);
 
-          if (kategori === "Siswa" && selectedKelas && selectedKelas !== "Semua") {
-            const cleanKelas = selectedKelas.toLowerCase().replace(/[\s-]+/g, "");
-            masterData = masterData.filter((m: any) => {
-              const kJur = `${m.kelas || ""} ${m.jurusan || ""}`.toLowerCase().replace(/[\s-]+/g, "");
-              return kJur.includes(cleanKelas) || cleanKelas.includes(kJur);
+        // Compute Rekap Persentase across the entire filtered period
+        let masterRes = await callGas("getDataMaster", [kategori]);
+        let masterData = extractArrayData(masterRes);
+        if (!masterData || masterData.length === 0) {
+          masterRes = await callGas(kategori === "Siswa" ? "getDataSiswa" : "getDataGuru");
+          masterData = extractArrayData(masterRes);
+        }
+        if (!masterData || masterData.length === 0) {
+          masterData = getStorage(kategori === "Siswa" ? "data_siswa" : "data_guru") || [];
+        }
+
+        if (kategori === "Siswa" && selectedKelas && selectedKelas !== "Semua") {
+          const cleanKelas = selectedKelas.toLowerCase().replace(/[\s-]+/g, "");
+          masterData = masterData.filter((m: any) => {
+            const kJur = `${m.kelas || ""} ${m.jurusan || ""}`.toLowerCase().replace(/[\s-]+/g, "");
+            return kJur.includes(cleanKelas) || cleanKelas.includes(kJur);
+          });
+        }
+
+        // Determine all active school days in the filtered period (excluding Sundays & holidays, up to today)
+        const todayStr = new Date().toISOString().split("T")[0];
+        let rStart = jenisFilter === "rentang" ? (tanggalMulai || todayStr) : `${bulanMinta || todayStr.substring(0, 7)}-01`;
+        let rEnd = jenisFilter === "rentang" ? (tanggalSelesai || todayStr) : todayStr;
+        if (jenisFilter === "bulan" && bulanMinta) {
+          const [yr, mo] = bulanMinta.split("-").map(Number);
+          const lastD = new Date(yr, mo, 0).getDate();
+          rEnd = `${bulanMinta}-${String(lastD).padStart(2, "0")}`;
+        }
+        if (rEnd > todayStr) rEnd = todayStr;
+
+        const holidayDates = new Set((getStorage("hari_libur") || []).map((h: any) => formatToIsoDate(h.tanggal)));
+        const activeDates: string[] = [];
+        if (rStart && rEnd && rStart <= rEnd) {
+          const curD = new Date(rStart + "T00:00:00");
+          const endD = new Date(rEnd + "T00:00:00");
+          while (curD <= endD) {
+            const dIso = curD.toISOString().split("T")[0];
+            const dWeek = curD.getDay(); // 0 is Sunday
+            if (dWeek !== 0 && !holidayDates.has(dIso)) {
+              activeDates.push(dIso);
+            }
+            curD.setDate(curD.getDate() + 1);
+          }
+        }
+
+        const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
+        const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
+
+        const rekapList = masterData.map((m: any) => {
+          const idTarget = String(m[idKey] || m.id || m.nisn || m.nip_nuptk || "").trim();
+          const namaTarget = String(m[nameKey] || m.nama || m.name || "Siswa/Guru").trim();
+          const kelasOrJob = kategori === "Siswa" 
+            ? (m.kelas_jurusan || `${m.kelas || ""} ${m.jurusan || ""}`.trim()) 
+            : (m.jabatan_tugas || "-");
+
+          const userRpts = filtered.filter((r: any) => {
+            const rId = String(r.id_siswa || r.id_guru || r.id_target || "").trim();
+            const rNama = String(r.nama_siswa || r.nama_guru || r.nama_target || "").trim();
+            if (idTarget && rId && rId === idTarget) return true;
+            if (namaTarget && rNama && rNama.toLowerCase() === namaTarget.toLowerCase()) return true;
+            return false;
+          });
+
+          const statusByDate = new Map<string, string>();
+          const jamMasuks: string[] = [];
+          const jamPulangs: string[] = [];
+
+          userRpts.forEach((r: any) => {
+            const dIso = formatToIsoDate(r.tanggal);
+            if (dIso) {
+              statusByDate.set(dIso, String(r.status_masuk || r.status || ""));
+            }
+            if (r.jam_masuk && r.jam_masuk !== "-") jamMasuks.push(r.jam_masuk);
+            if (r.jam_pulang && r.jam_pulang !== "-") jamPulangs.push(r.jam_pulang);
+          });
+
+          let hadir = 0;
+          let sakit = 0;
+          let izin = 0;
+          let alfa = 0;
+
+          if (activeDates.length > 0) {
+            activeDates.forEach((dIso) => {
+              const sm = (statusByDate.get(dIso) || "").toLowerCase();
+              if (!sm || sm === "-" || sm === "belum absen" || sm.includes("alfa") || sm.includes("tidak hadir")) {
+                alfa++;
+              } else if (sm.includes("sakit")) {
+                sakit++;
+              } else if (sm.includes("izin") || sm.includes("dispensasi")) {
+                izin++;
+              } else {
+                hadir++;
+              }
             });
-          }
-
-          const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
-          const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
-
-          const rekapList = masterData.map((m: any) => {
-            const idTarget = String(m[idKey] || m.id || m.nisn || m.nip_nuptk || "").trim();
-            const namaTarget = String(m[nameKey] || m.nama || m.name || "Siswa/Guru").trim();
-
-            const userRpts = filtered.filter((r: any) => {
-              const rId = String(r.id_siswa || r.id_guru || r.id_target || "").trim();
-              const rNama = String(r.nama_siswa || r.nama_guru || r.nama_target || "").trim();
-              if (idTarget && rId && rId === idTarget) return true;
-              if (namaTarget && rNama && rNama.toLowerCase() === namaTarget.toLowerCase()) return true;
-              return false;
-            });
-
-            let hadir = 0;
-            let sakit = 0;
-            let izin = 0;
-            let alfa = 0;
-            const jamMasuks: string[] = [];
-            const jamPulangs: string[] = [];
-
+          } else {
             userRpts.forEach((r: any) => {
               const sm = String(r.status_masuk || "").toLowerCase();
               if (sm.includes("tepat") || sm.includes("terlambat") || sm.includes("lupa") || sm.includes("hadir")) {
@@ -500,29 +798,29 @@ export default function Laporan() {
               } else if (r.status_masuk && r.status_masuk !== "-") {
                 hadir++;
               }
-
-              if (r.jam_masuk && r.jam_masuk !== "-") jamMasuks.push(r.jam_masuk);
-              if (r.jam_pulang && r.jam_pulang !== "-") jamPulangs.push(r.jam_pulang);
             });
+          }
 
-            const totalDays = hadir + sakit + izin + alfa;
-            const pct = totalDays === 0 ? "0%" : `${Math.round((hadir / totalDays) * 100)}%`;
+          const totalEffective = activeDates.length > 0 ? activeDates.length : (hadir + sakit + izin + alfa);
+          const pct = totalEffective === 0 ? "0%" : `${Math.round((hadir / totalEffective) * 100)}%`;
 
-            return {
-              id: idTarget,
-              nama: namaTarget,
-              hadir,
-              sakit,
-              izin,
-              alfa,
-              persentase: pct,
-              jam_masuk: jamMasuks.length > 0 ? jamMasuks.join(", ") : "-",
-              jam_pulang: jamPulangs.length > 0 ? jamPulangs.join(", ") : "-"
-            };
-          });
+          return {
+            id: idTarget,
+            nama: namaTarget,
+            kelas: kelasOrJob,
+            hariEfektif: totalEffective,
+            totalHari: totalEffective,
+            hadir,
+            sakit,
+            izin,
+            alfa,
+            persentase: pct,
+            jam_masuk: jamMasuks.length > 0 ? jamMasuks.join(", ") : "-",
+            jam_pulang: jamPulangs.length > 0 ? jamPulangs.join(", ") : "-"
+          };
+        });
 
-          setRekapRows(rekapList);
-        }
+        setRekapRows(rekapList);
       }
     } catch (err: any) {
       setError(err.toString());
@@ -537,7 +835,7 @@ export default function Laporan() {
   }, [kategori, viewMode, jenisFilter, bulanMinta, tanggalMulai, tanggalSelesai, selectedKelas, selectedGuru]);
 
   const handleDeleteMengajarLog = async (idLog: string, namaGuru: string) => {
-    if (!idLog) return;
+    if (!idLog || idLog.startsWith("UNATTENDED")) return;
     const confirmDelete = window.confirm(`Apakah Anda yakin ingin menghapus catatan presensi mengajar guru ${namaGuru}?`);
     if (!confirmDelete) return;
 
@@ -1062,7 +1360,7 @@ export default function Laporan() {
         });
       } else {
         if (filteredRekapMengajarRows.length === 0) return;
-        const headers = ["ID Guru", "Nama Guru", "Total Sesi Mengajar", "Hadir Tepat Waktu", "Terlambat", "Izin/Sakit/Tugas", "Persentase Kehadiran"];
+        const headers = ["ID Guru", "Nama Guru", "Total Jam Sesi", "Hadir Tepat Waktu", "Terlambat", "Izin/Sakit/Tugas", "Tidak Hadir", "Persentase Kehadiran"];
         csvContent += headers.join(",") + "\n";
         filteredRekapMengajarRows.forEach(row => {
           const csvRow = [
@@ -1072,6 +1370,7 @@ export default function Laporan() {
             row.tepat,
             row.terlambat,
             row.izinSakit,
+            row.tidakHadir || 0,
             `"${row.persentase}"`
           ];
           csvContent += csvRow.join(",") + "\n";
@@ -1104,20 +1403,20 @@ export default function Laporan() {
       });
     } else {
       if (rekapRows.length === 0) return;
-      const headers = ["ID", "Nama", "Hadir", "Sakit", "Izin", "Alfa", "Persentase Kehadiran", "Jam Masuk", "Jam Pulang"];
+      const headers = ["ID", "Nama", kategori === "Siswa" ? "Kelas" : "Jabatan", "Hari Efektif", "Hadir", "Sakit", "Izin", "Alfa", "Persentase Kehadiran"];
       csvContent += headers.join(",") + "\n";
       
       rekapRows.forEach(row => {
         const csvRow = [
           row.id,
           `"${row.nama}"`,
+          `"${row.kelas || "-"}"`,
+          row.hariEfektif || row.totalHari || (row.hadir + row.sakit + row.izin + row.alfa),
           row.hadir,
           row.sakit,
           row.izin,
           row.alfa,
-          row.persentase,
-          `"${row.jam_masuk}"`,
-          `"${row.jam_pulang}"`
+          `"${row.persentase}"`
         ];
         csvContent += csvRow.join(",") + "\n";
       });
@@ -1783,14 +2082,20 @@ export default function Laporan() {
                               {row.catatan_materi || "-"}
                             </td>
                             <td className="py-3.5 px-6 text-center print:hidden">
-                              <button
-                                onClick={() => handleDeleteMengajarLog(row.id_log_mengajar || "", row.nama_guru)}
-                                className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 font-bold px-2.5 py-1 rounded-lg text-[11px] transition-colors cursor-pointer"
-                                title="Hapus Log Mengajar"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                                Hapus
-                              </button>
+                              {row.id_log_mengajar && !row.id_log_mengajar.startsWith("UNATTENDED") ? (
+                                <button
+                                  onClick={() => handleDeleteMengajarLog(row.id_log_mengajar || "", row.nama_guru)}
+                                  className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 font-bold px-2.5 py-1 rounded-lg text-[11px] transition-colors cursor-pointer"
+                                  title="Hapus Log Mengajar"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  Hapus
+                                </button>
+                              ) : (
+                                <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded-md border border-rose-100 inline-block">
+                                  Alpa / Belum Absen
+                                </span>
+                              )}
                             </td>
                           </tr>
                         );
@@ -2198,19 +2503,20 @@ export default function Laporan() {
                     <tr className="bg-gray-50/70 border-b border-gray-100 text-[11px] font-semibold text-gray-500 uppercase tracking-wider print:bg-slate-100 print:text-black">
                       <th className="py-3.5 px-6">ID</th>
                       <th className="py-3.5 px-6">Nama</th>
+                      {kategori === "Siswa" && <th className="py-3.5 px-6">Kelas</th>}
+                      {kategori === "Guru" && <th className="py-3.5 px-6">Jabatan</th>}
+                      <th className="py-3.5 px-6 text-center">Hari Efektif</th>
                       <th className="py-3.5 px-6 text-center">Hadir</th>
                       <th className="py-3.5 px-6 text-center">Sakit</th>
                       <th className="py-3.5 px-6 text-center">Izin</th>
                       <th className="py-3.5 px-6 text-center">Alfa</th>
-                      <th className="py-3.5 px-6 text-center">Sandi Masuk</th>
-                      <th className="py-3.5 px-6 text-center">Sandi Pulang</th>
                       <th className="py-3.5 px-6 text-right">Rasio Hadir</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 text-xs text-gray-700 print:divide-slate-300">
                     {filteredRekapRows.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="py-8 text-center text-gray-400 font-medium">
+                        <td colSpan={10} className="py-8 text-center text-gray-400 font-medium">
                           Tidak ada data rekap persentase terekam
                         </td>
                       </tr>
@@ -2222,6 +2528,14 @@ export default function Laporan() {
                           <tr key={row.id} className="hover:bg-slate-50/50 transition-all duration-150">
                             <td className="py-3.5 px-6 font-mono font-bold text-gray-500">{row.id}</td>
                             <td className="py-3.5 px-6 font-bold text-gray-900">{row.nama}</td>
+                            <td className="py-3.5 px-6">
+                              <span className="font-semibold text-gray-700 bg-gray-50 px-2 py-0.5 rounded border border-gray-200 text-xs">
+                                {row.kelas || "-"}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-6 text-center font-bold text-gray-800">
+                              {row.hariEfektif || row.totalHari || (row.hadir + row.sakit + row.izin + row.alfa)} Hari
+                            </td>
                             <td className="py-3.5 px-6 text-center">
                               <span className="bg-emerald-50 text-emerald-800 font-bold px-2 py-1 rounded-lg border border-emerald-100">{row.hadir}</span>
                             </td>
@@ -2234,8 +2548,6 @@ export default function Laporan() {
                             <td className="py-3.5 px-6 text-center">
                               <span className={`px-2 py-1 rounded-lg font-bold ${row.alfa > 0 ? "bg-rose-50 text-rose-800 border border-rose-100" : "bg-gray-50 text-gray-400"}`}>{row.alfa}</span>
                             </td>
-                            <td className="py-3.5 px-6 text-center font-mono text-[10px] text-gray-400 max-w-[120px] truncate" title={row.jam_masuk}>{row.jam_masuk}</td>
-                            <td className="py-3.5 px-6 text-center font-mono text-[10px] text-gray-400 max-w-[120px] truncate" title={row.jam_pulang}>{row.jam_pulang}</td>
                             <td className="py-3.5 px-6 text-right font-extrabold text-sm">
                               <div className="flex items-center justify-end gap-1.5">
                                 {isHighRisk && <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" title="Kehadiran di bawah 75%!" />}
