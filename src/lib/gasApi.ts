@@ -58,7 +58,7 @@ export function getGasUrl(): string {
     const saved = localStorage.getItem(GAS_URL_STORAGE_KEY);
     if (saved && saved.trim()) return saved.trim();
   } catch (e) {}
-  return "https://script.google.com/macros/s/AKfycbzCjuiKC99_2xw6E8KY7wOOHLMrqWo3O6LjsU7LX0XZWMCie9_qXtTB-IyhRXxvUKkz9Q/exec";
+  return "https://script.google.com/macros/s/AKfycbzQ4b8j2R3mXz0YV4X_O/exec";
 }
 
 export function setGasUrl(url: string): void {
@@ -184,11 +184,94 @@ function initMockDb() {
       { id_guru: "G-002", nip_nuptk: "199201042019082001", nama_guru: "Eka Rahmawati, S.Pd", jenis_kelamin: "Perempuan", jabatan_tugas: "Waka Kurikulum", no_hp: "08198765432", qr_content: "QR-G-002" }
     ]));
   }
-  if (!localStorage.getItem(getKey("laporan_siswa"))) {
-    localStorage.setItem(getKey("laporan_siswa"), JSON.stringify([]));
+  if (!localStorage.getItem(getKey("laporan_siswa")) || JSON.parse(localStorage.getItem(getKey("laporan_siswa")) || "[]").length <= 1) {
+    const sampleDates = ["2026-09-22", "2026-09-23", "2026-09-24", "2026-09-25", "2026-09-26"];
+    const siswaList = [
+      { id: "S-001", nama: "Ahmad Dani", kelas: "XI RPL 1" },
+      { id: "S-002", nama: "Siti Aminah", kelas: "XI RPL 1" },
+      { id: "S-003", nama: "Rizky Pratama", kelas: "X RPL 1" },
+      { id: "S-004", nama: "Dewi Lestari", kelas: "X RPL 1" },
+      { id: "S-005", nama: "Budi Santoso", kelas: "X RPL 2" },
+      { id: "S-006", nama: "Nurlaila Fitri", kelas: "X RPL 2" },
+      { id: "S-007", nama: "Fajar Ramadhan", kelas: "XI RPL 2" },
+      { id: "S-008", nama: "Putri Anggraeni", kelas: "XI RPL 2" },
+      { id: "S-009", nama: "Dimas Arya", kelas: "XII RPL 1" },
+      { id: "S-010", nama: "Zahra Salsabila", kelas: "XII RPL 1" }
+    ];
+    const initialLogs: any[] = [];
+    sampleDates.forEach((tgl, dIdx) => {
+      siswaList.forEach((s, sIdx) => {
+        let stMasuk = "Tepat Waktu";
+        let jMasuk = "06:45";
+        let stPulang = "Tepat Waktu";
+        let jPulang = "15:35";
+        let ket = "Scan Masuk Tepat Waktu";
+
+        // Create realistic diverse attendance patterns
+        if (dIdx === 1 && sIdx % 4 === 1) {
+          stMasuk = "Terlambat";
+          jMasuk = "07:20";
+        } else if (dIdx === 2 && sIdx % 5 === 2) {
+          stMasuk = "Sakit";
+          jMasuk = "-";
+          stPulang = "-";
+          jPulang = "-";
+          ket = "Surat Dokter Sakit Demam";
+        } else if (dIdx === 3 && sIdx % 6 === 3) {
+          stMasuk = "Izin";
+          jMasuk = "-";
+          stPulang = "-";
+          jPulang = "-";
+          ket = "Izin Acara Keluarga";
+        } else if (dIdx === 4 && sIdx % 7 === 4) {
+          stMasuk = "Alfa";
+          jMasuk = "-";
+          stPulang = "Alfa";
+          jPulang = "-";
+          ket = "Otomatis Alfa (Batas 18:00 WIB)";
+        }
+
+        initialLogs.push({
+          id_log_siswa: `LOG-S-${tgl.replace(/-/g, "")}-${s.id}`,
+          tanggal: tgl,
+          id_siswa: s.id,
+          nama_siswa: s.nama,
+          kelas_jurusan: s.kelas,
+          jam_masuk: jMasuk,
+          status_masuk: stMasuk,
+          jam_pulang: jPulang,
+          status_pulang: stPulang,
+          ket: ket
+        });
+      });
+    });
+    localStorage.setItem(getKey("laporan_siswa"), JSON.stringify(initialLogs));
   }
-  if (!localStorage.getItem(getKey("laporan_guru"))) {
-    localStorage.setItem(getKey("laporan_guru"), JSON.stringify([]));
+  if (!localStorage.getItem(getKey("laporan_guru")) || JSON.parse(localStorage.getItem(getKey("laporan_guru")) || "[]").length <= 1) {
+    const sampleDates = ["2026-09-22", "2026-09-23", "2026-09-24", "2026-09-25", "2026-09-26"];
+    const guruList = [
+      { id: "G-001", nama: "Bahrul Ulum, S.Kom" },
+      { id: "G-002", nama: "Eka Rahmawati, S.Pd" }
+    ];
+    const initialGuruLogs: any[] = [];
+    sampleDates.forEach((tgl, dIdx) => {
+      guruList.forEach((g, gIdx) => {
+        let stMasuk = (dIdx === 2 && gIdx === 1) ? "Terlambat" : "Tepat Waktu";
+        let jMasuk = (dIdx === 2 && gIdx === 1) ? "07:18" : "06:40";
+        initialGuruLogs.push({
+          id_log_guru: `LOG-G-${tgl.replace(/-/g, "")}-${g.id}`,
+          tanggal: tgl,
+          id_guru: g.id,
+          nama_guru: g.nama,
+          jam_masuk: jMasuk,
+          status_masuk: stMasuk,
+          jam_pulang: "15:40",
+          status_pulang: "Tepat Waktu",
+          ket: "Presensi Guru"
+        });
+      });
+    });
+    localStorage.setItem(getKey("laporan_guru"), JSON.stringify(initialGuruLogs));
   }
   if (!localStorage.getItem(getKey("pengaturan_jam"))) {
     localStorage.setItem(getKey("pengaturan_jam"), JSON.stringify({
@@ -2166,9 +2249,32 @@ export function callMock(action: string, args: any[] = []): any {
     case "getLaporanFilter": {
       const [kategori, kelas, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta] = args;
       try {
+        const todayStr = new Date().toISOString().split("T")[0];
         if (jenisFilter === "rentang" && tanggalMulai && tanggalSelesai) {
-          jalankanAutoAlfaSistem(tanggalMulai);
-          jalankanAutoAlfaSistem(tanggalSelesai);
+          const start = new Date(tanggalMulai + "T00:00:00");
+          const end = new Date(tanggalSelesai + "T00:00:00");
+          const limit = end.toISOString().split("T")[0] > todayStr ? new Date(todayStr + "T00:00:00") : end;
+          if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && start <= limit) {
+            const cur = new Date(start);
+            while (cur <= limit) {
+              const curStr = cur.toISOString().split("T")[0];
+              jalankanAutoAlfaSistem(curStr);
+              cur.setDate(cur.getDate() + 1);
+            }
+          }
+        } else if (jenisFilter === "bulan" && bulanMinta) {
+          const start = new Date(bulanMinta + "-01T00:00:00");
+          const [yr, mo] = bulanMinta.split("-").map(Number);
+          const end = new Date(yr, mo, 0);
+          const limit = end.toISOString().split("T")[0] > todayStr ? new Date(todayStr + "T00:00:00") : end;
+          if (!isNaN(start.getTime()) && start <= limit) {
+            const cur = new Date(start);
+            while (cur <= limit) {
+              const curStr = cur.toISOString().split("T")[0];
+              jalankanAutoAlfaSistem(curStr);
+              cur.setDate(cur.getDate() + 1);
+            }
+          }
         } else {
           jalankanAutoAlfaSistem();
         }
@@ -2203,6 +2309,136 @@ export function callMock(action: string, args: any[] = []): any {
 
     case "hitungRekapPersentase": {
       const [kategori, kelas, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta] = args;
+
+      if (kategori === "Mengajar") {
+        const teachers = getStorage("data_guru") || [];
+        const rawSchedules = getStorage("jadwal_pelajaran") || [];
+        const mengajarLogs = getStorage("absensi_mengajar_guru") || [];
+
+        const todayStr = new Date().toISOString().split("T")[0];
+        let rStart = jenisFilter === "rentang" ? (tanggalMulai || todayStr) : `${bulanMinta || todayStr.substring(0, 7)}-01`;
+        let rEnd = jenisFilter === "rentang" ? (tanggalSelesai || todayStr) : todayStr;
+        if (jenisFilter === "bulan" && bulanMinta) {
+          const [yr, mo] = bulanMinta.split("-").map(Number);
+          const lastD = new Date(yr, mo, 0).getDate();
+          rEnd = `${bulanMinta}-${String(lastD).padStart(2, "0")}`;
+        }
+        if (rEnd > todayStr) rEnd = todayStr;
+
+        const holidaySet = new Set((getStorage("hari_libur") || []).map((h: any) => formatToIsoDate(h.tanggal)));
+        const activeSchoolDates: { dateIso: string; dayName: string }[] = [];
+        const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+        if (rStart && rEnd && rStart <= rEnd) {
+          const curD = new Date(rStart + "T00:00:00");
+          const endD = new Date(rEnd + "T00:00:00");
+          while (curD <= endD) {
+            const dIso = curD.toISOString().split("T")[0];
+            const dWeek = curD.getDay();
+            if (dWeek !== 0 && !holidaySet.has(dIso)) {
+              activeSchoolDates.push({ dateIso: dIso, dayName: dayNames[dWeek] });
+            }
+            curD.setDate(curD.getDate() + 1);
+          }
+        }
+
+        const isMatchGuru = (id1: string, name1: string, id2: string, name2: string) => {
+          const cId1 = String(id1 || "").trim().toLowerCase();
+          const cId2 = String(id2 || "").trim().toLowerCase();
+          if (cId1 && cId2 && (cId1 === cId2 || cId1.replace(/^(guru|id|nip|g)[_:\-\s]+/i, "") === cId2.replace(/^(guru|id|nip|g)[_:\-\s]+/i, ""))) return true;
+          const cN1 = String(name1 || "").trim().toLowerCase();
+          const cN2 = String(name2 || "").trim().toLowerCase();
+          if (cN1 && cN2 && (cN1 === cN2 || cN1.includes(cN2) || cN2.includes(cN1))) return true;
+          return false;
+        };
+
+        const isMatchClass = (itemKelas: string, filterKelas: string) => {
+          if (!filterKelas || filterKelas === "Semua") return true;
+          const k1 = String(itemKelas || "").toLowerCase().replace(/[\s-]+/g, "");
+          const k2 = filterKelas.toLowerCase().replace(/[\s-]+/g, "");
+          return k1.includes(k2) || k2.includes(k1);
+        };
+
+        const rekap = teachers.map((g: any) => {
+          const teacherSchedules = rawSchedules.filter((s: any) =>
+            isMatchGuru(g.id_guru, g.nama_guru, s.id_guru, s.nama_guru) && isMatchClass(s.kelas, kelas)
+          );
+
+          const teacherAttendanceLogs = mengajarLogs.filter((item: any) => {
+            const itemDate = formatToIsoDate(item.tanggal);
+            const inRange = jenisFilter === "rentang"
+              ? (itemDate >= (tanggalMulai || "") && itemDate <= (tanggalSelesai || ""))
+              : itemDate.startsWith(bulanMinta || "");
+            const matchG = isMatchGuru(g.id_guru, g.nama_guru, item.id_guru, item.nama_guru);
+            const matchC = isMatchClass(item.kelas, kelas);
+            return inRange && matchG && matchC;
+          });
+
+          const matchedLogIds = new Set<string>();
+          let tepat = 0;
+          let terlambat = 0;
+          let izinSakit = 0;
+          let missedScheduledCount = 0;
+          let totalScheduled = 0;
+
+          activeSchoolDates.forEach(act => {
+            const schedsOnThisDay = teacherSchedules.filter((s: any) =>
+              String(s.hari || "").trim().toLowerCase() === act.dayName.toLowerCase()
+            );
+
+            schedsOnThisDay.forEach((s: any) => {
+              totalScheduled++;
+              const logMatch = teacherAttendanceLogs.find((l: any) => {
+                if (matchedLogIds.has(l.id_log_mengajar)) return false;
+                const sameDate = formatToIsoDate(l.tanggal) === act.dateIso;
+                const sameJam = Number(l.jam_ke || 1) === Number(s.jam_ke || 1);
+                const sameClass = isMatchClass(l.kelas, s.kelas);
+                return sameDate && (sameJam || sameClass);
+              });
+
+              if (logMatch) {
+                matchedLogIds.add(logMatch.id_log_mengajar);
+                const st = String(logMatch.status || "");
+                if (st.includes("Tepat")) tepat++;
+                else if (st.includes("Terlambat")) terlambat++;
+                else if (st.includes("Izin") || st.includes("Sakit") || st.includes("Tugas")) izinSakit++;
+                else missedScheduledCount++;
+              } else {
+                missedScheduledCount++;
+              }
+            });
+          });
+
+          teacherAttendanceLogs.forEach((l: any) => {
+            if (!matchedLogIds.has(l.id_log_mengajar)) {
+              const st = String(l.status || "");
+              if (st.includes("Tepat")) tepat++;
+              else if (st.includes("Terlambat")) terlambat++;
+              else if (st.includes("Tidak Hadir") || st.includes("Alfa")) missedScheduledCount++;
+              else izinSakit++;
+            }
+          });
+
+          const totalAttended = tepat + terlambat + izinSakit + missedScheduledCount;
+          const finalTotal = totalScheduled > 0 ? Math.max(totalScheduled, totalAttended) : totalAttended;
+          const tidakHadir = totalScheduled > 0 ? Math.max(missedScheduledCount, finalTotal - (tepat + terlambat + izinSakit)) : missedScheduledCount;
+          const totalHadir = tepat + terlambat;
+          const pct = finalTotal > 0 ? Math.round((totalHadir / finalTotal) * 100) : 0;
+
+          return {
+            id_guru: g.id_guru || "-",
+            nama_guru: g.nama_guru || "-",
+            total: finalTotal,
+            tepat,
+            terlambat,
+            izinSakit,
+            tidakHadir,
+            persentase: `${pct}%`
+          };
+        });
+
+        return { success: true, data: rekap };
+      }
+
       let masterData = getStorage(kategori === "Siswa" ? "data_siswa" : "data_guru") || [];
       
       if (kategori === "Siswa" && kelas && kelas !== "Semua") {
@@ -2215,6 +2451,32 @@ export function callMock(action: string, args: any[] = []): any {
       
       const rptRes = callMock("getLaporanFilter", [kategori, kelas, jenisFilter, tanggalMulai, tanggalSelesai, bulanMinta]);
       const rptData = extractArrayData(rptRes);
+
+      // Determine active school days in range
+      const todayStr = new Date().toISOString().split("T")[0];
+      let rStart = jenisFilter === "rentang" ? (tanggalMulai || todayStr) : `${bulanMinta || todayStr.substring(0, 7)}-01`;
+      let rEnd = jenisFilter === "rentang" ? (tanggalSelesai || todayStr) : todayStr;
+      if (jenisFilter === "bulan" && bulanMinta) {
+        const [yr, mo] = bulanMinta.split("-").map(Number);
+        const lastD = new Date(yr, mo, 0).getDate();
+        rEnd = `${bulanMinta}-${String(lastD).padStart(2, "0")}`;
+      }
+      if (rEnd > todayStr) rEnd = todayStr;
+
+      const holidaySet = new Set((getStorage("hari_libur") || []).map((h: any) => formatToIsoDate(h.tanggal)));
+      const activeDates: string[] = [];
+      if (rStart && rEnd && rStart <= rEnd) {
+        const curD = new Date(rStart + "T00:00:00");
+        const endD = new Date(rEnd + "T00:00:00");
+        while (curD <= endD) {
+          const dIso = curD.toISOString().split("T")[0];
+          const dWeek = curD.getDay(); // 0 is Sunday
+          if (dWeek !== 0 && !holidaySet.has(dIso)) {
+            activeDates.push(dIso);
+          }
+          curD.setDate(curD.getDate() + 1);
+        }
+      }
       
       const idKey = kategori === "Siswa" ? "id_siswa" : "id_guru";
       const nameKey = kategori === "Siswa" ? "nama_siswa" : "nama_guru";
@@ -2222,6 +2484,7 @@ export function callMock(action: string, args: any[] = []): any {
       const rekap = masterData.map((m: any) => {
         const idTarget = String(m[idKey] || m.id || "").trim();
         const nama = String(m[nameKey] || m.nama || "").trim();
+        const kelasOrJob = kategori === "Siswa" ? (m.kelas_jurusan || `${m.kelas || ""} ${m.jurusan || ""}`.trim()) : (m.jabatan_tugas || "-");
         
         const userRpts = rptData.filter((r: any) => {
           const rId = String(r[idKey] || r.id_target || r.id_siswa || r.id_guru || "").trim();
@@ -2230,38 +2493,64 @@ export function callMock(action: string, args: any[] = []): any {
           if (nama && rNama && rNama.toLowerCase() === nama.toLowerCase()) return true;
           return false;
         });
-        
-        let hadir = 0;
-        let sakit = 0;
-        let izin = 0;
-        let alfa = 0;
+
+        const statusByDate = new Map<string, string>();
         const jamMasuks: string[] = [];
         const jamPulangs: string[] = [];
         
         userRpts.forEach((r: any) => {
-          const sm = String(r.status_masuk || "").toLowerCase();
-          if (sm.includes("tepat") || sm.includes("terlambat") || sm.includes("lupa") || sm.includes("hadir")) {
-            hadir++;
-          } else if (sm.includes("sakit")) {
-            sakit++;
-          } else if (sm.includes("izin")) {
-            izin++;
-          } else if (sm.includes("alfa") || sm.includes("alpha")) {
-            alfa++;
-          } else if (r.status_masuk && r.status_masuk !== "-") {
-            hadir++;
+          const dIso = formatToIsoDate(r.tanggal);
+          if (dIso) {
+            statusByDate.set(dIso, String(r.status_masuk || r.status || ""));
           }
-          
           if (r.jam_masuk && r.jam_masuk !== "-") jamMasuks.push(r.jam_masuk);
           if (r.jam_pulang && r.jam_pulang !== "-") jamPulangs.push(r.jam_pulang);
         });
+
+        let hadir = 0;
+        let sakit = 0;
+        let izin = 0;
+        let alfa = 0;
+
+        if (activeDates.length > 0) {
+          activeDates.forEach((dIso) => {
+            const st = (statusByDate.get(dIso) || "").toLowerCase();
+            if (!st || st === "-" || st === "belum absen" || st.includes("alfa") || st.includes("tidak hadir")) {
+              alfa++;
+            } else if (st.includes("sakit")) {
+              sakit++;
+            } else if (st.includes("izin") || st.includes("dispensasi")) {
+              izin++;
+            } else {
+              hadir++;
+            }
+          });
+        } else {
+          userRpts.forEach((r: any) => {
+            const sm = String(r.status_masuk || "").toLowerCase();
+            if (sm.includes("tepat") || sm.includes("terlambat") || sm.includes("lupa") || sm.includes("hadir")) {
+              hadir++;
+            } else if (sm.includes("sakit")) {
+              sakit++;
+            } else if (sm.includes("izin")) {
+              izin++;
+            } else if (sm.includes("alfa") || sm.includes("alpha")) {
+              alfa++;
+            } else if (r.status_masuk && r.status_masuk !== "-") {
+              hadir++;
+            }
+          });
+        }
         
-        const totalDays = hadir + sakit + izin + alfa;
-        const persentase = totalDays === 0 ? "0%" : ((hadir / totalDays) * 100).toFixed(1) + "%";
+        const totalEffective = activeDates.length > 0 ? activeDates.length : (hadir + sakit + izin + alfa);
+        const persentase = totalEffective === 0 ? "0%" : `${Math.round((hadir / totalEffective) * 100)}%`;
         
         return {
           id: idTarget,
           nama: nama,
+          kelas: kelasOrJob,
+          hariEfektif: totalEffective,
+          totalHari: totalEffective,
           hadir,
           sakit,
           izin,
@@ -2703,6 +2992,121 @@ export function callMock(action: string, args: any[] = []): any {
       initMockDb();
       localStorage.setItem(getStorageKey("MOCK_jadwal_guru"), JSON.stringify([]));
       return { success: true, message: "Struktur database berhasil dibuat ulang (SIMULASI)!" };
+    }
+
+    case "backupDatabaseToDrive":
+    case "backupSpreadsheetToDrive":
+    case "backupSpreadsheetGoogleDrive": {
+      const [folderId] = args;
+      const dateStr = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      const isSpreadsheet = action.includes("Spreadsheet");
+      const name = isSpreadsheet ? `Backup_Spreadsheet_SIAS_${dateStr}` : `backup_database_sias_${dateStr}.json`;
+      return {
+        success: true,
+        message: `Backup ${isSpreadsheet ? "Spreadsheet Google Sheets" : "Database"} berhasil disimpan ke Google Drive${folderId ? ` (Folder: ${folderId})` : ""}!`,
+        fileName: name,
+        fileUrl: "https://drive.google.com"
+      };
+    }
+
+    case "restoreDatabaseJSON":
+    case "restoreDatabase": {
+      const [payload] = args;
+      if (!payload || typeof payload !== "object") {
+        return { success: false, message: "Format payload restore tidak valid." };
+      }
+      if (Array.isArray(payload.data_siswa) || Array.isArray(payload.DataSiswa)) {
+        setStorage("data_siswa", payload.data_siswa || payload.DataSiswa);
+      }
+      if (Array.isArray(payload.data_guru) || Array.isArray(payload.DataGuru)) {
+        setStorage("data_guru", payload.data_guru || payload.DataGuru);
+      }
+      if (Array.isArray(payload.data_kelas) || Array.isArray(payload.DataKelas)) {
+        setStorage("data_kelas", payload.data_kelas || payload.DataKelas);
+      }
+      if (Array.isArray(payload.jam_pelajaran) || Array.isArray(payload.JamPelajaran)) {
+        setStorage("jam_pelajaran", payload.jam_pelajaran || payload.JamPelajaran);
+      }
+      if (Array.isArray(payload.jadwal_pelajaran) || Array.isArray(payload.JadwalPelajaran)) {
+        setStorage("jadwal_pelajaran", payload.jadwal_pelajaran || payload.JadwalPelajaran);
+      }
+      if (Array.isArray(payload.jadwal_guru) || Array.isArray(payload.JadwalGuru)) {
+        setStorage("jadwal_guru", payload.jadwal_guru || payload.JadwalGuru);
+      }
+      if (Array.isArray(payload.laporan_siswa) || Array.isArray(payload.PresensiSiswa)) {
+        setStorage("laporan_siswa", payload.laporan_siswa || payload.PresensiSiswa);
+      }
+      if (Array.isArray(payload.laporan_guru) || Array.isArray(payload.PresensiGuru)) {
+        setStorage("laporan_guru", payload.laporan_guru || payload.PresensiGuru);
+      }
+      if (Array.isArray(payload.absensi_mengajar_guru) || Array.isArray(payload.AbsensiMengajar)) {
+        setStorage("absensi_mengajar_guru", payload.absensi_mengajar_guru || payload.AbsensiMengajar);
+      }
+      if (Array.isArray(payload.hari_libur) || Array.isArray(payload.HariLibur)) {
+        setStorage("hari_libur", payload.hari_libur || payload.HariLibur);
+      }
+      if (Array.isArray(payload.users) || Array.isArray(payload.Users)) {
+        setStorage("users", payload.users || payload.Users);
+      }
+      if (payload.pengaturan && typeof payload.pengaturan === "object") {
+        const clean = sanitizeTimeFields(payload.pengaturan);
+        localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify(clean));
+        localStorage.setItem(getStorageKey("pengaturan_jam"), JSON.stringify(clean));
+      }
+      return { success: true, message: "Database berhasil dipulihkan secara menyeluruh!" };
+    }
+
+    case "restoreDatabaseSpreadsheet": {
+      const [sheetsObj] = args;
+      if (!sheetsObj || typeof sheetsObj !== "object") {
+        return { success: false, message: "Data spreadsheet tidak valid." };
+      }
+      // Process each sheet name
+      if (Array.isArray(sheetsObj.DataSiswa || sheetsObj.data_siswa)) {
+        setStorage("data_siswa", sheetsObj.DataSiswa || sheetsObj.data_siswa);
+      }
+      if (Array.isArray(sheetsObj.DataGuru || sheetsObj.data_guru)) {
+        setStorage("data_guru", sheetsObj.DataGuru || sheetsObj.data_guru);
+      }
+      if (Array.isArray(sheetsObj.DataKelas || sheetsObj.data_kelas)) {
+        setStorage("data_kelas", sheetsObj.DataKelas || sheetsObj.data_kelas);
+      }
+      if (Array.isArray(sheetsObj.JadwalGuru || sheetsObj.jadwal_guru)) {
+        setStorage("jadwal_guru", sheetsObj.JadwalGuru || sheetsObj.jadwal_guru);
+      }
+      if (Array.isArray(sheetsObj.JadwalPelajaran || sheetsObj.jadwal_pelajaran)) {
+        setStorage("jadwal_pelajaran", sheetsObj.JadwalPelajaran || sheetsObj.jadwal_pelajaran);
+      }
+      if (Array.isArray(sheetsObj.JamPelajaran || sheetsObj.jam_pelajaran)) {
+        setStorage("jam_pelajaran", sheetsObj.JamPelajaran || sheetsObj.jam_pelajaran);
+      }
+      if (Array.isArray(sheetsObj.PresensiSiswa || sheetsObj.laporan_siswa)) {
+        setStorage("laporan_siswa", sheetsObj.PresensiSiswa || sheetsObj.laporan_siswa);
+      }
+      if (Array.isArray(sheetsObj.PresensiGuru || sheetsObj.laporan_guru)) {
+        setStorage("laporan_guru", sheetsObj.PresensiGuru || sheetsObj.laporan_guru);
+      }
+      if (Array.isArray(sheetsObj.AbsensiMengajar || sheetsObj.absensi_mengajar_guru)) {
+        setStorage("absensi_mengajar_guru", sheetsObj.AbsensiMengajar || sheetsObj.absensi_mengajar_guru);
+      }
+      if (Array.isArray(sheetsObj.HariLibur || sheetsObj.hari_libur)) {
+        setStorage("hari_libur", sheetsObj.HariLibur || sheetsObj.hari_libur);
+      }
+      if (Array.isArray(sheetsObj.Users || sheetsObj.users)) {
+        setStorage("users", sheetsObj.Users || sheetsObj.users);
+      }
+      if (Array.isArray(sheetsObj.Pengaturan)) {
+        const conf: any = {};
+        sheetsObj.Pengaturan.forEach((item: any) => {
+          const k = item.kunci || item.key;
+          const v = item.nilai !== undefined ? item.nilai : item.value;
+          if (k) conf[k] = v;
+        });
+        const clean = sanitizeTimeFields(conf);
+        localStorage.setItem(getStorageKey("MOCK_pengaturan_jam"), JSON.stringify(clean));
+        localStorage.setItem(getStorageKey("pengaturan_jam"), JSON.stringify(clean));
+      }
+      return { success: true, message: "Database dari file Spreadsheet Excel berhasil dipulihkan!" };
     }
 
     default:
@@ -3222,11 +3626,30 @@ export async function callGas(action: string, args: any[] = []): Promise<any> {
         } else if (action === "getAbsensiMengajarGuru") {
           const list = Array.isArray(result) ? result : (Array.isArray(result.data) ? result.data : null);
           if (list) setStorage("absensi_mengajar_guru", list);
-        } else if (action === "getLaporanFilter" || action === "getLaporanPresensi" || action === "getPresensiSiswa" || action === "getPresensiGuru" || action === "getLaporanSiswa" || action === "getLaporanGuru") {
+        } else if (action === "getPresensiSiswa" || action === "getPresensiGuru" || action === "getLaporanSiswa" || action === "getLaporanGuru") {
           const list = Array.isArray(result) ? result : (Array.isArray(result?.data) ? result.data : null);
           if (list && Array.isArray(list)) {
             const isSiswa = args[0] === "Siswa" || action.includes("Siswa");
             setStorage(isSiswa ? "laporan_siswa" : "laporan_guru", list);
+          }
+        } else if (action === "getLaporanFilter" || action === "getLaporanPresensi") {
+          const list = Array.isArray(result) ? result : (Array.isArray(result?.data) ? result.data : null);
+          if (list && Array.isArray(list)) {
+            const isSiswa = args[0] === "Siswa" || action.includes("Siswa");
+            const storageKey = isSiswa ? "laporan_siswa" : "laporan_guru";
+            const current = getStorage(storageKey) || [];
+            const map = new Map<string, any>();
+            current.forEach((r: any) => {
+              const id = r.id_siswa || r.id_guru || r.id_target || r.id;
+              const tgl = formatToIsoDate(r.tanggal);
+              map.set(`${id}_${tgl}`, r);
+            });
+            list.forEach((r: any) => {
+              const id = r.id_siswa || r.id_guru || r.id_target || r.id;
+              const tgl = formatToIsoDate(r.tanggal);
+              map.set(`${id}_${tgl}`, r);
+            });
+            setStorage(storageKey, Array.from(map.values()));
           }
         }
       } catch (e) {
