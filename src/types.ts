@@ -87,13 +87,16 @@ export interface LaporanRow {
 export interface RekapPersentase {
   id: string;
   nama: string;
+  kelas?: string;
+  totalHari?: number;
+  hariEfektif?: number;
   hadir: number;
   sakit: number;
   izin: number;
   alfa: number;
   persentase: string;
-  jam_masuk: string;
-  jam_pulang: string;
+  jam_masuk?: string;
+  jam_pulang?: string;
 }
 
 export interface DashboardMetrics {
